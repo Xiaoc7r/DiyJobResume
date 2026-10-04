@@ -147,3 +147,11 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# Local build and development artifacts
+*.tsbuildinfo
+dist/
+.env*
+!.env.example
+playwright-report/
+test-results/
