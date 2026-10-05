@@ -47,6 +47,8 @@ import type {
   Template,
 } from "./flow";
 import { lineHtml, editableText, fonts, rowStyle } from "./render";
+import { SelectionTools, paragraphOptions } from "./SelectionTools";
+import { withColumns } from "./formatting";
 
 function load() {
   try {
@@ -117,11 +119,15 @@ function SimpleInput({
   index,
   onChange,
   onFocus,
+  onEnter,
+  onSlash,
 }: {
   line: Line;
   index: number;
   onChange: (value: string) => void;
   onFocus: () => void;
+  onEnter: () => void;
+  onSlash: () => void;
 }) {
   const el = useRef<HTMLDivElement>(null),
     composing = useRef(false),
@@ -144,6 +150,8 @@ function SimpleInput({
   return (
     <div
       ref={el}
+      data-simple={line.id}
+      data-order={line.order || 1}
       className={`simple-input simple-${line.kind}`}
       contentEditable
       suppressContentEditableWarning
@@ -153,9 +161,15 @@ function SimpleInput({
       onFocus={onFocus}
       onInput={flush}
       onKeyDown={(e) => {
+        if (e.key === "/" && !line.text && !e.nativeEvent.isComposing) {
+          e.preventDefault();
+          onSlash();
+          return;
+        }
         if (e.key === "Enter" && !e.nativeEvent.isComposing) {
           e.preventDefault();
-          document.execCommand("insertLineBreak");
+          if (e.shiftKey) document.execCommand("insertLineBreak");
+          else onEnter();
         }
       }}
       onCompositionStart={() => {
@@ -164,9 +178,6 @@ function SimpleInput({
       onCompositionEnd={() => {
         composing.current = false;
         flush();
-      }}
-      onBlur={() => {
-        if (el.current) el.current.innerHTML = html;
       }}
       onPaste={(e) => {
         e.preventDefault();
@@ -194,6 +205,7 @@ function Editable({
   onDrop,
   onMove,
   onBlur,
+  ghost = false,
 }: {
   piece: Piece;
   template: Template;
@@ -209,6 +221,7 @@ function Editable({
   onDrop: (id: string) => void;
   onMove: (target: string) => void;
   onBlur: () => void;
+  ghost?: boolean;
 }) {
   const el = useRef<HTMLDivElement>(null),
     composing = useRef(false),
@@ -230,7 +243,8 @@ function Editable({
   };
   return (
     <div
-      className={`paper-row ${selected ? "selected" : ""} ${armed ? "armed" : ""}`}
+      className={`paper-row ${ghost ? "ghost-row" : ""} ${selected ? "selected" : ""} ${armed ? "armed" : ""}`}
+      data-preview={ghost ? "true" : undefined}
       data-line={piece.line.id}
       data-start={piece.start}
       onDragOver={(e) => {
@@ -287,10 +301,11 @@ function Editable({
       <div
         ref={el}
         data-edit={piece.line.id}
+        data-order={piece.line.order || 1}
         data-part={piece.start}
         role="textbox"
         aria-label={`简历${kindLabels[piece.line.kind]}：${piece.line.text.slice(0, 25)}`}
-        contentEditable={!armed}
+        contentEditable={!armed && !ghost}
         suppressContentEditableWarning
         className={`flow-row row-${piece.line.kind} ${contact ? "row-contact" : ""} ${piece.continued ? "continued" : ""}`}
         style={rowStyle(piece.line, settings, piece.continued)}
@@ -308,9 +323,6 @@ function Editable({
         onCompositionEnd={() => {
           composing.current = false;
           flush();
-        }}
-        onBlur={() => {
-          if (el.current) el.current.innerHTML = html;
         }}
         onPaste={(e) => {
           e.preventDefault();
@@ -397,6 +409,20 @@ export default function Studio() {
     [fontVersion, setFontVersion] = useState(0),
     [picSelection, setPicSelection] = useState(""),
     [imageKind, setImageKind] = useState("证件照");
+  const [preview, setPreview] = useState<{
+    key: string;
+    doc: Resume;
+    ids: string[];
+    label: string;
+  } | null>(null);
+  const [blockMenu, setBlockMenu] = useState<{
+    id: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const view = preview?.doc ?? doc;
+  const previewScroll = useRef<number | null>(null),
+    previewReveal = useRef(false);
   const measureRef = useRef<HTMLDivElement>(null),
     workspace = useRef<HTMLDivElement>(null),
     mdRef = useRef<HTMLTextAreaElement>(null),
@@ -404,9 +430,9 @@ export default function Studio() {
     imageRef = useRef<HTMLInputElement>(null),
     editorRef = useRef<HTMLDivElement>(null);
   const pendingCaret = useRef<{ id: string; offset: number } | null>(null);
-  const contactId = doc.lines.find(
+  const contactId = view.lines.find(
     (line, index) =>
-      line.kind === "text" && doc.lines[index - 1]?.kind === "name",
+      line.kind === "text" && view.lines[index - 1]?.kind === "name",
   )?.id;
   const pictureBottom = Math.max(
     0,
@@ -425,6 +451,8 @@ export default function Studio() {
   );
   const historyUpdate = (next: Resume, group = "") => {
     if (next === ref.current) return;
+    setPreview(null);
+    previewScroll.current = null;
     const previous = ref.current;
     const now = Date.now();
     if (
@@ -507,6 +535,8 @@ export default function Studio() {
         setArmed("");
         setPicSelection("");
         setFileMenu(false);
+        setBlockMenu(null);
+        cancelPreview();
       }
     };
     window.addEventListener("keydown", key);
@@ -517,9 +547,10 @@ export default function Studio() {
     if (!host) return;
     const node = document.createElement("div");
     host.replaceChildren(node);
-    const s = doc.settings;
+    const s = view.settings;
     const measure = (line: Line, text: string, continued: boolean) => {
       node.className = `flow-row row-${line.kind} ${line.id === contactId ? "row-contact" : ""} ${continued ? "continued" : ""}`;
+      node.dataset.order = String(line.order || 1);
       const st = rowStyle(line, s, continued);
       Object.assign(node.style, {
         fontSize: st.fontSize + "px",
@@ -527,11 +558,11 @@ export default function Studio() {
         paddingBottom: st.paddingBottom + "px",
         lineHeight: String(st.lineHeight),
       });
-      node.innerHTML = lineHtml(line, text, doc.template);
+      node.innerHTML = lineHtml(line, text, view.template);
       return Math.ceil(node.getBoundingClientRect().height * 100) / 100 + 0.25;
     };
     const active = document.activeElement as HTMLElement;
-    if (active?.dataset.edit) {
+    if (!preview && active?.dataset.edit) {
       const offset = cursorOffset(active);
       if (offset !== null) {
         let total = offset;
@@ -545,16 +576,29 @@ export default function Studio() {
         pendingCaret.current = { id: active.dataset.edit, offset: total };
       }
     }
-    setPages(paginate(doc.lines, PAGE.height - s.top - s.bottom, measure));
+    setPages(paginate(view.lines, PAGE.height - s.top - s.bottom, measure));
   }, [
-    doc.lines,
-    doc.settings,
-    doc.template,
+    view.lines,
+    view.settings,
+    view.template,
     fontVersion,
     headerContactHeight,
     contactId,
   ]);
   useLayoutEffect(() => {
+    if (preview && previewReveal.current) {
+      previewReveal.current = false;
+      const ghost = workspace.current?.querySelector<HTMLElement>(
+        '[data-preview="true"]',
+      );
+      if (ghost && workspace.current) {
+        const host = workspace.current;
+        host.scrollTop +=
+          ghost.getBoundingClientRect().top -
+          host.getBoundingClientRect().top -
+          80;
+      }
+    }
     const caret = pendingCaret.current;
     if (!caret) return;
     pendingCaret.current = null;
@@ -607,15 +651,31 @@ export default function Studio() {
       }
     }
   };
-  const addLine = (after: string, kind: Kind = "text") => {
+  const addLine = (
+    after: string,
+    kind: Kind = "text",
+    side: "simple" | "paper" = "paper",
+    columns = 1,
+  ) => {
     const lines = [...ref.current.lines],
       index = lines.findIndex((l) => l.id === after),
-      line = { id: uid(), kind, text: "" };
+      line: Line = {
+        id: uid(),
+        kind,
+        text: columns > 1 ? Array(columns).fill("").join(" | ") : "",
+        ...(kind === "ordered"
+          ? { order: (lines[index]?.order || 0) + 1 }
+          : {}),
+      };
     lines.splice(index + 1, 0, line);
     historyUpdate({ ...ref.current, lines });
     setSelected(line.id);
     setTimeout(() => {
-      document.querySelector<HTMLElement>(`[data-edit="${line.id}"]`)?.focus();
+      document
+        .querySelector<HTMLElement>(
+          `[data-${side === "simple" ? "simple" : "edit"}="${line.id}"]`,
+        )
+        ?.focus();
     }, 50);
   };
   const removeLine = (id: string) => {
@@ -636,17 +696,17 @@ export default function Studio() {
   const source = toMarkdown(doc.lines),
     currentTemplate = templates.find((t) => t.id === doc.template)!;
   const resumeStyle = {
-    "--accent": doc.settings.accent,
-    "--ink": doc.settings.color,
+    "--accent": view.settings.accent,
+    "--ink": view.settings.color,
     "--header-contact-height": headerContactHeight + "px",
     "--header-align":
-      doc.settings.headerAlign === "template"
-        ? doc.template === "ribbon"
+      view.settings.headerAlign === "template"
+        ? view.template === "ribbon"
           ? "left"
           : "center"
-        : doc.settings.headerAlign,
-    fontFamily: fonts[doc.settings.font],
-    color: doc.settings.color,
+        : view.settings.headerAlign,
+    fontFamily: fonts[view.settings.font],
+    color: view.settings.color,
   } as CSSProperties;
   const resizeSidebar = (e: ReactPointerEvent) => {
     const start = e.clientX,
@@ -751,31 +811,119 @@ export default function Studio() {
       lines: doc.lines.filter((_, i) => i < start || i >= end),
     });
   };
-  const formatText = (command: "bold" | "italic") => {
-    if (mode === "md") {
-      const el = mdRef.current;
-      if (!el) return;
-      const a = el.selectionStart,
-        b = el.selectionEnd,
-        marker = command === "bold" ? "**" : "*",
-        value =
-          source.slice(0, a) +
-          marker +
-          (source.slice(a, b) || "文字") +
-          marker +
-          source.slice(b);
-      historyUpdate(
-        { ...doc, lines: parseMarkdown(value, doc.lines) },
-        "markdown",
-      );
-      el.focus();
-    } else {
-      const anchor = window.getSelection()?.anchorNode;
-      const element =
-        anchor instanceof Element ? anchor : anchor?.parentElement;
-      if (element?.closest('[contenteditable="true"]'))
-        document.execCommand(command);
+  const cancelPreview = () => {
+    setPreview(null);
+    previewReveal.current = false;
+    const savedScroll = previewScroll.current;
+    previewScroll.current = null;
+    if (savedScroll !== null && workspace.current)
+      workspace.current.scrollTop = savedScroll;
+  };
+  const beginPreview = (
+    key: string,
+    next: Resume,
+    label: string,
+    ids?: string[],
+  ) => {
+    if (preview?.key === key) return;
+    if (previewScroll.current === null)
+      previewScroll.current = workspace.current?.scrollTop ?? 0;
+    previewReveal.current = true;
+    setPreview({
+      key,
+      doc: next,
+      label,
+      ids:
+        ids ??
+        next.lines
+          .filter((l) => !doc.lines.some((old) => old.id === l.id))
+          .map((l) => l.id),
+    });
+  };
+  const previewModule = (name: string, body: string, label: string) =>
+    beginPreview(
+      name + label,
+      insertModule(ref.current, name, body),
+      `将在「${name}」末尾加入「${label}」`,
+    );
+  const confirmModule = (name: string, body: string, label: string) => {
+    const next =
+      preview?.key === name + label
+        ? preview.doc
+        : insertModule(ref.current, name, body);
+    setPreview(null);
+    previewScroll.current = null;
+    previewReveal.current = false;
+    historyUpdate(next);
+    const added = next.lines.find(
+      (l) => !doc.lines.some((old) => old.id === l.id),
+    );
+    if (added) {
+      setSelected(added.id);
+      setTimeout(() => locate(added.id), 50);
     }
+    setNotice("已加入" + name + "，可以撤销。");
+  };
+  const previewHeader = (align: "left" | "center") =>
+    beginPreview(
+      "header-" + align,
+      { ...doc, settings: { ...doc.settings, headerAlign: align } },
+      "预览表头" + (align === "left" ? "左对齐" : "居中"),
+      doc.lines
+        .filter((l) => l.kind === "name" || l.id === contactId)
+        .map((l) => l.id),
+    );
+  const confirmHeader = (align: "left" | "center") => {
+    setPreview(null);
+    previewScroll.current = null;
+    previewReveal.current = false;
+    settings({ headerAlign: align });
+  };
+  const confirmPreview = () => {
+    if (!preview) return;
+    const next = preview.doc;
+    previewScroll.current = null;
+    previewReveal.current = false;
+    setPreview(null);
+    historyUpdate(next);
+    setNotice("已应用预览，可以撤销。");
+  };
+  const openBlockMenu = (id: string) => {
+    const el = editorRef.current?.querySelector<HTMLElement>(
+        `[data-field="${id}"]`,
+      ),
+      rect = el?.getBoundingClientRect();
+    setBlockMenu({
+      id,
+      x: rect?.left ?? 30,
+      y: Math.min(window.innerHeight - 330, rect?.top ?? 120),
+    });
+  };
+  const chooseBlock = (kind: Kind, columns = 1) => {
+    if (!blockMenu) return;
+    const line = doc.lines.find((l) => l.id === blockMenu.id);
+    if (line && !line.text) {
+      historyUpdate({
+        ...doc,
+        lines: doc.lines.map((l) =>
+          l.id === line.id
+            ? {
+                ...l,
+                kind,
+                text: columns > 1 ? Array(columns).fill("").join(" | ") : "",
+              }
+            : l,
+        ),
+      });
+      setTimeout(
+        () =>
+          document
+            .querySelector<HTMLElement>(`[data-simple="${line.id}"]`)
+            ?.focus(),
+        30,
+      );
+    } else addLine(blockMenu.id, kind, "simple", columns);
+    setBlockMenu(null);
   };
   return (
     <div
@@ -843,7 +991,7 @@ export default function Studio() {
                 </button>
                 <button
                   onClick={() => {
-                    historyUpdate(initialResume());
+                    historyUpdate(initialResume(doc.template));
                     setFileMenu(false);
                     setNotice("已载入新版虚构示例，之前的草稿可撤销恢复。");
                   }}
@@ -867,6 +1015,10 @@ export default function Studio() {
             className="primary"
             onClick={async () => {
               (document.activeElement as HTMLElement)?.blur();
+              cancelPreview();
+              await new Promise((resolve) =>
+                requestAnimationFrame(() => requestAnimationFrame(resolve)),
+              );
               await document.fonts.ready;
               window.print();
             }}
@@ -926,31 +1078,8 @@ export default function Studio() {
           </div>
           <div className="editor-hint">
             {mode === "simple"
-              ? "像写文档一样填写，右侧实时排版。"
-              : "# 姓名　## 板块　### 经历　- 要点"}
-          </div>
-          <div className="text-tools">
-            <button
-              aria-label="加粗选中文字"
-              title="选中文字后加粗"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => formatText("bold")}
-            >
-              <b>B</b>
-            </button>
-            <button
-              aria-label="斜体选中文字"
-              title="选中文字后设为斜体"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => formatText("italic")}
-            >
-              <i>I</i>
-            </button>
-            <span>
-              {mode === "simple"
-                ? "选中文字可直接设置强调"
-                : "支持标题、列表、链接与标签"}
-            </span>
+              ? "直接输入 · 选中文字设置格式 · 空行输入 / 添加内容"
+              : "选中文字设置格式 · 支持一级至六级标题与列表"}
           </div>
           {mode === "md" ? (
             <textarea
@@ -980,17 +1109,12 @@ export default function Studio() {
                     data-field={line.id}
                     className={`edit-field field-${line.kind} ${selected === line.id ? "active" : ""}`}
                   >
-                    <div className="field-label">
-                      <span>
-                        {line.kind === "entry"
-                          ? "经历信息 · 用 | 分成两列或三列"
-                          : kindLabels[line.kind]}
-                      </span>
+                    <div className="block-gutter">
                       <div>
                         <button
-                          aria-label={`在此处添加要点 ${index + 1}`}
-                          title="在后面添加一条"
-                          onClick={() => addLine(line.id, "bullet")}
+                          aria-label={`添加内容 ${index + 1}`}
+                          title="选择要添加的内容"
+                          onClick={() => openBlockMenu(line.id)}
                         >
                           <Plus size={13} />
                         </button>
@@ -1016,6 +1140,16 @@ export default function Studio() {
                       index={index}
                       onFocus={() => setSelected(line.id)}
                       onChange={(value) => updateLine(line.id, value)}
+                      onEnter={() =>
+                        addLine(
+                          line.id,
+                          ["bullet", "ordered"].includes(line.kind)
+                            ? line.kind
+                            : "text",
+                          "simple",
+                        )
+                      }
+                      onSlash={() => openBlockMenu(line.id)}
                     />
                   </div>
                 ))}
@@ -1154,6 +1288,15 @@ export default function Studio() {
           <div className="preview-guidance">
             单击文字直接写 · 双击显示拖动手柄 · 页数随内容自动增减
           </div>
+          {preview && (
+            <div className="preview-banner" role="status">
+              <span>
+                <b>插入预览</b> {preview.label}，确认后保存。
+              </span>
+              <button onClick={confirmPreview}>确认应用</button>
+              <button onClick={cancelPreview}>取消</button>
+            </div>
+          )}
           <div
             ref={workspace}
             className="paper-workspace"
@@ -1172,13 +1315,13 @@ export default function Studio() {
               >
                 <span className="page-caption">第 {page + 1} 页</span>
                 <article
-                  className={`resume-paper template-${doc.template}`}
+                  className={`resume-paper template-${view.template}`}
                   data-page={page}
                   style={{
                     ...resumeStyle,
                     width: PAGE.width,
                     height: PAGE.height,
-                    padding: `${doc.settings.top}px ${doc.settings.right}px ${doc.settings.bottom}px ${doc.settings.left}px`,
+                    padding: `${view.settings.top}px ${view.settings.right}px ${view.settings.bottom}px ${view.settings.left}px`,
                     transform: `scale(${zoom})`,
                   }}
                 >
@@ -1186,9 +1329,10 @@ export default function Studio() {
                     <Editable
                       key={piece.line.id + "-" + piece.start}
                       piece={piece}
-                      template={doc.template}
+                      template={view.template}
                       contact={piece.line.id === contactId}
-                      settings={doc.settings}
+                      settings={view.settings}
+                      ghost={preview?.ids.includes(piece.line.id)}
                       selected={selected === piece.line.id}
                       armed={armed === piece.line.id}
                       onSelect={() => {
@@ -1411,8 +1555,17 @@ export default function Studio() {
                     <p>{t.desc}</p>
                   </button>
                 ))}
+                <button
+                  className="custom-module"
+                  onClick={() => {
+                    historyUpdate(initialResume(doc.template));
+                    setNotice("已载入当前模板示例，可撤销回到原稿。");
+                  }}
+                >
+                  载入当前模板示例
+                </button>
                 <p className="library-note">
-                  切换模板只改变样式，已填写的内容会保留。
+                  已改写的内容会保留。载入示例可重新开始，也可撤销。
                 </p>
               </>
             ) : (
@@ -1424,14 +1577,24 @@ export default function Studio() {
                 </div>
                 <section className="module-group">
                   <h3>个人信息 · 表头形式</h3>
-                  <button onClick={() => settings({ headerAlign: "center" })}>
+                  <button
+                    onMouseEnter={() => previewHeader("center")}
+                    onFocus={() => previewHeader("center")}
+                    onMouseLeave={cancelPreview}
+                    onClick={() => confirmHeader("center")}
+                  >
                     <span>
                       <strong>姓名与联系方式居中</strong>
                       <small>保留内容，调整表头排列</small>
                     </span>
                     <Check size={15} />
                   </button>
-                  <button onClick={() => settings({ headerAlign: "left" })}>
+                  <button
+                    onMouseEnter={() => previewHeader("left")}
+                    onFocus={() => previewHeader("left")}
+                    onMouseLeave={cancelPreview}
+                    onClick={() => confirmHeader("left")}
+                  >
                     <span>
                       <strong>姓名与联系方式左对齐</strong>
                       <small>与当前标题风格保持一致</small>
@@ -1445,19 +1608,18 @@ export default function Studio() {
                     {module.variants.map((v) => (
                       <button
                         key={v.name}
+                        onMouseEnter={() =>
+                          previewModule(module.name, v.body, v.name)
+                        }
+                        onFocus={() =>
+                          previewModule(module.name, v.body, v.name)
+                        }
+                        onMouseLeave={cancelPreview}
                         onClick={() => {
-                          const next = insertModule(doc, module.name, v.body);
-                          historyUpdate(next);
-                          const added = next.lines.find(
-                            (l) => !doc.lines.some((old) => old.id === l.id),
-                          );
-                          if (added) {
-                            setSelected(added.id);
-                            setTimeout(() => locate(added.id), 50);
-                          }
-                          setNotice(
-                            "已加入" + module.name + "，并沿用当前模板。",
-                          );
+                          if (window.innerWidth <= 900) {
+                            previewModule(module.name, v.body, v.name);
+                            setMobile("preview");
+                          } else confirmModule(module.name, v.body, v.name);
                         }}
                       >
                         <span>
@@ -1465,7 +1627,7 @@ export default function Studio() {
                           <small>
                             {module.name === "专业技能"
                               ? "同一风格，不同表达方式"
-                              : "加入对应板块，不重复创建标题"}
+                              : `预览加入「${module.name}」末尾`}
                           </small>
                         </span>
                         <Plus size={16} />
@@ -1475,11 +1637,36 @@ export default function Studio() {
                 ))}
                 <button
                   className="custom-module"
-                  onClick={() =>
-                    historyUpdate(
-                      insertModule(doc, "自定义板块", "填写你的补充经历。"),
+                  onMouseEnter={() =>
+                    previewModule(
+                      "自定义板块",
+                      "填写你的补充经历。",
+                      "自定义内容",
                     )
                   }
+                  onFocus={() =>
+                    previewModule(
+                      "自定义板块",
+                      "填写你的补充经历。",
+                      "自定义内容",
+                    )
+                  }
+                  onMouseLeave={cancelPreview}
+                  onClick={() => {
+                    if (window.innerWidth <= 900) {
+                      previewModule(
+                        "自定义板块",
+                        "填写你的补充经历。",
+                        "自定义内容",
+                      );
+                      setMobile("preview");
+                    } else
+                      confirmModule(
+                        "自定义板块",
+                        "填写你的补充经历。",
+                        "自定义内容",
+                      );
+                  }}
                 >
                   <Plus size={15} />
                   添加自定义板块
@@ -1512,13 +1699,85 @@ export default function Studio() {
           模板与内容
         </button>
       </nav>
+      <SelectionTools
+        lines={doc.lines}
+        onSource={(value, start, end) => {
+          historyUpdate(
+            { ...ref.current, lines: parseMarkdown(value, ref.current.lines) },
+            "format",
+          );
+          requestAnimationFrame(() => {
+            mdRef.current?.focus();
+            mdRef.current?.setSelectionRange(start, end);
+          });
+        }}
+        onKind={(ids, kind) => {
+          let order = 0;
+          historyUpdate({
+            ...ref.current,
+            lines: ref.current.lines.map((l) =>
+              ids.includes(l.id)
+                ? {
+                    ...l,
+                    kind,
+                    ...(kind === "ordered" ? { order: ++order } : {}),
+                  }
+                : l,
+            ),
+          });
+        }}
+        onColumns={(id, count) =>
+          historyUpdate({
+            ...ref.current,
+            lines: ref.current.lines.map((l) =>
+              l.id === id ? withColumns(l, count) : l,
+            ),
+          })
+        }
+      />
+      {blockMenu && (
+        <>
+          <div
+            className="block-menu-dismiss"
+            onPointerDown={() => setBlockMenu(null)}
+          />
+          <div
+            className="block-menu"
+            role="menu"
+            aria-label="添加内容菜单"
+            style={{ left: blockMenu.x, top: Math.max(90, blockMenu.y) }}
+          >
+            {paragraphOptions.map((p) => (
+              <button
+                key={p.kind}
+                role="menuitem"
+                onClick={() => chooseBlock(p.kind)}
+              >
+                {p.label}
+              </button>
+            ))}
+            <button role="menuitem" onClick={() => chooseBlock("bullet")}>
+              无序列表
+            </button>
+            <button role="menuitem" onClick={() => chooseBlock("ordered")}>
+              有序列表
+            </button>
+            <button role="menuitem" onClick={() => chooseBlock("entry", 2)}>
+              左右两栏
+            </button>
+            <button role="menuitem" onClick={() => chooseBlock("entry", 3)}>
+              左 · 中 · 右三栏
+            </button>
+          </div>
+        </>
+      )}
       <div
         ref={measureRef}
-        className={`measure-host template-${doc.template}`}
+        className={`measure-host template-${view.template}`}
         aria-hidden="true"
         style={{
           ...resumeStyle,
-          width: PAGE.width - doc.settings.left - doc.settings.right,
+          width: PAGE.width - view.settings.left - view.settings.right,
         }}
       />
       <input
@@ -1602,8 +1861,9 @@ export default function Studio() {
                           type="number"
                           aria-label={`${kindLabels[k]}${field === "before" ? "上间距" : field === "after" ? "下间距" : "字号"}`}
                           value={doc.settings.types[k][field]}
-                          min={field === "size" ? 10 : 0}
-                          max={field === "size" ? 36 : 40}
+                          min={field === "size" ? 1 : 0}
+                          max={field === "size" ? 300 : 40}
+                          step={field === "size" ? 0.5 : 1}
                           onChange={(e) => {
                             if (e.target.value !== "")
                               settings({
@@ -1612,9 +1872,9 @@ export default function Studio() {
                                   [k]: {
                                     ...doc.settings.types[k],
                                     [field]: Math.max(
-                                      field === "size" ? 10 : 0,
+                                      field === "size" ? 1 : 0,
                                       Math.min(
-                                        field === "size" ? 36 : 40,
+                                        field === "size" ? 300 : 40,
                                         Number(e.target.value),
                                       ),
                                     ),

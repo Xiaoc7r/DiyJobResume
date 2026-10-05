@@ -1,3 +1,4 @@
+import MarkdownIt from "markdown-it";
 import type { Line, Settings, Template } from "./flow";
 export const escapeHtml = (s: string) =>
   s.replace(
@@ -7,49 +8,67 @@ export const escapeHtml = (s: string) =>
         c
       ]!,
   );
-export function inline(s: string): string {
-  const pattern =
-    /\*\*([^*]+)\*\*|\*([^*]+)\*|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)/g;
-  let out = "",
-    last = 0;
-  for (const m of s.matchAll(pattern)) {
-    out += escapeHtml(s.slice(last, m.index));
-    out += m[1]
-      ? `<strong>${escapeHtml(m[1])}</strong>`
-      : m[2]
-        ? `<em>${escapeHtml(m[2])}</em>`
-        : m[3]
-          ? `<code>${escapeHtml(m[3])}</code>`
-          : `<a href="${escapeHtml(m[5])}" target="_blank" rel="noopener noreferrer">${escapeHtml(m[4])}</a>`;
-    last = m.index! + m[0].length;
+const markdown = new MarkdownIt({ html: false, breaks: true, linkify: false });
+markdown.disable("image");
+markdown.validateLink = (href) =>
+  /^(https?:\/\/|mailto:)[^\s<>"']+$/i.test(href);
+// Chinese punctuation can border emphasis without an ASCII space.
+markdown.inline.ruler.before("emphasis", "cjk_strong", (state, silent) => {
+  if (
+    state.src.slice(state.pos, state.pos + 2) !== "**" ||
+    state.src[state.pos + 2] === "*"
+  )
+    return false;
+  const end = state.src.indexOf("**", state.pos + 2);
+  if (end < 0 || state.src[end + 2] === "*") return false;
+  if (!silent) {
+    const token = state.push("cjk_strong", "strong", 0);
+    token.content = state.src.slice(state.pos + 2, end);
   }
-  return out + escapeHtml(s.slice(last)).replace(/\n/g, "<br>");
+  state.pos = end + 2;
+  return true;
+});
+markdown.renderer.rules.cjk_strong = (tokens, index) =>
+  "<strong>" + markdown.renderInline(tokens[index].content) + "</strong>";
+markdown.inline.ruler.before(
+  "html_inline",
+  "safe_underline",
+  (state, silent) => {
+    if (state.src.slice(state.pos, state.pos + 3) !== "<u>") return false;
+    const end = state.src.indexOf("</u>", state.pos + 3);
+    if (end < 0) return false;
+    if (!silent) {
+      const token = state.push("safe_underline", "u", 0);
+      token.content = state.src.slice(state.pos + 3, end);
+    }
+    state.pos = end + 4;
+    return true;
+  },
+);
+markdown.renderer.rules.safe_underline = (tokens, index) =>
+  "<u>" + markdown.renderInline(tokens[index].content) + "</u>";
+markdown.renderer.rules.link_open = (tokens, index, options, _env, self) => {
+  tokens[index].attrSet("target", "_blank");
+  tokens[index].attrSet("rel", "noopener noreferrer");
+  return self.renderToken(tokens, index, options);
+};
+export function inline(s: string): string {
+  return markdown.renderInline(s);
 }
 export function lineHtml(
   line: Line,
   text = line.text,
-  template: Template = "blue",
+  _template: Template = "blue",
 ) {
-  const fields = text.split(" | "),
-    left = fields[0].split(" · ");
-  if (
-    line.kind === "entry" &&
-    template !== "blue" &&
-    fields.length === 2 &&
-    left.length >= 2
-  ) {
-    return [fields[1], left[0], left.slice(1).join(" · ")]
+  if (line.kind === "entry" && text.includes(" | ")) {
+    const fields = text.split(" | ");
+    return fields
       .map(
-        (s) =>
-          `<span class="entry-cell" data-original="two">${inline(s)}</span>`,
+        (s, i) =>
+          `<span class="entry-cell" data-placeholder="${i === 0 ? "左侧内容" : i === fields.length - 1 ? "右侧内容" : "中间内容"}">${inline(s) || "<br>"}</span>`,
       )
       .join("");
   }
-  if (line.kind === "entry" && text.includes(" | "))
-    return text
-      .split(" | ")
-      .map((s) => `<span class="entry-cell">${inline(s)}</span>`)
-      .join("");
   return `<span class="ink">${inline(text) || "<br>"}</span>`;
 }
 export function domMarkdown(node: Node): string {
@@ -65,11 +84,17 @@ export function domMarkdown(node: Node): string {
     case "I":
     case "EM":
       return "*" + content + "*";
+    case "U":
+      return "<u>" + content + "</u>";
+    case "S":
+    case "STRIKE":
+    case "DEL":
+      return "~~" + content + "~~";
     case "CODE":
       return "`" + content + "`";
     case "A": {
       const href = node.getAttribute("href") || "";
-      return /^(https?:\/\/|mailto:)/.test(href)
+      return /^(https?:\/\/|mailto:)/i.test(href)
         ? `[${content}](${href})`
         : content;
     }
@@ -82,15 +107,11 @@ export function domMarkdown(node: Node): string {
 }
 export function editableText(el: HTMLElement) {
   const cells = el.querySelectorAll(":scope > .entry-cell");
-  if (cells.length === 3 && cells[0].getAttribute("data-original") === "two") {
-    const values = Array.from(cells).map((c) =>
-      Array.from(c.childNodes).map(domMarkdown).join(""),
-    );
-    return values[1] + " · " + values[2] + " | " + values[0];
-  }
   return cells.length
     ? Array.from(cells)
-        .map((c) => Array.from(c.childNodes).map(domMarkdown).join(""))
+        .map((c) =>
+          Array.from(c.childNodes).map(domMarkdown).join("").replace(/\n$/, ""),
+        )
         .join(" | ")
     : Array.from(el.childNodes).map(domMarkdown).join("").replace(/\n$/, "");
 }

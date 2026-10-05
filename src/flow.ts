@@ -1,12 +1,25 @@
+import { demoFor } from "./samples";
+export { demoFor } from "./samples";
 export const PAGE = { width: 794, height: 1123 };
 export const STORAGE_KEY = "diyjobresume.document.v2";
 export const OLD_KEY = "diyjobresume.document.v1";
-export type Kind = "name" | "section" | "entry" | "bullet" | "text" | "blank";
+export type Kind =
+  | "name"
+  | "section"
+  | "entry"
+  | "h4"
+  | "h5"
+  | "h6"
+  | "bullet"
+  | "ordered"
+  | "text"
+  | "blank";
 export type Template = "blue" | "black" | "ribbon";
 export interface Line {
   id: string;
   kind: Kind;
   text: string;
+  order?: number;
 }
 export interface Picture {
   id: string;
@@ -83,8 +96,12 @@ export const defaultSettings = (): Settings => ({
     name: { size: 24, before: 0, after: 4 },
     section: { size: 17, before: 9, after: 5 },
     entry: { size: 14, before: 4, after: 2 },
-    text: { size: 14, before: 0, after: 2 },
-    bullet: { size: 14, before: 1, after: 1 },
+    text: { size: 13, before: 0, after: 2 },
+    bullet: { size: 13, before: 1, after: 1 },
+    ordered: { size: 13, before: 1, after: 1 },
+    h4: { size: 15, before: 4, after: 2 },
+    h5: { size: 14, before: 3, after: 2 },
+    h6: { size: 13, before: 2, after: 2 },
   },
 });
 export const kindLabels: Record<Kind, string> = {
@@ -94,6 +111,10 @@ export const kindLabels: Record<Kind, string> = {
   text: "正文",
   bullet: "要点",
   blank: "空行",
+  ordered: "有序列表",
+  h4: "四级标题",
+  h5: "五级标题",
+  h6: "六级标题",
 };
 const prefixes: Record<Kind, string> = {
   name: "# ",
@@ -102,6 +123,10 @@ const prefixes: Record<Kind, string> = {
   bullet: "- ",
   text: "",
   blank: "",
+  ordered: "1. ",
+  h4: "#### ",
+  h5: "##### ",
+  h6: "###### ",
 };
 export function parseMarkdown(source: string, previous: Line[] = []): Line[] {
   if (source.length > 150000)
@@ -110,16 +135,24 @@ export function parseMarkdown(source: string, previous: Line[] = []): Line[] {
   if (rows.length > 2000)
     throw new Error("内容超过 2000 行，请拆分为不同简历。");
   const parsed: Line[] = rows.map((row) => {
-    const m = /^(#{1,3})\s+(.*)$/.exec(row);
+    const m = /^(#{1,6})\s+(.*)$/.exec(row);
     let kind: Kind = "text",
       text = row;
     if (m) {
-      kind =
-        m[1].length === 1 ? "name" : m[1].length === 2 ? "section" : "entry";
+      kind = (["name", "section", "entry", "h4", "h5", "h6"] as Kind[])[
+        m[1].length - 1
+      ];
       text = m[2];
     } else if (/^[-*]\s/.test(row)) {
       kind = "bullet";
       text = row.slice(2);
+    } else if (/^\d+[.)]\s/.test(row)) {
+      return {
+        id: uid(),
+        kind: "ordered",
+        text: row.replace(/^\d+[.)]\s+/, ""),
+        order: Number(row.match(/^\d+/)![0]),
+      };
     } else if (!row.trim()) {
       kind = "blank";
       text = "";
@@ -152,47 +185,24 @@ export function parseMarkdown(source: string, previous: Line[] = []): Line[] {
   return parsed;
 }
 export const toMarkdown = (lines: Line[]) =>
-  lines.map((l) => prefixes[l.kind] + l.text).join("\n");
-export const demo = `# 炒肉多
-138 0000 2468 | xxiaocr@gmail.com | 求职方向：后端开发工程师
-## 教育背景
-### 示例大学 · 计算机科学与技术 | 2021.09 — 2025.06
-本科 · GPA：3.8 / 4.0 · 校级优秀毕业生
-主修课程：数据结构、操作系统、计算机网络、数据库系统、软件工程。
-## 实习经历
-### 星河科技 · 后端开发实习生 | 2024.07 — 2024.12
-**工作概述：**参与企业服务平台的功能开发，负责接口设计、联调与测试，协同团队完成版本交付。
-- **需求分析：**梳理业务流程与边界条件，输出接口文档，减少跨团队沟通成本。
-- **功能开发：**使用 Java 与 Spring Boot 完成核心接口，补充参数校验和异常处理。
-- **稳定性：**完善日志与监控，通过单元测试和压测发现并修复边界问题。
-### 远山信息 · 软件研发实习生 | 2024.01 — 2024.06
-- 参与内部管理系统建设，完成数据查询、权限校验与报表导出功能。
-- 与产品、测试同学协作复现问题，编写修复说明与回归用例。
-## 项目经历
-### 星图 · 团队知识库 | 核心开发者 · 2024
-技术栈：\`Java\` \`Spring Boot\` \`MySQL\` \`Redis\` \`Vue\`
-**项目简介：**面向团队知识沉淀的协作平台，提供文档管理、全文检索、权限控制与版本记录。
-- **架构设计：**拆分文档、检索与权限模块，定义清晰的接口与数据契约。
-- **检索体验：**实现关键词检索与分页查询，结合缓存减少重复访问。
-- **可靠性：**为关键操作增加幂等校验，使用自动化测试保障数据一致性。
-### 拾光 · 任务协作工具 | 独立项目 · 2023
-- 完成需求分析、原型设计与开发，实现任务分配、状态跟踪和提醒。
-- 整理项目文档与部署流程，支持本地开发与持续集成。
-## 专业技能
-- **编程基础：**熟悉 Java，理解常用数据结构、集合、异常处理和并发基础。
-- **数据存储：**熟悉 MySQL、Redis，理解索引、事务、缓存与常见优化思路。
-- **开发框架：**熟悉 Spring Boot、MyBatis，能够编写清晰可维护的业务代码。
-- **工程实践：**熟悉 Git、接口测试、日志排查与团队协作流程。
-## 专业奖项
-- 2024 · 校级优秀学生奖学金
-- 2023 · 大学生软件设计竞赛二等奖`;
-export function initialResume(): Resume {
+  lines
+    .map(
+      (l) =>
+        (l.kind === "ordered" ? `${l.order || 1}. ` : prefixes[l.kind]) +
+        l.text,
+    )
+    .join("\n");
+export const demo = demoFor("blue");
+export function initialResume(template: Template = "blue"): Resume {
   return {
     version: 2,
     name: "炒肉多的简历",
-    template: "blue",
-    lines: parseMarkdown(demo),
-    settings: defaultSettings(),
+    template,
+    lines: parseMarkdown(demoFor(template)),
+    settings: {
+      ...defaultSettings(),
+      accent: templates.find((t) => t.id === template)!.color,
+    },
     pictures: [],
   };
 }
@@ -200,6 +210,10 @@ export function applyTemplate(doc: Resume, template: Template): Resume {
   return {
     ...doc,
     template,
+    lines:
+      toMarkdown(doc.lines) === demoFor(doc.template)
+        ? parseMarkdown(demoFor(template), doc.lines)
+        : doc.lines,
     settings: {
       ...doc.settings,
       accent: templates.find((t) => t.id === template)!.color,
@@ -228,8 +242,8 @@ export const modules = [
         body: "### 公司名称 · 岗位名称 | 2024.07 — 2024.12\n**工作概述：**简要说明业务背景与职责。\n- **行动：**你具体完成了什么。\n- **成果：**用真实结果说明你的贡献。",
       },
       {
-        name: "时间 · 公司 · 岗位",
-        body: "### 2024.07 — 2024.12 | 公司名称 | 岗位名称\n- **背景：**业务面临的问题。\n- **职责：**你负责的工作。\n- **成果：**可验证的结果。",
+        name: "公司 · 岗位 · 时间",
+        body: "### 公司名称 | 后端开发实习生 | 2024.07 — 2024.12\n- **背景：**业务面临的问题。\n- **职责：**你负责的工作。\n- **成果：**可验证的结果。",
       },
     ],
   },
@@ -241,8 +255,8 @@ export const modules = [
         body: "### 项目名称 | 角色 · 时间\n技术栈：`工具一` `工具二`\n**项目简介：**项目解决的问题与使用场景。\n- **贡献：**你负责的设计与实现。\n- **成果：**项目的实际效果。",
       },
       {
-        name: "时间 · 项目 · 角色",
-        body: "### 2024.01 — 2024.06 | 项目名称 | 核心开发者\n- **背景：**项目目标与业务需求。\n- **技术：**实现方案与选型原因。\n- **难点：**解决了什么问题。\n- **成果：**真实可验证的结果。",
+        name: "项目 · 角色 · 时间",
+        body: "### 项目名称 | 核心开发者 | 2024.01 — 2024.06\n- **背景：**项目目标与业务需求。\n- **技术：**实现方案与选型原因。\n- **难点：**解决了什么问题。\n- **成果：**真实可验证的结果。",
       },
     ],
   },
@@ -376,7 +390,14 @@ export function readResume(raw: unknown): Resume {
         ? l.id
         : uid();
     seen.add(id);
-    return { id, kind: l.kind, text: l.text };
+    return {
+      id,
+      kind: l.kind,
+      text: l.text,
+      ...(l.kind === "ordered"
+        ? { order: Math.max(1, Math.floor(numeric(l.order, 1, 1, 9999))) }
+        : {}),
+    };
   });
   if (toMarkdown(doc.lines).length > 150000) throw new Error("备份内容过长。");
   const s = r.settings || {},
@@ -395,7 +416,7 @@ export function readResume(raw: unknown): Resume {
   for (const k of Object.keys(d.types) as (keyof Settings["types"])[]) {
     const t = s.types?.[k] || {};
     d.types[k] = {
-      size: numeric(t.size, d.types[k].size, 10, 36),
+      size: numeric(t.size, d.types[k].size, 1, 300),
       before: numeric(t.before, d.types[k].before, 0, 40),
       after: numeric(t.after, d.types[k].after, 0, 40),
     };

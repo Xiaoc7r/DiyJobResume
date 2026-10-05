@@ -56,8 +56,9 @@ describe("continuous document", () => {
     expect(b[2].id).toBe(a[1].id);
     expect(b[3].id).toBe(a[2].id);
   });
-  it("template changes preserve content and images", () => {
+  it("template changes preserve edited content and images", () => {
     const doc = initialResume();
+    doc.lines[0].text = "自定义姓名";
     for (const template of ["blue", "black", "ribbon"] as const) {
       const next = applyTemplate(doc, template);
       expect(next.lines).toEqual(doc.lines);
@@ -105,7 +106,7 @@ describe("continuous document", () => {
     d.settings.top = -90;
     d.settings.types.text.size = 500;
     expect(readResume(d).settings.top).toBe(12);
-    expect(readResume(d).settings.types.text.size).toBe(36);
+    expect(readResume(d).settings.types.text.size).toBe(300);
   });
   it("roundtrips editable JSON backups", () => {
     const d = initialResume();
