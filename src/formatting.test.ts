@@ -7,6 +7,7 @@ import {
   parseMarkdown,
   toMarkdown,
   readResume,
+  templates,
 } from "./flow";
 import { skillLines } from "./samples";
 describe("selection formatting", () => {
@@ -73,7 +74,7 @@ describe("requested examples", () => {
         source = toMarkdown(doc.lines);
       expect(source).toContain("DoVideoAI");
       expect(source).not.toContain("CityHub");
-      expect(source).toContain("123 4567 8910");
+      expect(source).toContain("138 0000 2468");
       expect(readResume(doc).template).toBe(template);
       expect(source).toContain("github.com/Xiaoc7r");
       expect(source).toContain("xxiaocr@gmail.com");
@@ -82,11 +83,46 @@ describe("requested examples", () => {
       );
       expect(
         doc.lines
-          .slice(start + 1)
+          .slice(
+            start + 1,
+            doc.lines.findIndex(
+              (l) => l.kind === "section" && l.text === "专业奖项",
+            ),
+          )
+          .filter((l) => l.kind === "bullet")
           .map((l) => inline(l.text).replace(/<[^>]+>/g, "")),
       ).toEqual(skillLines);
       expect(
         applyTemplate(initialResume(), template).lines.map((l) => l.text),
       ).toEqual(doc.lines.map((l) => l.text));
     });
+});
+
+describe("template defaults and CSS backups", () => {
+  it("uses the requested template order and common typography", () => {
+    expect(templates.map((t) => t.id)).toEqual([
+      "blue",
+      "academic",
+      "black",
+      "ribbon",
+      "violet",
+      "teal",
+    ]);
+    const first = initialResume();
+    for (const t of templates) {
+      const doc = initialResume(t.id);
+      expect(toMarkdown(doc.lines)).toBe(toMarkdown(first.lines));
+      expect(doc.settings.types).toEqual(first.settings.types);
+    }
+  });
+  it("preserves CSS backups and migrates older drafts without CSS", () => {
+    const doc = initialResume();
+    doc.settings.customCss = "code { color: red; }";
+    expect(readResume(JSON.parse(JSON.stringify(doc))).settings.customCss).toBe(
+      doc.settings.customCss,
+    );
+    const old = JSON.parse(JSON.stringify(doc));
+    delete old.settings.customCss;
+    expect(readResume(old).settings.customCss).toBe("");
+  });
 });

@@ -1,6 +1,9 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import {
+  Github,
+  Mail,
+  Code2,
   Undo2,
   Redo2,
   Download,
@@ -49,6 +52,8 @@ import { lineHtml, editableText, fonts, rowStyle } from "./render";
 import { SelectionTools, paragraphOptions } from "./SelectionTools";
 import { withColumns } from "./formatting";
 import { NumericInput, holdDrag } from "./interaction";
+
+import { CustomCss, compileCustomCss } from "./CustomCss";
 
 function load() {
   try {
@@ -381,6 +386,8 @@ export default function Studio() {
   const [hovered, setHovered] = useState(""),
     [hoverGroup, setHoverGroup] = useState("");
   const [panelPosition, setPanelPosition] = useState({ x: 16, y: 82 });
+  const [cssOpen, setCssOpen] = useState(false);
+  const [contactOpen, setContactOpen] = useState(false);
   const pinnedPreview = useRef(false);
   const [preview, setPreview] = useState<{
     key: string;
@@ -394,6 +401,13 @@ export default function Studio() {
     y: number;
   } | null>(null);
   const view = preview?.doc ?? doc;
+  const customCss = useMemo(() => {
+    try {
+      return compileCustomCss(view.settings.customCss);
+    } catch {
+      return "";
+    }
+  }, [view.settings.customCss]);
   const previewScroll = useRef<number | null>(null),
     previewReveal = useRef(false);
   const measureRef = useRef<HTMLDivElement>(null),
@@ -971,6 +985,14 @@ export default function Studio() {
       className="studio"
       style={{ "--editor-width": leftWidth + "px" } as CSSProperties}
     >
+      <style>{customCss}</style>
+      {cssOpen && (
+        <CustomCss
+          value={doc.settings.customCss}
+          onApply={(css) => settings({ customCss: css })}
+          onClose={() => setCssOpen(false)}
+        />
+      )}
       <header className="app-header">
         <a className="brand" href="./">
           <FileText size={23} />
@@ -993,6 +1015,33 @@ export default function Studio() {
           {saved}
         </span>
         <div className="header-actions">
+          <a
+            className="icon-button github-link"
+            href="https://github.com/Xiaoc7r/DiyJobResume"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="GitHub 仓库"
+            aria-label="GitHub 仓库"
+          >
+            <Github size={20} />
+          </a>
+          <div className="contact-wrap">
+            <button
+              className="icon-button"
+              title="联系方式"
+              aria-label="联系方式"
+              aria-expanded={contactOpen}
+              onClick={() => setContactOpen(!contactOpen)}
+            >
+              <Mail size={19} />
+            </button>
+            {contactOpen && (
+              <div className="contact-popover">
+                <span>联系炒肉多</span>
+                <a href="mailto:xxiaocr@gmail.com">xxiaocr@gmail.com</a>
+              </div>
+            )}
+          </div>
           <button
             className="icon-button"
             title="使用帮助"
@@ -1293,6 +1342,13 @@ export default function Studio() {
               >
                 <GraduationCap size={19} />
               </button>
+              <button
+                title="自定义 CSS"
+                aria-label="自定义 CSS"
+                onClick={() => setCssOpen(true)}
+              >
+                <Code2 size={19} />
+              </button>
               <i />
               <NumberField
                 label="上下"
@@ -1583,7 +1639,7 @@ export default function Studio() {
                       style={{ "--mini-accent": t.color } as CSSProperties}
                     >
                       <strong>炒肉多</strong>
-                      <small>123 4567 8910 | xxiaocr@gmail.com</small>
+                      <small>138 0000 2468 | xxiaocr@gmail.com</small>
                       {["教育背景", "实习经历", "项目经历", "专业技能"].map(
                         (s, i) => (
                           <div key={s}>

@@ -43,6 +43,7 @@ export interface TypeStyle {
   after: number;
 }
 export interface Settings {
+  customCss: string;
   headerAlign: "template" | "left" | "center";
   top: number;
   bottom: number;
@@ -76,6 +77,12 @@ export const templates: {
     color: "#0756a5",
   },
   {
+    id: "academic",
+    name: "蓝图 · 研发履历",
+    desc: "简洁表头 · 延伸细线 · 清晰分区",
+    color: "#0756a5",
+  },
+  {
     id: "black",
     name: "黑线 · 专业履历",
     desc: "居中表头 · 黑色横线 · 三列经历",
@@ -88,39 +95,34 @@ export const templates: {
     color: "#171717",
   },
   {
-    id: "academic",
-    name: "蓝图 · 研发履历",
-    desc: "蓝色表头 · 延伸细线 · 清晰分区",
-    color: "#0756a5",
+    id: "violet",
+    name: "红序 · 系统架构",
+    desc: "红色顶线 · 浅色分区 · 左侧标记",
+    color: "#c43d3d",
   },
   {
     id: "teal",
     name: "青岚 · 工程实践",
-    desc: "青色横幅 · 双语板块 · 稳重技术风",
+    desc: "青色细线 · 留白分区 · 清爽技术风",
     color: "#588591",
-  },
-  {
-    id: "violet",
-    name: "紫序 · 系统架构",
-    desc: "紫色顶线 · 浅色分区 · 左侧标记",
-    color: "#763be5",
   },
 ];
 export const defaultSettings = (): Settings => ({
+  customCss: "",
   headerAlign: "template",
-  top: 36,
-  bottom: 36,
+  top: 31,
+  bottom: 28,
   left: 42,
   right: 42,
   color: "#171717",
   accent: "#0756a5",
   font: "sans",
-  lineHeight: 1.48,
+  lineHeight: 1.5,
   types: {
-    name: { size: 24, before: 0, after: 4 },
-    section: { size: 17, before: 9, after: 5 },
-    entry: { size: 14, before: 4, after: 2 },
-    text: { size: 13, before: 0, after: 2 },
+    name: { size: 24, before: 0, after: 0 },
+    section: { size: 16, before: 2, after: 2 },
+    entry: { size: 14, before: 3, after: 2 },
+    text: { size: 13, before: 0, after: 0 },
     bullet: { size: 13, before: 1, after: 1 },
     ordered: { size: 13, before: 1, after: 1 },
     h4: { size: 15, before: 4, after: 2 },
@@ -492,8 +494,10 @@ export function readResume(raw: unknown): Resume {
   if (toMarkdown(doc.lines).length > 150000) throw new Error("备份内容过长。");
   const s = r.settings || {},
     d = doc.settings;
-  d.top = numeric(s.top, 36, 12, 150);
-  d.bottom = numeric(s.bottom, 36, 12, 150);
+  d.customCss =
+    typeof s.customCss === "string" ? s.customCss.slice(0, 20000) : "";
+  d.top = numeric(s.top, d.top, 12, 150);
+  d.bottom = numeric(s.bottom, d.bottom, 12, 150);
   d.left = numeric(s.left, 42, 12, 150);
   d.right = numeric(s.right, 42, 12, 150);
   d.color = hex(s.color, d.color);
@@ -502,7 +506,7 @@ export function readResume(raw: unknown): Resume {
   d.headerAlign = ["template", "left", "center"].includes(s.headerAlign)
     ? s.headerAlign
     : "template";
-  d.lineHeight = numeric(s.lineHeight, 1.48, 1.1, 2.2);
+  d.lineHeight = numeric(s.lineHeight, d.lineHeight, 1.1, 2.2);
   for (const k of Object.keys(d.types) as (keyof Settings["types"])[]) {
     const t = s.types?.[k] || {};
     d.types[k] = {

@@ -687,7 +687,7 @@ a {
 }
 .template-ribbon .row-section .ink {
   background: var(--accent);
-  padding: 3px 12px;
+  padding: 0 12px;
   clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 100%, 0 100%);
   min-width: 90px;
 }
@@ -1732,7 +1732,7 @@ a {
   box-shadow: 0 2px 8px #73543b12;
 }
 .template-academic .row-name {
-  color: var(--accent);
+  color: var(--ink);
   text-align: left;
 }
 .template-academic .row-contact {
@@ -1751,18 +1751,19 @@ a {
   flex: 1;
 }
 .template-teal .row-name {
-  background: var(--accent);
-  color: white;
+  color: var(--ink);
   text-align: left;
-  padding-left: 12px !important;
-  clip-path: polygon(0 0, 94% 0, 100% 100%, 0 100%);
 }
 .template-teal .row-section {
-  background: var(--accent);
-  color: white;
-  border: 0;
-  padding-left: 10px;
-  border-radius: 6px 0 0 6px;
+  color: var(--accent);
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, white);
+  border-left: 3px solid var(--accent);
+  padding-left: 8px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent) 7%, white),
+    white
+  );
 }
 .template-violet.resume-paper:before {
   content: "";
@@ -1778,26 +1779,31 @@ a {
   background: color-mix(in srgb, var(--accent) 6%, white);
 }
 .mini-academic strong {
-  color: #0756a5;
+  color: #171717;
   text-align: left;
 }
 .mini-academic b {
   border-bottom: 2px solid #d4dfeb;
   color: #0756a5;
 }
-.mini-teal strong,
+.mini-teal strong {
+  color: #171717;
+  text-align: left;
+}
 .mini-teal b {
-  background: #588591;
-  color: white;
-  padding: 3px;
+  color: #588591;
+  border-left: 2px solid #588591;
+  border-bottom: 1px solid #c7d8dc;
+  background: #f5f9f9;
+  padding-left: 4px;
 }
 .mini-violet {
-  border-top: 5px solid #763be5;
+  border-top: 5px solid #c43d3d;
 }
 .mini-violet b {
-  border-left: 2px solid #763be5;
-  background: #f6f0ff;
-  color: #763be5;
+  border-left: 2px solid #c43d3d;
+  background: #fff2f2;
+  color: #c43d3d;
   padding-left: 4px;
 }
 @media (max-width: 900px) {
@@ -1843,4 +1849,76 @@ a {
 }
 .template-teal [data-title="专业奖项"]:after {
   content: "Awards";
+}
+
+.github-link {
+  color: inherit;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.contact-wrap {
+  position: relative;
+}
+.contact-popover {
+  position: absolute;
+  right: 0;
+  top: 42px;
+  z-index: 80;
+  padding: 18px;
+  background: white;
+  border: 1px solid #dedbd7;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px #0002;
+  white-space: nowrap;
+}
+.contact-popover span {
+  display: block;
+  margin-bottom: 8px;
+  color: #777;
+  font-size: 12px;
+}
+.contact-popover a {
+  color: #94654e;
+}
+.css-backdrop {
+  justify-content: flex-start;
+  padding: 80px 16px 16px;
+}
+.css-panel {
+  width: min(440px, 95vw);
+  margin: 0;
+  align-self: flex-start;
+  background: #fffefaf5;
+}
+.css-hint {
+  font-size: 12px;
+  color: #79736d;
+  line-height: 1.8;
+}
+.css-panel textarea {
+  width: 100%;
+  height: 310px;
+  resize: vertical;
+  padding: 14px;
+  border: 1px solid #dedbd7;
+  border-radius: 7px;
+  background: #faf9f6;
+  color: #35322f;
+  font:
+    13px/1.7 Consolas,
+    monospace;
+}
+.css-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+}
+.css-actions button {
+  padding: 9px 16px;
+  border: 1px solid #dedbd7;
+  border-radius: 6px;
 }

@@ -69,7 +69,7 @@ describe("continuous document", () => {
     const doc = initialResume(),
       next = insertModule(doc, "工作经历", "### 新公司 | 2025\n- 新职责");
     expect(
-      next.lines.filter((l) => l.kind === "section" && l.text === "工作经历"),
+      next.lines.filter((l) => l.kind === "section" && l.text === "实习经历"),
     ).toHaveLength(1);
     expect(
       next.lines.findIndex((l) => l.text === "新公司 | 2025"),
