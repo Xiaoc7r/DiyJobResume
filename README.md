@@ -13,8 +13,11 @@
 
 ## 🖼️ 效果预览
 
-<img width="2863" height="1523" alt="简历工坊预览" src="https://github.com/user-attachments/assets/4ddec401-cf64-4b8d-80a3-128927c7a580" />
+<img width="2860" height="1515" alt="简历工坊预览" src="https://github.com/user-attachments/assets/4b9eb0d7-c2f4-4907-9b82-bce594668813" />
 
+<img width="2859" height="1524" alt="image" src="https://github.com/user-attachments/assets/d0f3b132-321c-486b-9b22-e4adae1721f9" />
+
+<img width="94" height="314" alt="imag1e" src="https://github.com/user-attachments/assets/edd9589b-2899-4fea-ae33-e3c0efb70bb3" />
 
 
 
