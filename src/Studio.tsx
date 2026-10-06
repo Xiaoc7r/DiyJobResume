@@ -1891,7 +1891,21 @@ export default function Studio() {
             className={`modal ${modal === "type" ? "type-panel" : ""}`}
             style={
               modal === "type"
-                ? { left: panelPosition.x, top: panelPosition.y }
+                ? {
+                    left: Math.min(
+                      panelPosition.x,
+                      Math.max(
+                        0,
+                        window.innerWidth -
+                          Math.min(390, window.innerWidth - 24) -
+                          16,
+                      ),
+                    ),
+                    top: Math.min(
+                      panelPosition.y,
+                      Math.max(0, window.innerHeight - 100),
+                    ),
+                  }
                 : undefined
             }
             role="dialog"
