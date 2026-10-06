@@ -17,8 +17,6 @@
 
 <img width="2859" height="1524" alt="image" src="https://github.com/user-attachments/assets/d0f3b132-321c-486b-9b22-e4adae1721f9" />
 
-<img width="94" height="314" alt="imag1e" src="https://github.com/user-attachments/assets/edd9589b-2899-4fea-ae33-e3c0efb70bb3" />
-
 
 
 ## 🛠️ 本地运行
