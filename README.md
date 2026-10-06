@@ -5,7 +5,7 @@
 一个免费、开源、无需登录的在线简历编辑器。  
 选模板、填内容、调排版，数据均在浏览器本地处理。
 
-【 [追求无登录免费点击即用](https://xiaoc7r.github.io/DiyJobResume/) 】
+【 [点击即用](https://xiaoc7r.github.io/DiyJobResume/) 】
 
 </div>
 
