@@ -60,14 +60,21 @@ describe("selection formatting", () => {
   });
 });
 describe("requested examples", () => {
-  for (const template of ["blue", "black", "ribbon"] as const)
+  for (const template of [
+    "blue",
+    "black",
+    "ribbon",
+    "academic",
+    "teal",
+    "violet",
+  ] as const)
     it(template + " uses the requested project and original skills", () => {
       const doc = initialResume(template),
         source = toMarkdown(doc.lines);
-      expect(source).toContain(template === "black" ? "DoVideoAI" : "CityHub");
-      expect(source).not.toContain(
-        template === "black" ? "CityHub" : "DoVideoAI",
-      );
+      expect(source).toContain("DoVideoAI");
+      expect(source).not.toContain("CityHub");
+      expect(source).toContain("123 4567 8910");
+      expect(readResume(doc).template).toBe(template);
       expect(source).toContain("github.com/Xiaoc7r");
       expect(source).toContain("xxiaocr@gmail.com");
       const start = doc.lines.findIndex(

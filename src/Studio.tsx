@@ -10,7 +10,6 @@ import {
   GraduationCap,
   X,
   Plus,
-  Trash2,
   GripVertical,
   Check,
   ChevronDown,
@@ -49,6 +48,7 @@ import type {
 import { lineHtml, editableText, fonts, rowStyle } from "./render";
 import { SelectionTools, paragraphOptions } from "./SelectionTools";
 import { withColumns } from "./formatting";
+import { NumericInput, holdDrag } from "./interaction";
 
 function load() {
   try {
@@ -121,6 +121,7 @@ function SimpleInput({
   onFocus,
   onEnter,
   onSlash,
+  onBackspace,
 }: {
   line: Line;
   index: number;
@@ -128,6 +129,7 @@ function SimpleInput({
   onFocus: () => void;
   onEnter: () => void;
   onSlash: () => void;
+  onBackspace: () => void;
 }) {
   const el = useRef<HTMLDivElement>(null),
     composing = useRef(false),
@@ -166,6 +168,17 @@ function SimpleInput({
           onSlash();
           return;
         }
+        if (
+          e.key === "Backspace" &&
+          !e.nativeEvent.isComposing &&
+          (cursorOffset(e.currentTarget) === 0 ||
+            !e.currentTarget.textContent) &&
+          window.getSelection()?.isCollapsed
+        ) {
+          e.preventDefault();
+          onBackspace();
+          return;
+        }
         if (e.key === "Enter" && !e.nativeEvent.isComposing) {
           e.preventDefault();
           if (e.shiftKey) document.execCommand("insertLineBreak");
@@ -199,7 +212,6 @@ function Editable({
   armed,
   onSelect,
   onChange,
-  onArm,
   onEnter,
   onRemove,
   onDrop,
@@ -215,7 +227,6 @@ function Editable({
   armed: boolean;
   onSelect: () => void;
   onChange: (text: string) => void;
-  onArm: () => void;
   onEnter: () => void;
   onRemove: () => void;
   onDrop: (id: string) => void;
@@ -245,6 +256,9 @@ function Editable({
     <div
       className={`paper-row ${ghost ? "ghost-row" : ""} ${selected ? "selected" : ""} ${armed ? "armed" : ""}`}
       data-preview={ghost ? "true" : undefined}
+      onPointerDown={(e) => {
+        if (!ghost) holdDrag(e, piece.line.id, onMove);
+      }}
       data-line={piece.line.id}
       data-start={piece.start}
       onDragOver={(e) => {
@@ -260,44 +274,6 @@ function Editable({
         onDrop(e.dataTransfer.getData("application/x-resume-line"));
       }}
     >
-      {armed && (
-        <div className="drag-actions">
-          <button
-            aria-label="拖动这段内容"
-            title="拖到另一段之前；标题会连同所属内容一起移动"
-            onPointerDown={(e) => {
-              e.preventDefault();
-              const handle = e.currentTarget;
-              handle.setPointerCapture(e.pointerId);
-              let target: HTMLElement | null = null;
-              const move = (event: PointerEvent) => {
-                target?.classList.remove("drop-target");
-                target =
-                  document
-                    .elementFromPoint(event.clientX, event.clientY)
-                    ?.closest<HTMLElement>(".paper-row") || null;
-                if (target?.dataset.line !== piece.line.id)
-                  target?.classList.add("drop-target");
-              };
-              const end = (event: PointerEvent) => {
-                move(event);
-                const id = target?.dataset.line;
-                target?.classList.remove("drop-target");
-                handle.removeEventListener("pointermove", move);
-                if (id && id !== piece.line.id) onMove(id);
-              };
-              handle.addEventListener("pointermove", move);
-              handle.addEventListener("pointerup", end, { once: true });
-            }}
-          >
-            <GripVertical size={15} />
-            拖动
-          </button>
-          <button aria-label="结束拖动" onClick={onBlur}>
-            <Check size={15} />
-          </button>
-        </div>
-      )}
       <div
         ref={el}
         data-edit={piece.line.id}
@@ -305,17 +281,12 @@ function Editable({
         data-part={piece.start}
         role="textbox"
         aria-label={`简历${kindLabels[piece.line.kind]}：${piece.line.text.slice(0, 25)}`}
-        contentEditable={!armed && !ghost}
+        contentEditable={!ghost}
         suppressContentEditableWarning
         className={`flow-row row-${piece.line.kind} ${contact ? "row-contact" : ""} ${piece.continued ? "continued" : ""}`}
         style={rowStyle(piece.line, settings, piece.continued)}
         onFocus={onSelect}
         onClick={onSelect}
-        onDoubleClick={(e) => {
-          e.preventDefault();
-          onArm();
-          window.getSelection()?.removeAllRanges();
-        }}
         onInput={flush}
         onCompositionStart={() => {
           composing.current = true;
@@ -369,17 +340,13 @@ function NumberField({
   return (
     <label className="number-label">
       <span>{label}</span>
-      <input
-        type="number"
-        aria-label={label}
+      <NumericInput
+        label={label}
         value={value}
         min={min}
         max={max}
         step={step}
-        onChange={(e) => {
-          if (e.target.value !== "")
-            onChange(Math.max(min, Math.min(max, Number(e.target.value))));
-        }}
+        onChange={onChange}
       />
     </label>
   );
@@ -399,7 +366,9 @@ export default function Studio() {
     [tab, setTab] = useState<"templates" | "modules">("templates");
   const [selected, setSelected] = useState(""),
     [armed, setArmed] = useState(""),
-    [leftWidth, setLeftWidth] = useState(360),
+    [leftWidth, setLeftWidth] = useState(() =>
+      Math.min(560, Math.max(420, window.innerWidth * 0.28)),
+    ),
     [zoom, setZoom] = useState(0.75),
     [autoZoom, setAutoZoom] = useState(true),
     [modal, setModal] = useState<"type" | "help" | null>(null),
@@ -409,6 +378,10 @@ export default function Studio() {
     [fontVersion, setFontVersion] = useState(0),
     [picSelection, setPicSelection] = useState(""),
     [imageKind, setImageKind] = useState("证件照");
+  const [hovered, setHovered] = useState(""),
+    [hoverGroup, setHoverGroup] = useState("");
+  const [panelPosition, setPanelPosition] = useState({ x: 16, y: 82 });
+  const pinnedPreview = useRef(false);
   const [preview, setPreview] = useState<{
     key: string;
     doc: Resume;
@@ -451,6 +424,7 @@ export default function Studio() {
   );
   const historyUpdate = (next: Resume, group = "") => {
     if (next === ref.current) return;
+    pinnedPreview.current = false;
     setPreview(null);
     previewScroll.current = null;
     const previous = ref.current;
@@ -479,6 +453,9 @@ export default function Studio() {
   };
   const undo = () => {
     if (!past.length) return;
+    pinnedPreview.current = false;
+    setPreview(null);
+    previewScroll.current = null;
     const previous = ref.current;
     setFuture((f) => [previous, ...f]);
     setDoc(past.at(-1)!);
@@ -488,6 +465,9 @@ export default function Studio() {
   };
   const redo = () => {
     if (!future.length) return;
+    pinnedPreview.current = false;
+    setPreview(null);
+    previewScroll.current = null;
     const previous = ref.current;
     setPast((p) => [...p, previous]);
     setDoc(future[0]);
@@ -803,15 +783,73 @@ export default function Studio() {
       setNotice(String(e instanceof Error ? e.message : e));
     }
   };
-  const deleteSection = (id: string) => {
-    const start = doc.lines.findIndex((l) => l.id === id),
-      end = groupEnd(doc.lines, start);
-    historyUpdate({
-      ...doc,
-      lines: doc.lines.filter((_, i) => i < start || i >= end),
+  const sectionStart = (id: string) => {
+    const lines = ref.current.lines;
+    let index = lines.findIndex((l) => l.id === id);
+    for (let i = index; i >= 0; i--)
+      if (lines[i].kind === "section") return lines[i].id;
+    return id;
+  };
+  const inHoveredGroup = (id: string) => {
+    if (!hoverGroup) return false;
+    const start = doc.lines.findIndex((l) => l.id === hoverGroup),
+      at = doc.lines.findIndex((l) => l.id === id);
+    return start >= 0 && at >= start && at < groupEnd(doc.lines, start);
+  };
+  const backspaceLine = (id: string) => {
+    const lines = [...ref.current.lines],
+      i = lines.findIndex((l) => l.id === id);
+    if (i < 0) return;
+    if (i === 0) {
+      if (lines[i].kind !== "text") {
+        lines[i] = { ...lines[i], kind: "text" };
+        historyUpdate({ ...ref.current, lines });
+      }
+      return;
+    }
+    const previous = lines[i - 1],
+      offset = previous.text.replace(/[*_~`]/g, "").length;
+    lines[i - 1] = { ...previous, text: previous.text + lines[i].text };
+    lines.splice(i, 1);
+    historyUpdate({ ...ref.current, lines });
+    requestAnimationFrame(() => {
+      const el = document.querySelector<HTMLElement>(
+        `[data-simple="${previous.id}"]`,
+      );
+      el?.focus();
+      if (el) placeCursor(el, offset);
     });
   };
+  const dragPanel = (e: ReactPointerEvent) => {
+    if ((e.target as HTMLElement).closest("button")) return;
+    e.preventDefault();
+    const el = e.currentTarget as HTMLElement,
+      startX = e.clientX,
+      startY = e.clientY,
+      base = panelPosition;
+    el.setPointerCapture(e.pointerId);
+    const move = (event: PointerEvent) =>
+      setPanelPosition({
+        x: Math.max(
+          0,
+          Math.min(window.innerWidth - 240, base.x + event.clientX - startX),
+        ),
+        y: Math.max(
+          0,
+          Math.min(window.innerHeight - 80, base.y + event.clientY - startY),
+        ),
+      });
+    const end = () => {
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", end);
+      el.removeEventListener("pointercancel", end);
+    };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", end);
+    el.addEventListener("pointercancel", end);
+  };
   const cancelPreview = () => {
+    pinnedPreview.current = false;
     setPreview(null);
     previewReveal.current = false;
     const savedScroll = previewScroll.current;
@@ -819,13 +857,16 @@ export default function Studio() {
     if (savedScroll !== null && workspace.current)
       workspace.current.scrollTop = savedScroll;
   };
+  const leavePreview = () => {
+    if (!pinnedPreview.current) cancelPreview();
+  };
   const beginPreview = (
     key: string,
     next: Resume,
     label: string,
     ids?: string[],
   ) => {
-    if (preview?.key === key) return;
+    if (preview?.key === key || pinnedPreview.current) return;
     if (previewScroll.current === null)
       previewScroll.current = workspace.current?.scrollTop ?? 0;
     previewReveal.current = true;
@@ -851,6 +892,7 @@ export default function Studio() {
       preview?.key === name + label
         ? preview.doc
         : insertModule(ref.current, name, body);
+    pinnedPreview.current = false;
     setPreview(null);
     previewScroll.current = null;
     previewReveal.current = false;
@@ -862,7 +904,6 @@ export default function Studio() {
       setSelected(added.id);
       setTimeout(() => locate(added.id), 50);
     }
-    setNotice("已加入" + name + "，可以撤销。");
   };
   const previewHeader = (align: "left" | "center") =>
     beginPreview(
@@ -874,6 +915,7 @@ export default function Studio() {
         .map((l) => l.id),
     );
   const confirmHeader = (align: "left" | "center") => {
+    pinnedPreview.current = false;
     setPreview(null);
     previewScroll.current = null;
     previewReveal.current = false;
@@ -886,7 +928,6 @@ export default function Studio() {
     previewReveal.current = false;
     setPreview(null);
     historyUpdate(next);
-    setNotice("已应用预览，可以撤销。");
   };
   const openBlockMenu = (id: string) => {
     const el = editorRef.current?.querySelector<HTMLElement>(
@@ -934,7 +975,7 @@ export default function Studio() {
         <a className="brand" href="./">
           <FileText size={23} />
           <span>
-            简历工坊<small>把经历，写清楚。</small>
+            简历工坊<small>炒肉多，写简历。</small>
           </span>
         </a>
         <input
@@ -1028,7 +1069,7 @@ export default function Studio() {
           </button>
         </div>
       </header>
-      {notice && (
+      {notice && !/^已(加入|应用|载入|导入)/.test(notice) && (
         <div className="notice" role="status">
           {notice}
           <button aria-label="关闭提示" onClick={() => setNotice("")}>
@@ -1107,7 +1148,14 @@ export default function Studio() {
                   <div
                     key={line.id}
                     data-field={line.id}
-                    className={`edit-field field-${line.kind} ${selected === line.id ? "active" : ""}`}
+                    className={`edit-field field-${line.kind} ${selected === line.id ? "active" : ""} ${hovered === line.id ? "hovered" : ""}`}
+                    onMouseEnter={() => setHovered(line.id)}
+                    onMouseLeave={() => setHovered("")}
+                    onPointerDown={(e) =>
+                      holdDrag(e, line.id, (target) =>
+                        historyUpdate(moveGroup(ref.current, line.id, target)),
+                      )
+                    }
                   >
                     <div className="block-gutter">
                       <div>
@@ -1117,21 +1165,6 @@ export default function Studio() {
                           onClick={() => openBlockMenu(line.id)}
                         >
                           <Plus size={13} />
-                        </button>
-                        <button
-                          aria-label={`删除内容 ${index + 1}`}
-                          title={
-                            line.kind === "section"
-                              ? "删除整个板块，可撤销"
-                              : "删除这一行，可撤销"
-                          }
-                          onClick={() =>
-                            line.kind === "section"
-                              ? deleteSection(line.id)
-                              : removeLine(line.id)
-                          }
-                        >
-                          <Trash2 size={12} />
                         </button>
                       </div>
                     </div>
@@ -1150,6 +1183,7 @@ export default function Studio() {
                         )
                       }
                       onSlash={() => openBlockMenu(line.id)}
+                      onBackspace={() => backspaceLine(line.id)}
                     />
                   </div>
                 ))}
@@ -1285,13 +1319,12 @@ export default function Studio() {
               </select>
             </div>
           </div>
-          <div className="preview-guidance">
-            单击文字直接写 · 双击显示拖动手柄 · 页数随内容自动增减
-          </div>
+          <div className="preview-spacer" />
           {preview && (
             <div className="preview-banner" role="status">
               <span>
-                <b>插入预览</b> {preview.label}，确认后保存。
+                <b>插入预览</b> {preview.label}
+                。单击固定预览，双击卡片直接加入。
               </span>
               <button onClick={confirmPreview}>确认应用</button>
               <button onClick={cancelPreview}>取消</button>
@@ -1299,6 +1332,13 @@ export default function Studio() {
           )}
           <div
             ref={workspace}
+            onMouseMove={(e) => {
+              const row = (e.target as HTMLElement).closest<HTMLElement>(
+                "[data-line]",
+              );
+              setHoverGroup(row ? sectionStart(row.dataset.line!) : "");
+            }}
+            onMouseLeave={() => setHoverGroup("")}
             className="paper-workspace"
             onClick={(e) => {
               if (e.target === e.currentTarget) {
@@ -1333,7 +1373,11 @@ export default function Studio() {
                       contact={piece.line.id === contactId}
                       settings={view.settings}
                       ghost={preview?.ids.includes(piece.line.id)}
-                      selected={selected === piece.line.id}
+                      selected={
+                        selected === piece.line.id ||
+                        hovered === piece.line.id ||
+                        inHoveredGroup(piece.line.id)
+                      }
                       armed={armed === piece.line.id}
                       onSelect={() => {
                         if (armed !== piece.line.id) setArmed("");
@@ -1341,7 +1385,6 @@ export default function Studio() {
                         setPicSelection("");
                       }}
                       onChange={(text) => updatePiece(piece, text)}
-                      onArm={() => setArmed(piece.line.id)}
                       onEnter={() =>
                         addLine(
                           piece.line.id,
@@ -1358,7 +1401,11 @@ export default function Studio() {
                       }}
                       onMove={(target) => {
                         historyUpdate(
-                          moveGroup(ref.current, piece.line.id, target),
+                          moveGroup(
+                            ref.current,
+                            sectionStart(piece.line.id),
+                            sectionStart(target),
+                          ),
                         );
                         setArmed("");
                       }}
@@ -1536,7 +1583,7 @@ export default function Studio() {
                       style={{ "--mini-accent": t.color } as CSSProperties}
                     >
                       <strong>炒肉多</strong>
-                      <small>138 0000 2468 | xxiaocr@gmail.com</small>
+                      <small>123 4567 8910 | xxiaocr@gmail.com</small>
                       {["教育背景", "实习经历", "项目经历", "专业技能"].map(
                         (s, i) => (
                           <div key={s}>
@@ -1580,8 +1627,13 @@ export default function Studio() {
                   <button
                     onMouseEnter={() => previewHeader("center")}
                     onFocus={() => previewHeader("center")}
-                    onMouseLeave={cancelPreview}
-                    onClick={() => confirmHeader("center")}
+                    onMouseLeave={leavePreview}
+                    onClick={() => {
+                      pinnedPreview.current = false;
+                      previewHeader("center");
+                      pinnedPreview.current = true;
+                    }}
+                    onDoubleClick={() => confirmHeader("center")}
                   >
                     <span>
                       <strong>姓名与联系方式居中</strong>
@@ -1592,8 +1644,13 @@ export default function Studio() {
                   <button
                     onMouseEnter={() => previewHeader("left")}
                     onFocus={() => previewHeader("left")}
-                    onMouseLeave={cancelPreview}
-                    onClick={() => confirmHeader("left")}
+                    onMouseLeave={leavePreview}
+                    onClick={() => {
+                      pinnedPreview.current = false;
+                      previewHeader("left");
+                      pinnedPreview.current = true;
+                    }}
+                    onDoubleClick={() => confirmHeader("left")}
                   >
                     <span>
                       <strong>姓名与联系方式左对齐</strong>
@@ -1614,13 +1671,22 @@ export default function Studio() {
                         onFocus={() =>
                           previewModule(module.name, v.body, v.name)
                         }
-                        onMouseLeave={cancelPreview}
+                        onMouseLeave={leavePreview}
                         onClick={() => {
-                          if (window.innerWidth <= 900) {
-                            previewModule(module.name, v.body, v.name);
-                            setMobile("preview");
-                          } else confirmModule(module.name, v.body, v.name);
+                          pinnedPreview.current = false;
+                          previewModule(module.name, v.body, v.name);
+                          pinnedPreview.current = true;
+                          if (window.innerWidth <= 900) setMobile("preview");
                         }}
+                        onDoubleClick={() =>
+                          confirmModule(module.name, v.body, v.name)
+                        }
+                        className={
+                          preview?.key === module.name + v.name
+                            ? "previewing"
+                            : ""
+                        }
+                        title="单击固定预览 · 双击加入"
                       >
                         <span>
                           <strong>{v.name}</strong>
@@ -1651,22 +1717,25 @@ export default function Studio() {
                       "自定义内容",
                     )
                   }
-                  onMouseLeave={cancelPreview}
+                  onMouseLeave={leavePreview}
                   onClick={() => {
-                    if (window.innerWidth <= 900) {
-                      previewModule(
-                        "自定义板块",
-                        "填写你的补充经历。",
-                        "自定义内容",
-                      );
-                      setMobile("preview");
-                    } else
-                      confirmModule(
-                        "自定义板块",
-                        "填写你的补充经历。",
-                        "自定义内容",
-                      );
+                    pinnedPreview.current = false;
+                    previewModule(
+                      "自定义板块",
+                      "填写你的补充经历。",
+                      "自定义内容",
+                    );
+                    pinnedPreview.current = true;
+                    if (window.innerWidth <= 900) setMobile("preview");
                   }}
+                  onDoubleClick={() =>
+                    confirmModule(
+                      "自定义板块",
+                      "填写你的补充经历。",
+                      "自定义内容",
+                    )
+                  }
+                  title="单击固定预览 · 双击加入"
                 >
                   <Plus size={15} />
                   添加自定义板块
@@ -1814,15 +1883,26 @@ export default function Studio() {
         }}
       />
       {modal && (
-        <div className="modal-backdrop" onClick={() => setModal(null)}>
+        <div
+          className={`modal-backdrop ${modal === "type" ? "type-backdrop" : ""}`}
+          onClick={() => setModal(null)}
+        >
           <section
-            className="modal"
+            className={`modal ${modal === "type" ? "type-panel" : ""}`}
+            style={
+              modal === "type"
+                ? { left: panelPosition.x, top: panelPosition.y }
+                : undefined
+            }
             role="dialog"
             aria-modal="true"
             aria-label={modal === "type" ? "间距与字号" : "使用帮助"}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="modal-heading">
+            <div
+              className="modal-heading"
+              onPointerDown={modal === "type" ? dragPanel : undefined}
+            >
               <div>
                 <h2>
                   {modal === "type" ? "让排版恰到好处" : "写一份清晰的简历"}
@@ -1856,32 +1936,21 @@ export default function Studio() {
                     <div className="type-row" key={k}>
                       <strong>{kindLabels[k]}</strong>
                       {(["before", "after", "size"] as const).map((field) => (
-                        <input
+                        <NumericInput
                           key={field}
-                          type="number"
-                          aria-label={`${kindLabels[k]}${field === "before" ? "上间距" : field === "after" ? "下间距" : "字号"}`}
+                          label={`${kindLabels[k]}${field === "before" ? "上间距" : field === "after" ? "下间距" : "字号"}`}
                           value={doc.settings.types[k][field]}
                           min={field === "size" ? 1 : 0}
                           max={field === "size" ? 300 : 40}
                           step={field === "size" ? 0.5 : 1}
-                          onChange={(e) => {
-                            if (e.target.value !== "")
-                              settings({
-                                types: {
-                                  ...doc.settings.types,
-                                  [k]: {
-                                    ...doc.settings.types[k],
-                                    [field]: Math.max(
-                                      field === "size" ? 1 : 0,
-                                      Math.min(
-                                        field === "size" ? 300 : 40,
-                                        Number(e.target.value),
-                                      ),
-                                    ),
-                                  },
-                                },
-                              });
-                          }}
+                          onChange={(n) =>
+                            settings({
+                              types: {
+                                ...doc.settings.types,
+                                [k]: { ...doc.settings.types[k], [field]: n },
+                              },
+                            })
+                          }
                         />
                       ))}
                     </div>
@@ -1923,12 +1992,12 @@ export default function Studio() {
                 </p>
                 <p>
                   <b>2. 定风格：</b>
-                  右侧三套模板分别对应蓝色细线、黑色横线、黑色标签。拼接内容只选择经历的组织方式，自动继承当前风格。
+                  右侧六套模板可直接使用。拼接内容只选择经历的组织方式，自动继承当前风格。
                 </p>
                 <p>
                   <b>3. 纸上编辑：</b>单击文字输入，Enter
                   添加下一段，Shift+Enter
-                  段内换行。双击显示拖动手柄，拖到另一段之前；拖动标题会带上其所属内容。
+                  段内换行。长按后拖到另一板块之前；纸上拖动会带上板块内的内容。
                 </p>
                 <p>
                   <b>4. 自动分页：</b>

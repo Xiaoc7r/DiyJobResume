@@ -14,7 +14,13 @@ export type Kind =
   | "ordered"
   | "text"
   | "blank";
-export type Template = "blue" | "black" | "ribbon";
+export type Template =
+  | "blue"
+  | "black"
+  | "ribbon"
+  | "academic"
+  | "teal"
+  | "violet";
 export interface Line {
   id: string;
   kind: Kind;
@@ -65,7 +71,7 @@ export const templates: {
 }[] = [
   {
     id: "blue",
-    name: "蓝线 · 校招经典",
+    name: "炒肉多经典",
     desc: "居中表头 · 蓝色细线 · 紧凑清晰",
     color: "#0756a5",
   },
@@ -80,6 +86,24 @@ export const templates: {
     name: "标签 · 技术履历",
     desc: "左对齐表头 · 黑色标签 · 分区明确",
     color: "#171717",
+  },
+  {
+    id: "academic",
+    name: "蓝图 · 研发履历",
+    desc: "蓝色表头 · 延伸细线 · 清晰分区",
+    color: "#0756a5",
+  },
+  {
+    id: "teal",
+    name: "青岚 · 工程实践",
+    desc: "青色横幅 · 双语板块 · 稳重技术风",
+    color: "#588591",
+  },
+  {
+    id: "violet",
+    name: "紫序 · 系统架构",
+    desc: "紫色顶线 · 浅色分区 · 左侧标记",
+    color: "#763be5",
   },
 ];
 export const defaultSettings = (): Settings => ({
@@ -287,7 +311,73 @@ export const modules = [
     ],
   },
 ];
+modules.find((m) => m.name === "实习经历")!.name = "工作经历";
+const extraVariants: Record<string, { name: string; body: string }[]> = {
+  教育背景: [
+    {
+      name: "学位卡片 · 课程标签",
+      body: "### 学校名称 | 专业 · 学位 | 入学 — 毕业\n`核心课程` `研究方向` `学业荣誉`\nGPA / 学术成果与相关经历。",
+    },
+    {
+      name: "学术经历 · 成果列表",
+      body: "### 学校名称 · 研究方向 | 入学 — 毕业\n1. 研究课题与个人贡献。\n2. 论文、竞赛或学术成果。",
+    },
+  ],
+  工作经历: [
+    {
+      name: "职责 · 行动 · 结果",
+      body: "### 公司名称 | 岗位名称 | 开始 — 结束\n**职责范围：**业务规模与负责的边界。\n- **关键行动：**设计方案、技术取舍与推进过程。\n- **业务结果：**可核验的交付成果与改进。",
+    },
+    {
+      name: "技术标签 · 核心贡献",
+      body: "### 公司名称 · 团队 | 开始 — 结束\n`岗位名称` `业务方向` `核心技术`\n- 主导的核心模块与工程实践。\n- 性能、稳定性或协作方面的改进。",
+    },
+  ],
+  项目经历: [
+    {
+      name: "项目卡片 · 链接与技术栈",
+      body: "### 项目名称 | 开始 — 结束\n[项目地址](https://github.com/Xiaoc7r)\n`技术一` `技术二` `技术三`\n**项目目标：**解决的问题与使用场景。\n- **个人贡献：**实现与取舍。",
+    },
+    {
+      name: "方案拆解 · 编号成果",
+      body: "### 项目名称 | 负责角色 | 开始 — 结束\n**项目概述：**目标与关键约束。\n1. 架构设计与技术选型。\n2. 核心难点及解决方案。\n3. 交付结果与验证方式。",
+    },
+  ],
+  专业技能: [
+    {
+      name: "技能标签 · 能力说明",
+      body: "`Java` `MySQL` `Redis` `工程实践`\n结合具体场景说明掌握深度，避免只列工具名称。",
+    },
+    {
+      name: "能力分组 · 左右对照",
+      body: "### 技术领域 | 实践能力\n### 后端开发 | 接口设计、并发与稳定性\n### 数据存储 | 索引设计、缓存与一致性",
+    },
+  ],
+  专业奖项: [
+    {
+      name: "荣誉标签 · 说明",
+      body: "### 奖项名称 | 获奖时间\n`颁发单位` `奖项等级`\n简述评选范围与获奖贡献。",
+    },
+    {
+      name: "奖项 · 机构 · 时间",
+      body: "### 奖项名称 | 颁发机构 | 获奖时间\n### 荣誉名称 | 颁发机构 | 获奖时间",
+    },
+  ],
+};
+for (const module of modules)
+  module.variants.push(...(extraVariants[module.name] || []));
 export function insertModule(doc: Resume, name: string, body: string): Resume {
+  if (
+    name === "工作经历" &&
+    !doc.lines.some((l) => l.kind === "section" && l.text === name) &&
+    doc.lines.some((l) => l.kind === "section" && l.text === "实习经历")
+  )
+    name = "实习经历";
+  if (
+    name === "实习经历" &&
+    doc.lines.some((l) => l.kind === "section" && l.text === "工作经历")
+  )
+    name = "工作经历";
   const lines = [...doc.lines],
     start = lines.findIndex((l) => l.kind === "section" && l.text === name);
   let pos = lines.length;
@@ -377,7 +467,7 @@ export function readResume(raw: unknown): Resume {
   const doc = initialResume(),
     seen = new Set<string>();
   doc.name = str(r.name, "我的简历").slice(0, 100);
-  doc.template = ["blue", "black", "ribbon"].includes(r.template)
+  doc.template = templates.some((t) => t.id === r.template)
     ? r.template
     : "blue";
   doc.lines = r.lines.map((l: any) => {

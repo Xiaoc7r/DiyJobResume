@@ -20,19 +20,17 @@ const skills = skillLines.map(
 );
 // Explicit fictional internship examples; not claims about the user's employment.
 const header = `# 炒肉多
-138 0000 2468 | xxiaocr@gmail.com | [github.com/Xiaoc7r](https://github.com/Xiaoc7r)
+123 4567 8910 | xxiaocr@gmail.com | [github.com/Xiaoc7r](https://github.com/Xiaoc7r)
 ## 教育背景
-### 吉林大学 \`985\` \`211\` \`双一流\` | 2023.09 - 2027.07
+### 吉林大学 \`985\` \`211\` \`双一流\` | 2019.09 - 2023.06
 **计算机科学与技术**
-## 实习经历
-### 星河科技 | 后端开发实习生 | 2024.07 - 2024.12
-**工作概述：**参与企业服务平台的功能开发，负责接口设计、联调与测试，协同团队完成版本交付。
-- **需求分析：**梳理业务流程与边界条件，输出接口文档，减少跨团队沟通成本。
-- **功能开发：**使用 Java 与 Spring Boot 完成核心接口，补充参数校验和异常处理。
-- **稳定性：**完善日志与监控，通过单元测试和压测发现并修复边界问题。
-### 远山信息 | 后端开发实习生 | 2024.01 - 2024.06
-- 参与内部管理系统建设，完成数据查询、权限校验与报表导出功能。
-- 与产品、测试同学协作复现问题，编写修复说明与回归用例。
+## 工作经历
+### 星河科技 · 电商平台事业群 | 后端开发工程师 | 2023.07 - 2026.07
+**职责范围：**负责交易履约与营销基础服务，从需求评审、方案设计、核心开发到灰度发布与线上值守，推动跨团队交付。
+- **交易一致性：**设计订单状态机、幂等键与本地消息表，配合消息重试、补偿任务和对账机制，处理支付回调与超时关单的并发冲突。
+- **高并发治理：**拆分热点缓存与数据库访问路径，落地限流、隔离和降级；通过容量评估与全链路压测确定资源水位，支撑活动流量峰值。
+- **稳定性建设：**围绕接口耗时、消息积压和业务成功率建立监控与告警，完善故障演练、灰度验证及回滚预案，推动问题复盘与长期修复。
+- **工程协作：**推进接口契约、自动化回归与代码评审，沉淀通用组件及排障手册，参与新人带教和跨业务系统的技术方案评审。
 ## 项目经历`;
 export const cityhub = `### CityHub——智能生活服务平台 | 2024.03 - 2024.08
 **技术栈：** \`SpringBoot\` \`MySQL\` \`Redis\` \`Lua\` \`MyBatis-Plus\` \`RocketMQ\`
@@ -53,12 +51,6 @@ export const dovideo = `### DoVideoAI——AI视频解析平台 | 2024.09 - 2025
 - 基于 Redis 实现 **令牌桶限流**，设置每秒请求上限，遏制恶意请求带来的高昂 AI Token 开销，保障服务可用性。
 - 应对三方 API 网络抖动使用 **指数退避重试机制**，兜底第三方 API 调用失败场景，显著提升任务执行成功率。
 - 接入硅基流动平台大模型，使用 Redis 支持会话记忆，基于 **Function Calling** 实现查询信息和精准总结。`;
-export function demoFor(template: Template) {
-  return (
-    header +
-    "\n" +
-    (template === "black" ? dovideo : cityhub) +
-    "\n## 专业技能\n" +
-    skills.join("\n")
-  );
+export function demoFor(_template: Template) {
+  return header + "\n" + dovideo + "\n## 专业技能\n" + skills.join("\n");
 }

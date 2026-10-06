@@ -1629,3 +1629,218 @@ a {
     display: none !important;
   }
 }
+/* v0.4 interaction polish */
+:root {
+  font-synthesis: style;
+}
+.markdown-editor {
+  font-size: 14px;
+  font-weight: 500;
+  color: #292722;
+  line-height: 26px;
+}
+.flow-row em,
+.simple-input em {
+  font-style: italic;
+  font-synthesis: style;
+}
+.save-state {
+  position: absolute;
+  left: calc(var(--editor-width) + 30px);
+  top: 27px;
+}
+.document-name {
+  width: 180px;
+  max-width: calc(var(--editor-width) - 200px);
+}
+.preview-spacer {
+  height: 12px;
+  flex: none;
+}
+.paper-row.selected {
+  background: #edf0f280;
+  outline: none;
+}
+.paper-row:hover {
+  background: #e6ebef88;
+  box-shadow: inset 0 0 0 1px #bdc9d050;
+}
+.paper-row:has([contenteditable]:focus) {
+  outline: 1px solid #b6795e55;
+}
+.edit-field:hover,
+.edit-field.hovered {
+  background: #e9e7e030;
+  outline: 1px solid #d8d3cc60;
+}
+.holding-block,
+.holding-block * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+.moving-block {
+  opacity: 0.65;
+  box-shadow: 0 4px 15px #0002;
+}
+.drop-target {
+  box-shadow: inset 0 3px #b5795e !important;
+}
+.modal-backdrop {
+  backdrop-filter: none;
+}
+.type-backdrop {
+  background: #18181322;
+  pointer-events: none;
+}
+.type-panel {
+  position: absolute;
+  width: 390px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 100px);
+  padding: 20px;
+  background: #fcfbf8ed;
+  pointer-events: auto;
+}
+.type-panel .modal-heading {
+  cursor: move;
+  touch-action: none;
+  margin-bottom: 16px;
+}
+.type-panel h2 {
+  font-size: 18px;
+}
+.type-panel .type-grid {
+  grid-template-columns: 1.4fr repeat(3, 1fr);
+  gap: 8px;
+  font-size: 11px;
+}
+.type-panel .type-row strong {
+  font-size: 11px;
+}
+.type-panel input {
+  min-width: 0;
+  padding: 6px;
+  width: 100%;
+}
+.type-panel .page-settings {
+  gap: 12px;
+}
+.module-group button:hover,
+.module-group button.previewing {
+  border-color: #b5795e;
+  background: #f3e9df;
+  box-shadow: 0 2px 8px #73543b12;
+}
+.template-academic .row-name {
+  color: var(--accent);
+  text-align: left;
+}
+.template-academic .row-contact {
+  text-align: left;
+}
+.template-academic .row-section {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  border-bottom: 0;
+}
+.template-academic .row-section:after {
+  content: "";
+  height: 2px;
+  background: color-mix(in srgb, var(--accent) 22%, white);
+  flex: 1;
+}
+.template-teal .row-name {
+  background: var(--accent);
+  color: white;
+  text-align: left;
+  padding-left: 12px !important;
+  clip-path: polygon(0 0, 94% 0, 100% 100%, 0 100%);
+}
+.template-teal .row-section {
+  background: var(--accent);
+  color: white;
+  border: 0;
+  padding-left: 10px;
+  border-radius: 6px 0 0 6px;
+}
+.template-violet.resume-paper:before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 12px;
+  background: var(--accent);
+}
+.template-violet .row-section {
+  border: 0;
+  border-left: 4px solid var(--accent);
+  padding-left: 10px;
+  background: color-mix(in srgb, var(--accent) 6%, white);
+}
+.mini-academic strong {
+  color: #0756a5;
+  text-align: left;
+}
+.mini-academic b {
+  border-bottom: 2px solid #d4dfeb;
+  color: #0756a5;
+}
+.mini-teal strong,
+.mini-teal b {
+  background: #588591;
+  color: white;
+  padding: 3px;
+}
+.mini-violet {
+  border-top: 5px solid #763be5;
+}
+.mini-violet b {
+  border-left: 2px solid #763be5;
+  background: #f6f0ff;
+  color: #763be5;
+  padding-left: 4px;
+}
+@media (max-width: 900px) {
+  .save-state {
+    display: none;
+  }
+  .document-name {
+    max-width: 180px;
+  }
+  .type-panel {
+    width: 360px;
+  }
+  .type-panel .page-settings {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+@media print {
+  .preview-spacer {
+    display: none !important;
+  }
+  .paper-row.selected,
+  .paper-row:hover {
+    background: none !important;
+    box-shadow: none !important;
+  }
+}
+.template-teal .row-section .ink:after {
+  font-size: 0.85em;
+  margin-left: 8px;
+  font-weight: 500;
+}
+.template-teal [data-title="教育背景"]:after {
+  content: "Education";
+}
+.template-teal [data-title="工作经历"]:after {
+  content: "Work Experience";
+}
+.template-teal [data-title="项目经历"]:after {
+  content: "Projects";
+}
+.template-teal [data-title="专业技能"]:after {
+  content: "Technical Skills";
+}
+.template-teal [data-title="专业奖项"]:after {
+  content: "Awards";
+}

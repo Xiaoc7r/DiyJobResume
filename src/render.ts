@@ -30,6 +30,20 @@ markdown.inline.ruler.before("emphasis", "cjk_strong", (state, silent) => {
 });
 markdown.renderer.rules.cjk_strong = (tokens, index) =>
   "<strong>" + markdown.renderInline(tokens[index].content) + "</strong>";
+markdown.inline.ruler.before("emphasis", "cjk_italic", (state, silent) => {
+  if (state.src[state.pos] !== "*" || state.src[state.pos + 1] === "*")
+    return false;
+  const end = state.src.indexOf("*", state.pos + 1);
+  if (end < 0 || state.src[end + 1] === "*") return false;
+  if (!silent) {
+    const token = state.push("cjk_italic", "em", 0);
+    token.content = state.src.slice(state.pos + 1, end);
+  }
+  state.pos = end + 1;
+  return true;
+});
+markdown.renderer.rules.cjk_italic = (tokens, index) =>
+  "<em>" + markdown.renderInline(tokens[index].content) + "</em>";
 markdown.inline.ruler.before(
   "html_inline",
   "safe_underline",
@@ -69,7 +83,7 @@ export function lineHtml(
       )
       .join("");
   }
-  return `<span class="ink">${inline(text) || "<br>"}</span>`;
+  return `<span class="ink"${line.kind === "section" ? ` data-title="${escapeHtml(text)}"` : ""}>${inline(text) || "<br>"}</span>`;
 }
 export function domMarkdown(node: Node): string {
   if (node.nodeType === Node.TEXT_NODE) return node.textContent || "";
