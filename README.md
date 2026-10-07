@@ -19,14 +19,6 @@
 
 
 
-## 使用协议
-
-本项目采用 [PolyForm Noncommercial 1.0.0](LICENSE.md)：非商业用途可免费使用、修改和分享，分发时须保留协议及版权声明。
-
-**个人制作、导出和投递求职简历无需申请授权，生成的个人简历不受本软件商用限制。商业使用须事先取得作者书面授权**，请联系 [xxiaocr@gmail.com](mailto:xxiaocr@gmail.com)，说明使用主体及用途。发送通知或申请不等于获准。
-
-详见 [使用与商业授权说明](LICENSING.md)。第三方依赖和字体继续遵循各自许可证。
-
 ## 🛠️ 本地运行
 
 需要安装 Node.js。
@@ -45,3 +37,9 @@ npm run dev
 [打开简历工坊](https://xiaoc7r.github.io/DiyJobResume/)
 
 <img width="2863" height="1523" alt="image" src="https://github.com/user-attachments/assets/4ddec401-cf64-4b8d-80a3-128927c7a580" />
+
+## 使用协议
+
+本项目采用 [PolyForm Noncommercial 1.0.0](LICENSE.md)：非商业用途可免费使用、修改和分享，分发时须保留协议及版权声明。
+
+详见 [使用与商业授权说明](LICENSING.md)。第三方依赖和字体继续遵循各自许可证。
