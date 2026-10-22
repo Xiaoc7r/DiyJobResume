@@ -1,4 +1,6 @@
 import { demoFor } from "./samples";
+import { experienceBlocks } from "./experience";
+import type { ExperienceBlock } from "./experience";
 export { demoFor } from "./samples";
 export const PAGE = { width: 794, height: 1123 };
 export const STORAGE_KEY = "diyjobresume.document.v2";
@@ -246,7 +248,7 @@ export function applyTemplate(doc: Resume, template: Template): Resume {
     },
   };
 }
-export const modules = [
+export const modules: { name: string; variants: ExperienceBlock[] }[] = [
   {
     name: "教育背景",
     variants: [
@@ -368,6 +370,9 @@ const extraVariants: Record<string, { name: string; body: string }[]> = {
 };
 for (const module of modules)
   module.variants.push(...(extraVariants[module.name] || []));
+for (const module of modules)
+  if (experienceBlocks[module.name])
+    module.variants = experienceBlocks[module.name];
 export function insertModule(doc: Resume, name: string, body: string): Resume {
   if (
     name === "工作经历" &&

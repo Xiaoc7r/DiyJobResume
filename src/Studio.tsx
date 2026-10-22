@@ -54,6 +54,15 @@ import { withColumns } from "./formatting";
 import { NumericInput, holdDrag } from "./interaction";
 
 import { CustomCss, compileCustomCss } from "./CustomCss";
+import {
+  densities,
+  applyDensity,
+  activeDensity,
+  checkContent,
+  checkRendered,
+} from "./productTools";
+import type { Density, ExportIssue } from "./productTools";
+import { ExportReview } from "./ExportReview";
 
 function load() {
   try {
@@ -388,6 +397,9 @@ export default function Studio() {
   const [panelPosition, setPanelPosition] = useState({ x: 16, y: 82 });
   const [cssOpen, setCssOpen] = useState(false);
   const [contactOpen, setContactOpen] = useState(false);
+  const [exportIssues, setExportIssues] = useState<ExportIssue[] | null>(null);
+  const [exportBusy, setExportBusy] = useState(false);
+  const exportLock = useRef(false);
   const pinnedPreview = useRef(false);
   const [preview, setPreview] = useState<{
     key: string;
@@ -525,6 +537,7 @@ export default function Studio() {
         else undo();
       }
       if (e.key === "Escape") {
+        setExportIssues(null);
         setModal(null);
         setArmed("");
         setPicSelection("");
@@ -895,12 +908,16 @@ export default function Studio() {
           .map((l) => l.id),
     });
   };
-  const previewModule = (name: string, body: string, label: string) =>
+  const previewModule = (name: string, body: string, label: string) => {
+    const next = insertModule(ref.current, name, body);
+    const addedAt = next.lines.findIndex(l => !ref.current.lines.some(old => old.id === l.id));
+    const destination = next.lines.slice(0, addedAt + 1).findLast(l => l.kind === "section")?.text ?? name;
     beginPreview(
       name + label,
-      insertModule(ref.current, name, body),
-      `将在「${name}」末尾加入「${label}」`,
+      next,
+      `将在「${destination}」末尾加入「${label}」`,
     );
+  };
   const confirmModule = (name: string, body: string, label: string) => {
     const next =
       preview?.key === name + label
@@ -1103,18 +1120,49 @@ export default function Studio() {
           </div>
           <button
             className="primary"
+            disabled={exportBusy}
             onClick={async () => {
-              (document.activeElement as HTMLElement)?.blur();
-              cancelPreview();
-              await new Promise((resolve) =>
-                requestAnimationFrame(() => requestAnimationFrame(resolve)),
-              );
-              await document.fonts.ready;
-              window.print();
+              if (exportLock.current) return;
+              exportLock.current = true;
+              setExportBusy(true);
+              try {
+                (document.activeElement as HTMLElement)?.blur();
+                cancelPreview();
+                await new Promise((resolve) =>
+                  requestAnimationFrame(() => requestAnimationFrame(resolve)),
+                );
+                let timeout: ReturnType<typeof setTimeout> | undefined;
+                const fontsReady = await Promise.race([
+                  document.fonts.ready.then(() => true),
+                  new Promise<boolean>((resolve) => {
+                    timeout = setTimeout(() => resolve(false), 5000);
+                  }),
+                ]);
+                clearTimeout(timeout);
+                await new Promise((resolve) =>
+                  requestAnimationFrame(() => requestAnimationFrame(resolve)),
+                );
+                const root = workspace.current;
+                const issues = checkContent(
+                  ref.current,
+                  root?.querySelectorAll(".resume-paper").length ?? 1,
+                );
+                if (root) issues.push(...checkRendered(root));
+                if (!fontsReady || document.fonts.status !== "loaded")
+                  issues.push({
+                    message:
+                      "字体仍在加载，导出效果可能与最终排版不同。可稍后重试。",
+                  });
+                if (issues.length) setExportIssues(issues);
+                else window.print();
+              } finally {
+                exportLock.current = false;
+                setExportBusy(false);
+              }
             }}
           >
             <Download size={16} />
-            导出 PDF
+            {exportBusy ? "准备导出…" : "导出 PDF"}
           </button>
         </div>
       </header>
@@ -1296,6 +1344,32 @@ export default function Studio() {
               <span className="page-count">A4 · {pages.length} 页</span>
             </div>
             <div className="format-toolbar">
+              <label className="density-control">
+                <span>密度</span>
+                <select
+                  aria-label="排版密度"
+                  value={activeDensity(doc.settings)}
+                  title="只调整行距、段距和上下留白，保留文字与字号"
+                  onChange={(e) =>
+                    historyUpdate({
+                      ...ref.current,
+                      settings: applyDensity(
+                        ref.current.settings,
+                        e.target.value as Density,
+                      ),
+                    })
+                  }
+                >
+                  <option value="custom" disabled>
+                    自定义
+                  </option>
+                  {densities.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <button
                 title="间距与字号"
                 aria-label="间距与字号"
@@ -1747,10 +1821,16 @@ export default function Studio() {
                         <span>
                           <strong>{v.name}</strong>
                           <small>
-                            {module.name === "专业技能"
-                              ? "同一风格，不同表达方式"
-                              : `预览加入「${module.name}」末尾`}
+                            {v.description ||
+                              (module.name === "专业技能"
+                                ? "同一风格，不同表达方式"
+                                : `预览加入「${module.name}」末尾`)}
                           </small>
+                          {v.description && (
+                            <small className="block-destination">
+                              悬停看效果 · 单击固定 · 双击加入
+                            </small>
+                          )}
                         </span>
                         <Plus size={16} />
                       </button>
@@ -1938,6 +2018,31 @@ export default function Studio() {
           }
         }}
       />
+      {exportIssues && (
+        <ExportReview
+          issues={exportIssues}
+          onClose={() => setExportIssues(null)}
+          onLocate={(issue) => {
+            setExportIssues(null);
+            setMobile("preview");
+            if (issue.lineId) setSelected(issue.lineId);
+            requestAnimationFrame(() => {
+              const selector = issue.lineId
+                ? `[data-line="${CSS.escape(issue.lineId)}"]`
+                : `[data-page="${Math.min(issue.page ?? 0, pages.length - 1)}"]`;
+              workspace.current
+                ?.querySelector(selector)
+                ?.scrollIntoView({ block: "center", behavior: "smooth" });
+            });
+          }}
+          onContinue={() => {
+            setExportIssues(null);
+            requestAnimationFrame(() =>
+              requestAnimationFrame(() => window.print()),
+            );
+          }}
+        />
+      )}
       {modal && (
         <div
           className={`modal-backdrop ${modal === "type" ? "type-backdrop" : ""}`}
@@ -1993,6 +2098,26 @@ export default function Studio() {
             </div>
             {modal === "type" ? (
               <>
+                <div className="density-presets" aria-label="密度预设">
+                  {densities.map((p) => (
+                    <button
+                      key={p.id}
+                      aria-pressed={activeDensity(doc.settings) === p.id}
+                      onClick={() =>
+                        historyUpdate({
+                          ...ref.current,
+                          settings: applyDensity(ref.current.settings, p.id),
+                        })
+                      }
+                    >
+                      <strong>{p.name}</strong>
+                      <small>{p.hint}</small>
+                    </button>
+                  ))}
+                </div>
+                <p className="density-note">
+                  保留文字与字号，只调整留白和行距。可继续微调，也可撤销。
+                </p>
                 <div className="type-grid">
                   <span>内容类型</span>
                   <span>上间距</span>
