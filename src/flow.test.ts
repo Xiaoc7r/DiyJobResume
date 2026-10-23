@@ -8,6 +8,10 @@ import {
   insertModule,
   paginate,
   moveGroup,
+  moveGroupToBoundary,
+  snapToBlockBoundary,
+  resolveDropBoundary,
+  blockRange,
 } from "./flow";
 import { inline } from "./render";
 const measure = (_: unknown, text: string) =>
@@ -75,6 +79,52 @@ describe("continuous document", () => {
       next.lines.findIndex((l) => l.text === "新公司 | 2025"),
     ).toBeLessThan(next.lines.findIndex((l) => l.text === "项目经历"));
     expect(next.settings).toEqual(doc.settings);
+  });
+  it("snaps a section heading to block boundaries instead of landing inside another section", () => {
+    const doc = initialResume();
+    doc.lines = parseMarkdown("# 姓名\n## A\n### A1\nA正文\n## B\nB正文");
+    const start = doc.lines[4].id;
+    const boundary = snapToBlockBoundary(doc.lines, 2);
+    expect(boundary).toBe(1);
+    const next = moveGroupToBoundary(doc, start, boundary);
+    expect(toMarkdown(next.lines)).toBe(
+      "# 姓名\n## B\nB正文\n## A\n### A1\nA正文",
+    );
+  });
+  it("ignores the dragged block's own range when snapping", () => {
+    const doc = initialResume();
+    doc.lines = parseMarkdown("# 姓名\n## A\n### A1\nA正文\n## B\nB正文");
+    expect(snapToBlockBoundary(doc.lines, 2, doc.lines[4].id)).toBe(1);
+  });
+  it("keeps a normal line inside its own section", () => {
+    const doc = initialResume();
+    doc.lines = parseMarkdown(
+      "# 姓名\n## A\n- a1\n- a2\n## B\n- b1",
+    );
+    const a1 = doc.lines[2].id;
+    expect(blockRange(doc.lines, 2)).toEqual({ start: 1, end: 4 });
+    // 想拖进 B 板块（下标 5 之前）→ 被限制在 A 板块末尾
+    expect(resolveDropBoundary(doc.lines, a1, 5)).toBe(4);
+    const next = moveGroupToBoundary(doc, a1, 4);
+    expect(toMarkdown(next.lines)).toBe(
+      "# 姓名\n## A\n- a2\n- a1\n## B\n- b1",
+    );
+  });
+  it("does not let a normal line jump above its own section title", () => {
+    const doc = initialResume();
+    doc.lines = parseMarkdown("# 姓名\n## A\n- a1\n- a2\n## B\n- b1");
+    const a2 = doc.lines[3].id;
+    expect(resolveDropBoundary(doc.lines, a2, 0)).toBe(2);
+    const next = moveGroupToBoundary(doc, a2, 2);
+    expect(toMarkdown(next.lines)).toBe(
+      "# 姓名\n## A\n- a2\n- a1\n## B\n- b1",
+    );
+  });
+  it("keeps an already-valid block boundary untouched", () => {
+    const doc = initialResume();
+    doc.lines = parseMarkdown("# 姓名\n## A\n### A1\nA正文\n## B\nB正文");
+    expect(snapToBlockBoundary(doc.lines, 4)).toBe(4);
+    expect(snapToBlockBoundary(doc.lines, 0)).toBe(0);
   });
   it("drags a section together with its contents", () => {
     const doc = initialResume();

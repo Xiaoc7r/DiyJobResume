@@ -420,6 +420,69 @@ export function moveGroup(doc: Resume, id: string, target: string): Resume {
   lines.splice(b > a ? b - part.length : b, 0, ...part);
   return { ...doc, lines };
 }
+// 把 id 所在的块（section/entry 会带上它后面的内容）移到第 boundary 行之前。
+// boundary 用「原数组下标」表示，等于 lines.length 时就是移到末尾。
+export function moveGroupToBoundary(
+  doc: Resume,
+  id: string,
+  boundary: number,
+): Resume {
+  const from = doc.lines.findIndex((l) => l.id === id);
+  if (from < 0) return doc;
+  const end = groupEnd(doc.lines, from);
+  if (boundary >= from && boundary <= end) return doc;
+  const part = doc.lines.slice(from, end),
+    rest = [...doc.lines.slice(0, from), ...doc.lines.slice(end)];
+  rest.splice(boundary > end ? boundary - part.length : boundary, 0, ...part);
+  return { ...doc, lines: rest };
+}
+// 每一块（section/entry 连同它的内容）的起始下标，末尾也算一个插入点
+export function blockStarts(lines: Line[]): number[] {
+  const starts: number[] = [];
+  for (let i = 0; i < lines.length; i = groupEnd(lines, i)) starts.push(i);
+  starts.push(lines.length);
+  return starts;
+}
+// 把插入点吸附到最近的「块与块之间」，避免板块标题插进别人的内容里。
+// 传 id 时会跳过被拖那一块自己的区间，免得「吸附回原位」看起来像没反应。
+export function snapToBlockBoundary(
+  lines: Line[],
+  boundary: number,
+  id = "",
+): number {
+  const from = id ? lines.findIndex((l) => l.id === id) : -1,
+    end = from >= 0 ? groupEnd(lines, from) : -1;
+  const starts = blockStarts(lines).filter(
+    (start) => from < 0 || start < from || start >= end,
+  );
+  let best = starts[0] ?? 0;
+  for (const start of starts)
+    if (Math.abs(start - boundary) < Math.abs(best - boundary)) best = start;
+  return best;
+}
+// index 这一行属于哪个板块：板块标题本身、它后面的内容都算同一块；
+// 第一个板块标题之前的内容（姓名、联系方式）算表头块。
+export function blockRange(lines: Line[], index: number) {
+  let start = -1;
+  for (let i = 0; i < index; i++) if (lines[i].kind === "section") start = i;
+  if (lines[index]?.kind === "section") start = index;
+  if (start >= 0) return { start, end: groupEnd(lines, start) };
+  const firstSection = lines.findIndex((l) => l.kind === "section");
+  return { start: 0, end: firstSection < 0 ? lines.length : firstSection };
+}
+// 拖放落点的最终修正：板块标题吸附到整块之间；普通行只能待在自己板块内
+export function resolveDropBoundary(
+  lines: Line[],
+  dragId: string,
+  boundary: number,
+): number {
+  const from = lines.findIndex((l) => l.id === dragId);
+  if (from < 0) return boundary;
+  if (lines[from].kind === "section")
+    return snapToBlockBoundary(lines, boundary, dragId);
+  const { start, end } = blockRange(lines, from);
+  return Math.min(end, Math.max(start + 1, boundary));
+}
 const numeric = (v: unknown, d: number, min: number, max: number) =>
   typeof v === "number" && Number.isFinite(v)
     ? Math.min(max, Math.max(min, v))
