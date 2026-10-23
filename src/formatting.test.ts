@@ -76,8 +76,8 @@ describe("requested examples", () => {
       expect(source).not.toContain("CityHub");
       expect(source).toContain("138 0000 2468");
       expect(readResume(doc).template).toBe(template);
-      expect(source).toContain("github.com/example");
-      expect(source).toContain("zhangxiaoming@example.com");
+      expect(source).toContain("github.com/Xiaoc7r");
+      expect(source).toContain("xxiaocr@gmail.com");
       const start = doc.lines.findIndex(
         (l) => l.kind === "section" && l.text === "专业技能",
       );

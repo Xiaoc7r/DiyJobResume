@@ -72,7 +72,11 @@ export function saveAgentConfig(config: AgentConfig) {
   localStorage.setItem(AGENT_CONFIG_KEY, JSON.stringify(config));
 }
 export function noticeAccepted() {
-  return localStorage.getItem(NOTICE_KEY) === "1";
+  try {
+    return localStorage.getItem(NOTICE_KEY) === "1";
+  } catch {
+    return false;
+  }
 }
 export function acceptNotice() {
   localStorage.setItem(NOTICE_KEY, "1");
@@ -131,7 +135,8 @@ export function describeDoc(
   return head.join("\n");
 }
 
-export const AGENT_CONTENT_PROMPT = `
+export const AGENT_CONTENT_PROMPT = `所有动作的行号均引用请求中的原始行号，不因前面的删除或插入而变化。
+
 你还被允许修改文字内容（仅在用户明确要求改写、补充、删除、调整顺序时使用，不要自作主张）：
 12 {"type":"setText","line":4,"text":"新的这一行文字"} 改写第 4 行（保留原来的行类型，不要带 markdown 标记里的行前缀）
 13 {"type":"setKind","line":4,"kind":"text|bullet|section|entry|h4|h5|h6|ordered"} 改这一行的类型
@@ -238,7 +243,7 @@ export const AGENT_REVIEW_PROMPT = `你现在的任务是给一份「已经初�
 3) 经历行是「左侧 | 中间 | 右侧」三栏（公司/学校 | 职位/专业 | 时间）。
 只输出一个 JSON 对象，格式与平时一致。`;
 
-// AI 复核只允许这些动作：改类型、调版式、删空行，绝不碰文字内容
+// AI 复核可改写正文；调用方必须明确告知，并在接受前提供预览。
 const REVIEW_ACTIONS = new Set([
   "setKind",
   "setText",
@@ -264,7 +269,7 @@ export function isReviewAction(type: string) {
   return REVIEW_ACTIONS.has(type);
 }
 
-// 和对话里「帮我把格式调好」走同一套动作协议，只是把权限收紧到不改字
+// 与对话使用同一套动作协议；所有结果先预览。
 export async function reviewLayout(
   config: AgentConfig,
   draft: Resume,
@@ -342,10 +347,11 @@ async function summarizeTurns(
         {
           role: "user",
           content: `已有摘要：\n${previous || "（无）"}\n\n新增对话：\n${batch
-            .map((turn) =>
-              `${turn.role === "user" ? "用户" : "助手"}：${turn.text}${
-                turn.notes?.length ? `（改动：${turn.notes.join("；")}）` : ""
-              }`,
+            .map(
+              (turn) =>
+                `${turn.role === "user" ? "用户" : "助手"}：${turn.text}${
+                  turn.notes?.length ? `（改动：${turn.notes.join("；")}）` : ""
+                }`,
             )
             .join("\n")}`,
         },
@@ -388,7 +394,10 @@ export async function compactHistory(
     );
   let compacted = false;
   while (size() > budget && turns.length - count > KEEP_RECENT_TURNS) {
-    const next = Math.min(turns.length - KEEP_RECENT_TURNS, count + SUMMARY_BATCH);
+    const next = Math.min(
+      turns.length - KEEP_RECENT_TURNS,
+      count + SUMMARY_BATCH,
+    );
     text = await summarizeTurns(config, text, turns.slice(count, next), signal);
     count = next;
     compacted = true;
@@ -471,7 +480,10 @@ const withType = (
 ): Resume => {
   const types = { ...doc.settings.types };
   for (const kind of kinds)
-    types[kind] = { ...types[kind], ...patch } as Settings["types"][typeof kind];
+    types[kind] = {
+      ...types[kind],
+      ...patch,
+    } as Settings["types"][typeof kind];
   return withSettings(doc, { types });
 };
 const pickKinds = (value: unknown): Exclude<Kind, "blank">[] => {
@@ -480,7 +492,9 @@ const pickKinds = (value: unknown): Exclude<Kind, "blank">[] => {
   return KINDS.filter((k) => k === text);
 };
 export function sectionTitles(doc: Resume) {
-  return doc.lines.filter((l) => l.kind === "section").map((l) => l.text.trim());
+  return doc.lines
+    .filter((l) => l.kind === "section")
+    .map((l) => l.text.trim());
 }
 
 // 执行一组动作，返回新文档 + 给用户看的中文说明
@@ -491,7 +505,18 @@ export function applyAgentActions(
   let next = doc;
   const notes: string[] = [],
     skipped: string[] = [];
+  const originalLine = (value: unknown, allowZero = false) => {
+    const index = lineNo(value, doc.lines.length, allowZero);
+    if (index === 0 && allowZero) return 0;
+    if (index < 1) return -1;
+    const at = next.lines.findIndex((l) => l.id === doc.lines[index - 1].id);
+    return at < 0 ? -1 : at + 1;
+  };
   for (const action of actions) {
+    if (!action || typeof action !== "object") {
+      skipped.push("无法识别的动作");
+      continue;
+    }
     const type = String(action.type || "");
     if (type === "template") {
       const id = String(action.template || "") as Template;
@@ -515,7 +540,9 @@ export function applyAgentActions(
         continue;
       }
       next = withSettings(next, { font });
-      notes.push(`字体改为 ${font === "sans" ? "黑体" : font === "serif" ? "宋体" : "Nunito"}`);
+      notes.push(
+        `字体改为 ${font === "sans" ? "黑体" : font === "serif" ? "宋体" : "Nunito"}`,
+      );
     } else if (type === "fontSize") {
       const kinds = pickKinds(action.kind);
       const size = num(action.size, 10, 32, 0);
@@ -557,7 +584,8 @@ export function applyAgentActions(
       if (action.top !== undefined) patch.top = num(action.top, 12, 120, s.top);
       if (action.bottom !== undefined)
         patch.bottom = num(action.bottom, 12, 120, s.bottom);
-      if (action.left !== undefined) patch.left = num(action.left, 12, 120, s.left);
+      if (action.left !== undefined)
+        patch.left = num(action.left, 12, 120, s.left);
       if (action.right !== undefined)
         patch.right = num(action.right, 12, 120, s.right);
       if (!Object.keys(patch).length) {
@@ -574,7 +602,10 @@ export function applyAgentActions(
         skipped.push("颜色格式不对（要 #rrggbb）");
         continue;
       }
-      next = withSettings(next, type === "accent" ? { accent: color } : { color });
+      next = withSettings(
+        next,
+        type === "accent" ? { accent: color } : { color },
+      );
       notes.push(`${type === "accent" ? "主题色" : "正文色"}改为 ${color}`);
     } else if (type === "headerAlign") {
       const value = action.value === "left" ? "left" : "center";
@@ -611,12 +642,15 @@ export function applyAgentActions(
         skipped.push("目标位置不合法");
         continue;
       }
+      const current = order.indexOf(at) + 1;
+      if (current === position) {
+        skipped.push(`「${wanted}」已经在这个位置`);
+        continue;
+      }
       const boundary =
-        position <= 1
-          ? order[0]
-          : position > order.length
-            ? lines.length
-            : order[position - 1];
+        position > current
+          ? (order[position] ?? lines.length)
+          : order[position - 1];
       const moved = moveGroupToBoundary(next, lines[at].id, boundary);
       if (moved === next) {
         skipped.push(`「${wanted}」已经在这个位置`);
@@ -634,19 +668,22 @@ export function applyAgentActions(
       next = { ...next, lines };
       notes.push(`删掉 ${removed} 个空行`);
     } else if (type === "setText") {
-      const at = lineNo(action.line, next.lines.length);
-      const text = typeof action.text === "string" ? action.text.slice(0, 2000) : "";
+      const at = originalLine(action.line);
+      const text =
+        typeof action.text === "string" ? action.text.slice(0, 2000) : "";
       if (at < 0) {
         skipped.push(`行号 ${String(action.line)} 不存在`);
         continue;
       }
       next = {
         ...next,
-        lines: next.lines.map((line, i) => (i === at - 1 ? { ...line, text } : line)),
+        lines: next.lines.map((line, i) =>
+          i === at - 1 ? { ...line, text } : line,
+        ),
       };
       notes.push(`改写第 ${at} 行`);
     } else if (type === "setKind") {
-      const at = lineNo(action.line, next.lines.length),
+      const at = originalLine(action.line),
         kind = String(action.kind || "") as Kind;
       const allowed: Kind[] = [...KINDS, "blank"];
       if (at < 0 || !allowed.includes(kind)) {
@@ -656,15 +693,18 @@ export function applyAgentActions(
       next = {
         ...next,
         lines: next.lines.map((line, i) =>
-          i === at - 1 ? { ...line, kind, ...(kind !== "ordered" ? {} : { order: 1 }) } : line,
+          i === at - 1
+            ? { ...line, kind, ...(kind !== "ordered" ? {} : { order: 1 }) }
+            : line,
         ),
       };
       notes.push(`第 ${at} 行改成 ${kindLabels[kind]}`);
     } else if (type === "insert") {
-      const after = lineNo(action.after, next.lines.length, true),
+      const after = originalLine(action.after, true),
         kind = String(action.kind || "text") as Kind,
-        text = typeof action.text === "string" ? action.text.slice(0, 2000) : "";
-      if (after < 0) {
+        text =
+          typeof action.text === "string" ? action.text.slice(0, 2000) : "";
+      if (after < 0 || ![...KINDS, "blank"].includes(kind)) {
         skipped.push("插入位置不合法");
         continue;
       }
@@ -678,7 +718,7 @@ export function applyAgentActions(
           : `在第 ${after} 行后插入一行${kindLabels[kind]}`,
       );
     } else if (type === "remove") {
-      const at = lineNo(action.line, next.lines.length);
+      const at = originalLine(action.line);
       if (at < 0) {
         skipped.push(`行号 ${String(action.line)} 不存在`);
         continue;
@@ -687,7 +727,10 @@ export function applyAgentActions(
       notes.push(`删除第 ${at} 行`);
     } else if (type === "replace") {
       const find = typeof action.find === "string" ? action.find : "",
-        to = typeof action.replace === "string" ? action.replace.slice(0, 2000) : "";
+        to =
+          typeof action.replace === "string"
+            ? action.replace.slice(0, 2000)
+            : "";
       if (!find) {
         skipped.push("替换缺少原文");
         continue;

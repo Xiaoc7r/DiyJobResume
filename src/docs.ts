@@ -12,6 +12,7 @@ import { AGENT_TURNS_KEY, turnsKey } from "./agent";
 // 多份简历存在同一个键里：避免每份简历各占一个 localStorage 键，
 // 也方便一次性读写、避免切换时漏存。
 export const DOCS_KEY = "diyjobresume.docs.v1";
+export const RECOVERY_KEY = "diyjobresume.docs.recovery";
 
 export interface DocEntry {
   id: string;
@@ -133,15 +134,32 @@ function settleLegacyTurns(items: DocEntry[]) {
 }
 
 function write(library: DocLibrary) {
-  try {
-    localStorage.setItem(DOCS_KEY, JSON.stringify(library));
-  } catch {
-    /* 存不下时交给上层的保存失败提示 */
+  const raw = localStorage.getItem(DOCS_KEY);
+  if (raw) {
+    let damaged = false;
+    try {
+      const parsed = JSON.parse(raw);
+      damaged =
+        !Array.isArray(parsed.items) ||
+        !parsed.items.length ||
+        parsed.items.some((item: unknown) => !normalizeEntry(item));
+    } catch {
+      damaged = true;
+    }
+    if (damaged) {
+      // Never replace a damaged library unless its original bytes are safely backed up.
+      const key = localStorage.getItem(RECOVERY_KEY)
+        ? `${RECOVERY_KEY}.${uid()}`
+        : RECOVERY_KEY;
+      localStorage.setItem(key, raw);
+    }
   }
+  localStorage.setItem(DOCS_KEY, JSON.stringify(library));
 }
 
 // 读取简历列表；老版本只有单份文档，这里自动装进列表，用户不会丢稿。
 export function loadLibrary(): { library: DocLibrary; notice: string } {
+  let damaged = false;
   try {
     const raw = localStorage.getItem(DOCS_KEY);
     if (raw) {
@@ -154,14 +172,24 @@ export function loadLibrary(): { library: DocLibrary; notice: string } {
           ? String(parsed.activeId)
           : items[0].id;
         settleLegacyTurns(items);
-        return { library: { activeId, items }, notice: "" };
+        return {
+          library: { activeId, items },
+          notice:
+            items.length === parsed.items?.length
+              ? ""
+              : "部分草稿无法读取，原始列表将在保存前备份保留。",
+        };
       }
+      damaged = true;
     }
   } catch {
+    damaged = true;
     /* 损坏就尝试从旧键恢复，下面统一处理 */
   }
   let doc: Resume | null = null,
-    notice = "";
+    notice = damaged
+      ? "简历列表无法读取，原始数据仍保留；恢复旧稿或下载备份后再继续。"
+      : "";
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) doc = readResume(JSON.parse(saved));
@@ -169,8 +197,7 @@ export function loadLibrary(): { library: DocLibrary; notice: string } {
       const old = localStorage.getItem(OLD_KEY);
       if (old) {
         doc = readResume(JSON.parse(old));
-        notice =
-          "已迁移旧版文字与图片，原草稿仍保留。旧版自由色块不转入正文。";
+        notice = "已迁移旧版文字与图片，原草稿仍保留。旧版自由色块不转入正文。";
       }
     }
   } catch {
@@ -178,7 +205,13 @@ export function loadLibrary(): { library: DocLibrary; notice: string } {
   }
   const first = makeEntry(doc || initialResume());
   const library = { activeId: first.id, items: [first] };
-  write(library);
+  if (!damaged) {
+    try {
+      write(library);
+    } catch {
+      notice = "无法保存到本机，请下载备份；刷新前不要关闭页面。";
+    }
+  }
   settleLegacyTurns(library.items);
   return { library, notice };
 }

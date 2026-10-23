@@ -8,6 +8,8 @@ import {
 } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import {
+  Github,
+  Mail,
   Code2,
   Undo2,
   Redo2,
@@ -71,6 +73,15 @@ import {
 } from "./docs";
 import type { DocEntry } from "./docs";
 import { CustomCss, compileCustomCss } from "./CustomCss";
+import {
+  densities,
+  applyDensity,
+  activeDensity,
+  checkContent,
+  checkRendered,
+} from "./productTools";
+import type { Density, ExportIssue } from "./productTools";
+import { ExportReview } from "./ExportReview";
 import { AgentPanel } from "./AgentPanel";
 
 function saveFile(name: string, content: string, type: string) {
@@ -163,7 +174,9 @@ function mdCaretTop(el: HTMLTextAreaElement, position: number) {
     "border-left-width",
     "box-sizing",
     "tab-size",
-  ].forEach((name) => mirror.style.setProperty(name, style.getPropertyValue(name)));
+  ].forEach((name) =>
+    mirror.style.setProperty(name, style.getPropertyValue(name)),
+  );
   mirror.style.position = "absolute";
   mirror.style.top = "0";
   mirror.style.left = "0";
@@ -455,8 +468,7 @@ export default function Studio() {
   activeIdRef.current = activeId;
   const [doc, setDoc] = useState(
     () =>
-      boot.library.items.find((item) => item.id === boot.library.activeId)!
-        .doc,
+      boot.library.items.find((item) => item.id === boot.library.activeId)!.doc,
   );
   const ref = useRef(doc);
   ref.current = doc;
@@ -488,6 +500,10 @@ export default function Studio() {
     [flash, setFlash] = useState("");
   const [panelPosition, setPanelPosition] = useState({ x: 16, y: 82 });
   const [cssOpen, setCssOpen] = useState(false);
+  const [contactOpen, setContactOpen] = useState(false);
+  const [exportIssues, setExportIssues] = useState<ExportIssue[] | null>(null);
+  const [exportBusy, setExportBusy] = useState(false);
+  const exportLock = useRef(false);
   const [agentOpen, setAgentOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(true);
   const [editorOpen, setEditorOpen] = useState(true);
@@ -637,7 +653,12 @@ export default function Studio() {
     );
     docsRef.current = items;
     setDocs(items);
-    saveLibrary({ activeId: id, items });
+    try {
+      saveLibrary({ activeId: id, items });
+      setSaved("已保存到本机");
+    } catch {
+      setSaved("保存失败，请下载备份");
+    }
     return items;
   };
   useEffect(() => {
@@ -645,7 +666,6 @@ export default function Studio() {
     const save = () => {
       try {
         flushSave();
-        setSaved("已保存到本机");
       } catch {
         setSaved("保存失败，请下载备份");
       }
@@ -660,6 +680,13 @@ export default function Studio() {
 
   // 换到某一份：撤销栈、预览、选中都按文档隔离，避免跨文档撤销
   const activate = (entry: DocEntry, items: DocEntry[]) => {
+    try {
+      saveLibrary({ activeId: entry.id, items });
+    } catch {
+      setSaved("保存失败，请下载备份");
+      setNotice("无法保存，未切换或删除简历。请先下载备份。");
+      return false;
+    }
     docsRef.current = items;
     setDocs(items);
     activeIdRef.current = entry.id;
@@ -676,7 +703,7 @@ export default function Studio() {
     setDocMenu(false);
     setConfirmDelete(false);
     setSaved("已保存到本机");
-    saveLibrary({ activeId: entry.id, items });
+    return true;
   };
   const openDoc = (id: string) => {
     setDocMenu(false);
@@ -698,7 +725,7 @@ export default function Studio() {
           ? blankResume(doc.template, name)
           : cloneResume(doc, name),
       entry: DocEntry = { id: uid(), name, updatedAt: Date.now(), doc: next };
-    activate(entry, [entry, ...items]);
+    if (!activate(entry, [entry, ...items])) return;
     setNotice(`已新建「${name}」`);
   };
   const importDoc = (incoming: Resume) => {
@@ -714,7 +741,7 @@ export default function Studio() {
         updatedAt: Date.now(),
         doc: { ...incoming, name },
       };
-    activate(entry, [entry, ...items]);
+    if (!activate(entry, [entry, ...items])) return;
     setNotice(`已导入「${name}」`);
   };
   const removeDoc = () => {
@@ -728,7 +755,7 @@ export default function Studio() {
     );
     const removed = docsRef.current[index];
     const remaining = docsRef.current.filter((item) => item.id !== removed.id);
-    activate(remaining[Math.max(0, index - 1)], remaining);
+    if (!activate(remaining[Math.max(0, index - 1)], remaining)) return;
     setNotice(`已删除「${removed.name}」`);
   };
   useEffect(() => {
@@ -745,6 +772,7 @@ export default function Studio() {
         else undo();
       }
       if (e.key === "Escape") {
+        setExportIssues(null);
         setModal(null);
         setArmed("");
         setPicSelection("");
@@ -795,7 +823,8 @@ export default function Studio() {
   const measureHost = () => {
     const host = measureRef.current;
     if (!host) return null;
-    if (!measureNode.current) measureNode.current = document.createElement("div");
+    if (!measureNode.current)
+      measureNode.current = document.createElement("div");
     if (measureNode.current.parentElement !== host)
       host.replaceChildren(measureNode.current);
     return measureNode.current;
@@ -950,8 +979,7 @@ export default function Studio() {
         index = lines.findIndex((l) => l.id === id),
         el = mdRef.current;
       if (index < 0 || !el) return;
-      const start =
-          toMarkdown(lines.slice(0, index)).length + (index ? 1 : 0),
+      const start = toMarkdown(lines.slice(0, index)).length + (index ? 1 : 0),
         length = toMarkdown([lines[index]]).length,
         reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches,
         top = mdCaretTop(el, start),
@@ -1058,7 +1086,8 @@ export default function Studio() {
     const text = row.textContent || "";
     if (!text) return hideCaretMark();
     const at = Math.max(0, Math.min(offset, text.length));
-    const boundary = /[\s\u3000，。、；：！？,.;:!?()（）【】\[\]{}<>|/·"'“”‘’]/;
+    const boundary =
+      /[\s\u3000，。、；：！？,.;:!?()（）【】\[\]{}<>|/·"'“”‘’]/;
     const isWord = (c: string) => c && !boundary.test(c);
     let from = at,
       to = at;
@@ -1080,9 +1109,13 @@ export default function Studio() {
     });
     Object.assign(bar.style, {
       display: "block",
-      left: (caretRect && caretRect.height ? caretRect.left : wordRect.left) + "px",
-      top: (caretRect && caretRect.height ? caretRect.top : wordRect.top) + "px",
-      height: (caretRect && caretRect.height ? caretRect.height : wordRect.height) + "px",
+      left:
+        (caretRect && caretRect.height ? caretRect.left : wordRect.left) + "px",
+      top:
+        (caretRect && caretRect.height ? caretRect.top : wordRect.top) + "px",
+      height:
+        (caretRect && caretRect.height ? caretRect.height : wordRect.height) +
+        "px",
     });
   };
   // Markdown 模式下把 textarea 光标换算成「第几行 + 第几个可见字符」
@@ -1434,12 +1467,21 @@ export default function Studio() {
           .map((l) => l.id),
     });
   };
-  const previewModule = (name: string, body: string, label: string) =>
+  const previewModule = (name: string, body: string, label: string) => {
+    const next = insertModule(ref.current, name, body);
+    const addedAt = next.lines.findIndex(
+      (l) => !ref.current.lines.some((old) => old.id === l.id),
+    );
+    const destination =
+      [...next.lines.slice(0, addedAt + 1)]
+        .reverse()
+        .find((l) => l.kind === "section")?.text ?? name;
     beginPreview(
       name + label,
-      insertModule(ref.current, name, body),
-      `将在「${name}」末尾加入「${label}」`,
+      next,
+      `将在「${destination}」末尾加入「${label}」`,
     );
+  };
   const confirmModule = (name: string, body: string, label: string) => {
     const next =
       preview?.key === name + label
@@ -1585,7 +1627,10 @@ export default function Studio() {
                 ))}
               </div>
               <div className="doc-actions">
-                <button onClick={() => createDoc("blank")} title="新建一份空白简历">
+                <button
+                  onClick={() => createDoc("blank")}
+                  title="新建一份空白简历"
+                >
                   <FilePlus2 size={14} />
                   新建
                 </button>
@@ -1615,6 +1660,34 @@ export default function Studio() {
           {saved}
         </span>
         <div className="header-actions">
+          <a
+            className="icon-button github-link"
+            href="https://github.com/Xiaoc7r/DiyJobResume"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="GitHub 仓库"
+            aria-label="GitHub 仓库"
+          >
+            <Github size={20} />
+          </a>
+          <div className="contact-wrap">
+            <button
+              className="icon-button"
+              title="联系方式"
+              aria-label="联系方式"
+              aria-expanded={contactOpen}
+              onClick={() => setContactOpen(!contactOpen)}
+            >
+              <Mail size={19} />
+            </button>
+            {contactOpen && (
+              <div className="contact-popover">
+                <span>联系炒肉多</span>
+                <a href="mailto:xxiaocr@gmail.com">xxiaocr@gmail.com</a>
+              </div>
+            )}
+          </div>
+
           <div className="header-history">
             <button
               className="icon-button"
@@ -1647,7 +1720,11 @@ export default function Studio() {
           </button>
           <button
             className="header-mode"
-            title={libraryOpen && !agentOpen ? "收起右侧的简历样式面板" : "展开简历样式面板"}
+            title={
+              libraryOpen && !agentOpen
+                ? "收起右侧的简历样式面板"
+                : "展开简历样式面板"
+            }
             aria-label="简历样式"
             aria-pressed={libraryOpen && !agentOpen}
             onClick={() => {
@@ -1731,18 +1808,49 @@ export default function Studio() {
           </div>
           <button
             className="primary"
+            disabled={exportBusy}
             onClick={async () => {
-              (document.activeElement as HTMLElement)?.blur();
-              cancelPreview();
-              await new Promise((resolve) =>
-                requestAnimationFrame(() => requestAnimationFrame(resolve)),
-              );
-              await document.fonts.ready;
-              window.print();
+              if (exportLock.current) return;
+              exportLock.current = true;
+              setExportBusy(true);
+              try {
+                (document.activeElement as HTMLElement)?.blur();
+                cancelPreview();
+                await new Promise((resolve) =>
+                  requestAnimationFrame(() => requestAnimationFrame(resolve)),
+                );
+                let timeout: ReturnType<typeof setTimeout> | undefined;
+                const fontsReady = await Promise.race([
+                  document.fonts.ready.then(() => true),
+                  new Promise<boolean>((resolve) => {
+                    timeout = setTimeout(() => resolve(false), 5000);
+                  }),
+                ]);
+                clearTimeout(timeout);
+                await new Promise((resolve) =>
+                  requestAnimationFrame(() => requestAnimationFrame(resolve)),
+                );
+                const root = workspace.current;
+                const issues = checkContent(
+                  ref.current,
+                  root?.querySelectorAll(".resume-paper").length ?? 1,
+                );
+                if (root) issues.push(...checkRendered(root));
+                if (!fontsReady || document.fonts.status !== "loaded")
+                  issues.push({
+                    message:
+                      "字体仍在加载，导出效果可能与最终排版不同。可稍后重试。",
+                  });
+                if (issues.length) setExportIssues(issues);
+                else window.print();
+              } finally {
+                exportLock.current = false;
+                setExportBusy(false);
+              }
             }}
           >
             <Download size={16} />
-            导出 PDF
+            {exportBusy ? "准备导出…" : "导出 PDF"}
           </button>
         </div>
       </header>
@@ -1757,176 +1865,189 @@ export default function Studio() {
       <div className="workbench">
         {editorOpen && (
           <>
-        <aside
-          className={`editor-panel ${mobile === "editor" ? "mobile-active" : ""}`}
-        >
-          <div className="editor-heading">
-            <div className="mode-tabs" role="tablist" aria-label="编辑方式">
-              <button
-                role="tab"
-                aria-selected={mode === "simple"}
-                onClick={() => setMode("simple")}
-              >
-                简单编辑
-              </button>
-              <button
-                role="tab"
-                aria-selected={mode === "md"}
-                onClick={() => setMode("md")}
-              >
-                Markdown <span>.md</span>
-              </button>
-            </div>
-            <div className="history-buttons">
-              <button
-                title="收起编辑区"
-                aria-label="收起编辑区"
-                onClick={() => setEditorOpen(false)}
-              >
-                <PanelLeft size={16} />
-              </button>
-            </div>
-          </div>
-          <div className="editor-hint">
-            {mode === "simple"
-              ? "直接输入 · 选中文字设置格式 · 长按一行可以拖动排序"
-              : "选中文字设置格式 · 支持一级至六级标题与列表"}
-          </div>
-          {mode === "md" ? (
-            <textarea
-              ref={mdRef}
-              className="markdown-editor"
-              spellCheck={false}
-              aria-label="Markdown 简历内容"
-              value={source}
-              onClick={jumpFromCaret}
-              onSelect={jumpFromCaret}
-              onScroll={() => {
-                if (markScrolling.current) {
-                  const el = mdRef.current;
-                  window.clearTimeout(mdShowTimer.current);
-                  mdShowTimer.current = window.setTimeout(() => {
-                    if (el) showPendingMdMark(el);
-                  }, 130);
-                  return;
-                }
-                if (mdMarkRef.current) mdMarkRef.current.style.display = "none";
-              }}
-              onKeyUp={(e) => {
-                if (
-                  ["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End"].includes(
-                    e.key,
-                  )
-                )
-                  jumpFromCaret();
-              }}
-              onChange={(e) => {
-                try {
-                  historyUpdate(
-                    { ...doc, lines: parseMarkdown(e.target.value, doc.lines) },
-                    "markdown",
-                  );
-                } catch (err) {
-                  setNotice((err as Error).message);
-                }
-              }}
-            />
-          ) : (
-            <div ref={editorRef} className="simple-editor">
-              {doc.lines
-                .filter((l) => l.kind !== "blank")
-                .map((line, index) => (
-                  <div
-                    key={line.id}
-                    data-field={line.id}
-                    className={`edit-field field-${line.kind} ${selected === line.id ? "active" : ""} ${hovered === line.id ? "hovered" : ""} ${flash === line.id ? "flash-line" : ""}`}
-                    onMouseEnter={() => setHovered(line.id)}
-                    onMouseLeave={() => setHovered("")}
-                    onClick={(e) => {
-                      if ((e.target as HTMLElement).closest("button")) return;
-                      setSelected(line.id);
-                      scrollPaperTo(line.id);
-                    }}
-                    onPointerDown={(e) =>
-                      holdDrag(
-                        e,
-                        line.id,
-                        (target, after) => dropLineAt(line.id, target, after),
-                        350,
-                        blockAllow(line.id),
-                      )
-                    }
+            <aside
+              className={`editor-panel ${mobile === "editor" ? "mobile-active" : ""}`}
+            >
+              <div className="editor-heading">
+                <div className="mode-tabs" role="tablist" aria-label="编辑方式">
+                  <button
+                    role="tab"
+                    aria-selected={mode === "simple"}
+                    onClick={() => setMode("simple")}
                   >
-                    <div className="block-gutter">
-                      <div>
-                        <button
-                          aria-label={`添加内容 ${index + 1}`}
-                          title="选择要添加的内容"
-                          onClick={() => openBlockMenu(line.id)}
-                        >
-                          <Plus size={13} />
-                        </button>
+                    简单编辑
+                  </button>
+                  <button
+                    role="tab"
+                    aria-selected={mode === "md"}
+                    onClick={() => setMode("md")}
+                  >
+                    Markdown <span>.md</span>
+                  </button>
+                </div>
+                <div className="history-buttons">
+                  <button
+                    title="收起编辑区"
+                    aria-label="收起编辑区"
+                    onClick={() => setEditorOpen(false)}
+                  >
+                    <PanelLeft size={16} />
+                  </button>
+                </div>
+              </div>
+              <div className="editor-hint">
+                {mode === "simple"
+                  ? "直接输入 · 选中文字设置格式 · 长按一行可以拖动排序"
+                  : "选中文字设置格式 · 支持一级至六级标题与列表"}
+              </div>
+              {mode === "md" ? (
+                <textarea
+                  ref={mdRef}
+                  className="markdown-editor"
+                  spellCheck={false}
+                  aria-label="Markdown 简历内容"
+                  value={source}
+                  onClick={jumpFromCaret}
+                  onSelect={jumpFromCaret}
+                  onScroll={() => {
+                    if (markScrolling.current) {
+                      const el = mdRef.current;
+                      window.clearTimeout(mdShowTimer.current);
+                      mdShowTimer.current = window.setTimeout(() => {
+                        if (el) showPendingMdMark(el);
+                      }, 130);
+                      return;
+                    }
+                    if (mdMarkRef.current)
+                      mdMarkRef.current.style.display = "none";
+                  }}
+                  onKeyUp={(e) => {
+                    if (
+                      [
+                        "ArrowUp",
+                        "ArrowDown",
+                        "PageUp",
+                        "PageDown",
+                        "Home",
+                        "End",
+                      ].includes(e.key)
+                    )
+                      jumpFromCaret();
+                  }}
+                  onChange={(e) => {
+                    try {
+                      historyUpdate(
+                        {
+                          ...doc,
+                          lines: parseMarkdown(e.target.value, doc.lines),
+                        },
+                        "markdown",
+                      );
+                    } catch (err) {
+                      setNotice((err as Error).message);
+                    }
+                  }}
+                />
+              ) : (
+                <div ref={editorRef} className="simple-editor">
+                  {doc.lines
+                    .filter((l) => l.kind !== "blank")
+                    .map((line, index) => (
+                      <div
+                        key={line.id}
+                        data-field={line.id}
+                        className={`edit-field field-${line.kind} ${selected === line.id ? "active" : ""} ${hovered === line.id ? "hovered" : ""} ${flash === line.id ? "flash-line" : ""}`}
+                        onMouseEnter={() => setHovered(line.id)}
+                        onMouseLeave={() => setHovered("")}
+                        onClick={(e) => {
+                          if ((e.target as HTMLElement).closest("button"))
+                            return;
+                          setSelected(line.id);
+                          scrollPaperTo(line.id);
+                        }}
+                        onPointerDown={(e) =>
+                          holdDrag(
+                            e,
+                            line.id,
+                            (target, after) =>
+                              dropLineAt(line.id, target, after),
+                            350,
+                            blockAllow(line.id),
+                          )
+                        }
+                      >
+                        <div className="block-gutter">
+                          <div>
+                            <button
+                              aria-label={`添加内容 ${index + 1}`}
+                              title="选择要添加的内容"
+                              onClick={() => openBlockMenu(line.id)}
+                            >
+                              <Plus size={13} />
+                            </button>
+                          </div>
+                        </div>
+                        <SimpleInput
+                          line={line}
+                          index={index}
+                          onFocus={() => {
+                            setSelected(line.id);
+                            revealInPaper(line.id);
+                          }}
+                          onChange={(value) => updateLine(line.id, value)}
+                          onEnter={() =>
+                            addLine(
+                              line.id,
+                              ["bullet", "ordered"].includes(line.kind)
+                                ? line.kind
+                                : "text",
+                              "simple",
+                            )
+                          }
+                          onSlash={() => openBlockMenu(line.id)}
+                          onBackspace={() => backspaceLine(line.id)}
+                        />
                       </div>
-                    </div>
-                    <SimpleInput
-                      line={line}
-                      index={index}
-                      onFocus={() => {
-                        setSelected(line.id);
-                        revealInPaper(line.id);
-                      }}
-                      onChange={(value) => updateLine(line.id, value)}
-                      onEnter={() =>
-                        addLine(
-                          line.id,
-                          ["bullet", "ordered"].includes(line.kind)
-                            ? line.kind
-                            : "text",
-                          "simple",
-                        )
-                      }
-                      onSlash={() => openBlockMenu(line.id)}
-                      onBackspace={() => backspaceLine(line.id)}
-                    />
-                  </div>
-                ))}
-              <button
-                className="add-paragraph"
-                onClick={() => {
-                  const line = {
-                    id: uid(),
-                    kind: "text" as Kind,
-                    text: "补充内容",
-                  };
-                  historyUpdate({ ...doc, lines: [...doc.lines, line] });
-                }}
-              >
-                <Plus size={15} />
-                添加一段内容
-              </button>
+                    ))}
+                  <button
+                    className="add-paragraph"
+                    onClick={() => {
+                      const line = {
+                        id: uid(),
+                        kind: "text" as Kind,
+                        text: "补充内容",
+                      };
+                      historyUpdate({ ...doc, lines: [...doc.lines, line] });
+                    }}
+                  >
+                    <Plus size={15} />
+                    添加一段内容
+                  </button>
+                </div>
+              )}
+              <footer className="editor-footer">
+                内容自动保存到本机 · 无需登录
+              </footer>
+            </aside>
+            <div
+              role="separator"
+              aria-label="调整编辑区宽度"
+              aria-orientation="vertical"
+              aria-valuenow={Math.round(leftWidth)}
+              tabIndex={0}
+              className="panel-resizer"
+              onPointerDown={resizeSidebar}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowLeft")
+                  setLeftWidth((w) => Math.max(260, w - 20));
+                if (e.key === "ArrowRight")
+                  setLeftWidth((w) =>
+                    Math.min(window.innerWidth * 0.6, w + 20),
+                  );
+              }}
+            >
+              <GripVertical size={12} />
             </div>
-          )}
-          <footer className="editor-footer">
-            内容自动保存到本机 · 无需登录
-          </footer>
-        </aside>
-        <div
-          role="separator"
-          aria-label="调整编辑区宽度"
-          aria-orientation="vertical"
-          aria-valuenow={Math.round(leftWidth)}
-          tabIndex={0}
-          className="panel-resizer"
-          onPointerDown={resizeSidebar}
-          onKeyDown={(e) => {
-            if (e.key === "ArrowLeft")
-              setLeftWidth((w) => Math.max(260, w - 20));
-            if (e.key === "ArrowRight")
-              setLeftWidth((w) => Math.min(window.innerWidth * 0.6, w + 20));
-          }}
-        >
-          <GripVertical size={12} />
-        </div>
           </>
         )}
         <main
@@ -1952,6 +2073,32 @@ export default function Studio() {
               <span className="page-count">A4 · {pages.length} 页</span>
             </div>
             <div className="format-toolbar">
+              <label className="density-control">
+                <span>密度</span>
+                <select
+                  aria-label="排版密度"
+                  value={activeDensity(doc.settings)}
+                  title="只调整行距、段距和上下留白，保留文字与字号"
+                  onChange={(e) =>
+                    historyUpdate({
+                      ...ref.current,
+                      settings: applyDensity(
+                        ref.current.settings,
+                        e.target.value as Density,
+                      ),
+                    })
+                  }
+                >
+                  <option value="custom" disabled>
+                    自定义
+                  </option>
+                  {densities.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <button
                 title="间距与字号"
                 aria-label="间距与字号"
@@ -2297,8 +2444,14 @@ export default function Studio() {
               doc={doc}
               docId={activeId}
               pageCount={pages.length}
-              onApply={(next) => historyUpdate(next)}
+              onApply={(next, base) => {
+                if (activeIdRef.current !== activeId || ref.current !== base)
+                  return false;
+                historyUpdate(next);
+                return true;
+              }}
               onPreview={(next) => {
+                if (activeIdRef.current !== activeId) return;
                 pinnedPreview.current = false;
                 previewScroll.current = workspace.current?.scrollTop ?? 0;
                 previewReveal.current = false;
@@ -2326,216 +2479,227 @@ export default function Studio() {
           </aside>
         ) : (
           libraryOpen && (
-        <aside
-          className={`library-panel ${mobile === "library" ? "mobile-active" : ""}`}
-          style={{ width: rightWidth, minWidth: rightWidth }}
-        >
-          <div className="library-heading">
-            <div className="library-heading-row">
-              <h2>简历样式</h2>
-              <button
-                className="icon-button"
-                title="收起样式面板"
-                aria-label="收起样式面板"
-                onClick={() => setLibraryOpen(false)}
-              >
-                <PanelRight size={16} />
-              </button>
-            </div>
-            <p>先选统一风格，再补充你的经历。</p>
-          </div>
-          <div className="library-tabs" role="tablist" aria-label="模板与内容">
-            <button
-              role="tab"
-              aria-selected={tab === "templates"}
-              onClick={() => setTab("templates")}
+            <aside
+              className={`library-panel ${mobile === "library" ? "mobile-active" : ""}`}
+              style={{ width: rightWidth, minWidth: rightWidth }}
             >
-              整套模板
-            </button>
-            <button
-              role="tab"
-              aria-selected={tab === "modules"}
-              onClick={() => setTab("modules")}
-            >
-              拼接内容
-            </button>
-          </div>
-          <div className="library-scroll">
-            {tab === "templates" ? (
-              <>
-                {templates.map((t) => (
+              <div className="library-heading">
+                <div className="library-heading-row">
+                  <h2>简历样式</h2>
                   <button
-                    className={`template-card ${doc.template === t.id ? "active" : ""}`}
-                    key={t.id}
-                    aria-label={"使用" + t.name + "模板"}
-                    onClick={() => historyUpdate(applyTemplate(doc, t.id))}
+                    className="icon-button"
+                    title="收起样式面板"
+                    aria-label="收起样式面板"
+                    onClick={() => setLibraryOpen(false)}
                   >
-                    <div
-                      className={`mini-paper mini-${t.id}`}
-                      style={{ "--mini-accent": t.color } as CSSProperties}
-                    >
-                      <strong>炒肉多</strong>
-                      <small>138 0000 2468 | zhangxiaoming@example.com</small>
-                      {["教育背景", "实习经历", "项目经历", "专业技能"].map(
-                        (s, i) => (
-                          <div key={s}>
-                            <b>{s}</b>
-                            <span />
-                            <span />
-                            <span className={i === 1 ? "long" : ""} />
-                          </div>
-                        ),
-                      )}
-                    </div>
-                    <div className="template-name">
-                      {t.name}
-                      {doc.template === t.id && <Check size={15} />}
-                    </div>
-                    <p>{t.desc}</p>
+                    <PanelRight size={16} />
                   </button>
-                ))}
-                <button
-                  className="custom-module"
-                  onClick={() => {
-                    historyUpdate(initialResume(doc.template));
-                    setNotice("已载入当前模板示例，可撤销回到原稿。");
-                  }}
-                >
-                  载入当前模板示例
-                </button>
-                <p className="library-note">
-                  已改写的内容会保留。载入示例可重新开始，也可撤销。
-                </p>
-              </>
-            ) : (
-              <>
-                <div className="current-style">
-                  <span style={{ background: doc.settings.accent }} />
-                  {currentTemplate.name}
-                  <small>所有新增内容沿用这套风格</small>
                 </div>
-                <section className="module-group">
-                  <h3>个人信息 · 表头形式</h3>
-                  <button
-                    onMouseEnter={() => previewHeader("center")}
-                    onFocus={() => previewHeader("center")}
-                    onMouseLeave={leavePreview}
-                    onClick={() => {
-                      pinnedPreview.current = false;
-                      previewHeader("center");
-                      pinnedPreview.current = true;
-                    }}
-                    onDoubleClick={() => confirmHeader("center")}
-                  >
-                    <span>
-                      <strong>姓名与联系方式居中</strong>
-                      <small>保留内容，调整表头排列</small>
-                    </span>
-                    <Check size={15} />
-                  </button>
-                  <button
-                    onMouseEnter={() => previewHeader("left")}
-                    onFocus={() => previewHeader("left")}
-                    onMouseLeave={leavePreview}
-                    onClick={() => {
-                      pinnedPreview.current = false;
-                      previewHeader("left");
-                      pinnedPreview.current = true;
-                    }}
-                    onDoubleClick={() => confirmHeader("left")}
-                  >
-                    <span>
-                      <strong>姓名与联系方式左对齐</strong>
-                      <small>与当前标题风格保持一致</small>
-                    </span>
-                    <Check size={15} />
-                  </button>
-                </section>
-                {modules.map((module) => (
-                  <section className="module-group" key={module.name}>
-                    <h3>{module.name}</h3>
-                    {module.variants.map((v) => (
+                <p>先选统一风格，再补充你的经历。</p>
+              </div>
+              <div
+                className="library-tabs"
+                role="tablist"
+                aria-label="模板与内容"
+              >
+                <button
+                  role="tab"
+                  aria-selected={tab === "templates"}
+                  onClick={() => setTab("templates")}
+                >
+                  整套模板
+                </button>
+                <button
+                  role="tab"
+                  aria-selected={tab === "modules"}
+                  onClick={() => setTab("modules")}
+                >
+                  拼接内容
+                </button>
+              </div>
+              <div className="library-scroll">
+                {tab === "templates" ? (
+                  <>
+                    {templates.map((t) => (
                       <button
-                        key={v.name}
-                        onMouseEnter={() =>
-                          previewModule(module.name, v.body, v.name)
-                        }
-                        onFocus={() =>
-                          previewModule(module.name, v.body, v.name)
-                        }
+                        className={`template-card ${doc.template === t.id ? "active" : ""}`}
+                        key={t.id}
+                        aria-label={"使用" + t.name + "模板"}
+                        onClick={() => historyUpdate(applyTemplate(doc, t.id))}
+                      >
+                        <div
+                          className={`mini-paper mini-${t.id}`}
+                          style={{ "--mini-accent": t.color } as CSSProperties}
+                        >
+                          <strong>炒肉多</strong>
+                          <small>138 0000 2468 | xxiaocr@gmail.com</small>
+                          {["教育背景", "实习经历", "项目经历", "专业技能"].map(
+                            (s, i) => (
+                              <div key={s}>
+                                <b>{s}</b>
+                                <span />
+                                <span />
+                                <span className={i === 1 ? "long" : ""} />
+                              </div>
+                            ),
+                          )}
+                        </div>
+                        <div className="template-name">
+                          {t.name}
+                          {doc.template === t.id && <Check size={15} />}
+                        </div>
+                        <p>{t.desc}</p>
+                      </button>
+                    ))}
+                    <button
+                      className="custom-module"
+                      onClick={() => {
+                        historyUpdate(initialResume(doc.template));
+                        setNotice("已载入当前模板示例，可撤销回到原稿。");
+                      }}
+                    >
+                      载入当前模板示例
+                    </button>
+                    <p className="library-note">
+                      已改写的内容会保留。载入示例可重新开始，也可撤销。
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="current-style">
+                      <span style={{ background: doc.settings.accent }} />
+                      {currentTemplate.name}
+                      <small>所有新增内容沿用这套风格</small>
+                    </div>
+                    <section className="module-group">
+                      <h3>个人信息 · 表头形式</h3>
+                      <button
+                        onMouseEnter={() => previewHeader("center")}
+                        onFocus={() => previewHeader("center")}
                         onMouseLeave={leavePreview}
                         onClick={() => {
                           pinnedPreview.current = false;
-                          previewModule(module.name, v.body, v.name);
+                          previewHeader("center");
                           pinnedPreview.current = true;
-                          if (window.innerWidth <= 900) setMobile("preview");
                         }}
-                        onDoubleClick={() =>
-                          confirmModule(module.name, v.body, v.name)
-                        }
-                        className={
-                          preview?.key === module.name + v.name
-                            ? "previewing"
-                            : ""
-                        }
-                        title="单击固定预览 · 双击加入"
+                        onDoubleClick={() => confirmHeader("center")}
                       >
                         <span>
-                          <strong>{v.name}</strong>
-                          <small>
-                            {module.name === "专业技能"
-                              ? "同一风格，不同表达方式"
-                              : `预览加入「${module.name}」末尾`}
-                          </small>
+                          <strong>姓名与联系方式居中</strong>
+                          <small>保留内容，调整表头排列</small>
                         </span>
-                        <Plus size={16} />
+                        <Check size={15} />
                       </button>
+                      <button
+                        onMouseEnter={() => previewHeader("left")}
+                        onFocus={() => previewHeader("left")}
+                        onMouseLeave={leavePreview}
+                        onClick={() => {
+                          pinnedPreview.current = false;
+                          previewHeader("left");
+                          pinnedPreview.current = true;
+                        }}
+                        onDoubleClick={() => confirmHeader("left")}
+                      >
+                        <span>
+                          <strong>姓名与联系方式左对齐</strong>
+                          <small>与当前标题风格保持一致</small>
+                        </span>
+                        <Check size={15} />
+                      </button>
+                    </section>
+                    {modules.map((module) => (
+                      <section className="module-group" key={module.name}>
+                        <h3>{module.name}</h3>
+                        {module.variants.map((v) => (
+                          <button
+                            key={v.name}
+                            onMouseEnter={() =>
+                              previewModule(module.name, v.body, v.name)
+                            }
+                            onFocus={() =>
+                              previewModule(module.name, v.body, v.name)
+                            }
+                            onMouseLeave={leavePreview}
+                            onClick={() => {
+                              pinnedPreview.current = false;
+                              previewModule(module.name, v.body, v.name);
+                              pinnedPreview.current = true;
+                              if (window.innerWidth <= 900)
+                                setMobile("preview");
+                            }}
+                            onDoubleClick={() =>
+                              confirmModule(module.name, v.body, v.name)
+                            }
+                            className={
+                              preview?.key === module.name + v.name
+                                ? "previewing"
+                                : ""
+                            }
+                            title="单击固定预览 · 双击加入"
+                          >
+                            <span>
+                              <strong>{v.name}</strong>
+                              <small>
+                                {v.description ||
+                                  (module.name === "专业技能"
+                                    ? "同一风格，不同表达方式"
+                                    : `预览加入「${module.name}」末尾`)}
+                              </small>
+                              {v.description && (
+                                <small className="block-destination">
+                                  悬停看效果 · 单击固定 · 双击加入
+                                </small>
+                              )}
+                            </span>
+                            <Plus size={16} />
+                          </button>
+                        ))}
+                      </section>
                     ))}
-                  </section>
-                ))}
-                <button
-                  className="custom-module"
-                  onMouseEnter={() =>
-                    previewModule(
-                      "自定义板块",
-                      "填写你的补充经历。",
-                      "自定义内容",
-                    )
-                  }
-                  onFocus={() =>
-                    previewModule(
-                      "自定义板块",
-                      "填写你的补充经历。",
-                      "自定义内容",
-                    )
-                  }
-                  onMouseLeave={leavePreview}
-                  onClick={() => {
-                    pinnedPreview.current = false;
-                    previewModule(
-                      "自定义板块",
-                      "填写你的补充经历。",
-                      "自定义内容",
-                    );
-                    pinnedPreview.current = true;
-                    if (window.innerWidth <= 900) setMobile("preview");
-                  }}
-                  onDoubleClick={() =>
-                    confirmModule(
-                      "自定义板块",
-                      "填写你的补充经历。",
-                      "自定义内容",
-                    )
-                  }
-                  title="单击固定预览 · 双击加入"
-                >
-                  <Plus size={15} />
-                  添加自定义板块
-                </button>
-              </>
-            )}
-          </div>
-        </aside>
+                    <button
+                      className="custom-module"
+                      onMouseEnter={() =>
+                        previewModule(
+                          "自定义板块",
+                          "填写你的补充经历。",
+                          "自定义内容",
+                        )
+                      }
+                      onFocus={() =>
+                        previewModule(
+                          "自定义板块",
+                          "填写你的补充经历。",
+                          "自定义内容",
+                        )
+                      }
+                      onMouseLeave={leavePreview}
+                      onClick={() => {
+                        pinnedPreview.current = false;
+                        previewModule(
+                          "自定义板块",
+                          "填写你的补充经历。",
+                          "自定义内容",
+                        );
+                        pinnedPreview.current = true;
+                        if (window.innerWidth <= 900) setMobile("preview");
+                      }}
+                      onDoubleClick={() =>
+                        confirmModule(
+                          "自定义板块",
+                          "填写你的补充经历。",
+                          "自定义内容",
+                        )
+                      }
+                      title="单击固定预览 · 双击加入"
+                    >
+                      <Plus size={15} />
+                      添加自定义板块
+                    </button>
+                  </>
+                )}
+              </div>
+            </aside>
           )
         )}
       </div>
@@ -2690,6 +2854,31 @@ export default function Studio() {
           }
         }}
       />
+      {exportIssues && (
+        <ExportReview
+          issues={exportIssues}
+          onClose={() => setExportIssues(null)}
+          onLocate={(issue) => {
+            setExportIssues(null);
+            setMobile("preview");
+            if (issue.lineId) setSelected(issue.lineId);
+            requestAnimationFrame(() => {
+              const selector = issue.lineId
+                ? `[data-line="${CSS.escape(issue.lineId)}"]`
+                : `[data-page="${Math.min(issue.page ?? 0, pages.length - 1)}"]`;
+              workspace.current
+                ?.querySelector(selector)
+                ?.scrollIntoView({ block: "center", behavior: "smooth" });
+            });
+          }}
+          onContinue={() => {
+            setExportIssues(null);
+            requestAnimationFrame(() =>
+              requestAnimationFrame(() => window.print()),
+            );
+          }}
+        />
+      )}
       {modal && (
         <div
           className={`modal-backdrop ${modal === "type" ? "type-backdrop" : ""}`}
@@ -2745,6 +2934,26 @@ export default function Studio() {
             </div>
             {modal === "type" ? (
               <>
+                <div className="density-presets" aria-label="密度预设">
+                  {densities.map((p) => (
+                    <button
+                      key={p.id}
+                      aria-pressed={activeDensity(doc.settings) === p.id}
+                      onClick={() =>
+                        historyUpdate({
+                          ...ref.current,
+                          settings: applyDensity(ref.current.settings, p.id),
+                        })
+                      }
+                    >
+                      <strong>{p.name}</strong>
+                      <small>{p.hint}</small>
+                    </button>
+                  ))}
+                </div>
+                <p className="density-note">
+                  保留文字与字号，只调整留白和行距。可继续微调，也可撤销。
+                </p>
                 <div className="type-grid">
                   <span>内容类型</span>
                   <span>上间距</span>
@@ -2809,23 +3018,28 @@ export default function Studio() {
               <div className="help-body">
                 <p>
                   <b>1. 界面分三栏：</b>左边写内容，中间看效果，右边调样式。
-                  顶栏的「编辑区」「简历样式」「AI 排版」控制这三栏：点一下收起，再点展开；
-                  两栏之间的竖线可以左右拖动改宽度。右边「简历样式」和「AI 排版」是互斥的，
-                  打开一个会自动关掉另一个。
+                  顶栏的「编辑区」「简历样式」「AI
+                  排版」控制这三栏：点一下收起，再点展开；
+                  两栏之间的竖线可以左右拖动改宽度。右边「简历样式」和「AI
+                  排版」是互斥的， 打开一个会自动关掉另一个。
                 </p>
                 <p>
-                  <b>2. 多份简历：</b>顶栏简历名称右边的 <b>▾</b> 打开「我的简历」：新建空白、
+                  <b>2. 多份简历：</b>顶栏简历名称右边的 <b>▾</b>{" "}
+                  打开「我的简历」：新建空白、
                   复制当前这份、删除当前这份（会问一次，且至少保留一份）。
-                  每份简历的撤销记录和 AI 对话各自独立；以前只存过一份的草稿会自动收进列表。
+                  每份简历的撤销记录和 AI
+                  对话各自独立；以前只存过一份的草稿会自动收进列表。
                 </p>
                 <p>
                   <b>3. 写内容（左栏）：</b>
                   默认「直接编辑」，点任意一行就能改；选中文字会浮出格式工具（加粗、斜体、
                   下划线、标签、链接）。<code>Enter</code> 新增下一段，
-                  <code>Shift+Enter</code> 行内换行。鼠标移到某行，左边会出现 <b>+</b>，
+                  <code>
+                    Shift+Enter
+                  </code> 行内换行。鼠标移到某行，左边会出现 <b>+</b>，
                   从模块库插入板块或条目；在文字上长按约 0.4 秒可以拖动排序
-                  （拖板块标题会带着整段内容走）。
-                  需要大段替换时，切到 Markdown 看/改整篇源码。
+                  （拖板块标题会带着整段内容走）。 需要大段替换时，切到 Markdown
+                  看/改整篇源码。
                 </p>
                 <p>
                   <b>4. 点哪跳哪：</b>
@@ -2841,19 +3055,22 @@ export default function Studio() {
                 </p>
                 <p>
                   <b>6. 预览区（中间）：</b>
-                  纸张就是 A4（794×1123px），缩放只改显示大小、不改变排版，所以预览和导出 PDF 一致。
-                  内容变多会自动续页，单条太长会切到下一页继续。
+                  纸张就是
+                  A4（794×1123px），缩放只改显示大小、不改变排版，所以预览和导出
+                  PDF 一致。 内容变多会自动续页，单条太长会切到下一页继续。
                   工具栏的图片按钮可以上传照片或校徽，拖到合适位置，右下角拉大小。
                 </p>
                 <p>
                   <b>7. 撤销与保存：</b>
-                  顶栏 <b>↶ ↷</b> 或 <code>Ctrl+Z</code> / <code>Ctrl+Shift+Z</code>，
-                  最多 60 步，连续打字会合并成一步。改动会自动存到本机浏览器，
+                  顶栏 <b>↶ ↷</b> 或 <code>Ctrl+Z</code> /{" "}
+                  <code>Ctrl+Shift+Z</code>， 最多 60
+                  步，连续打字会合并成一步。改动会自动存到本机浏览器，
                   顶栏右侧显示「已保存到本机」。
                 </p>
                 <p>
                   <b>8. AI 排版（对话）：</b>
-                  点顶栏「AI 排版」打开助手。首次使用先填三项参数，点「测试连接」、
+                  点顶栏「AI
+                  排版」打开助手。首次使用先填三项参数，点「测试连接」、
                   勾选授权说明，再「保存并启用」：
                 </p>
                 <ul className="help-list">
@@ -2886,19 +3103,22 @@ export default function Studio() {
                 </p>
                 <p>
                   <b>10. 导出与备份：</b>
-                  「导出 PDF」打开打印窗口，选“另存为 PDF”，A4、100% 缩放、关闭页眉页脚、
-                  勾选背景图形。「文件」菜单可下载 JSON 备份、导出 Markdown、导入备份或 Markdown；
-                  导入 JSON 会新增一份简历，不会覆盖当前这份。
+                  「导出 PDF」打开打印窗口，选“另存为 PDF”，A4、100%
+                  缩放、关闭页眉页脚、 勾选背景图形。「文件」菜单可下载 JSON
+                  备份、导出 Markdown、导入备份或 Markdown； 导入 JSON
+                  会新增一份简历，不会覆盖当前这份。
                 </p>
                 <p className="muted">
                   <b>数据存在哪：</b>
                   全部保存在这台电脑的浏览器本地，没有账号、不上传。清除浏览器数据、
-                  换浏览器或换设备都会看不到；照片以 base64 存在简历里，浏览器容量约 5MB，
+                  换浏览器或换设备都会看不到；照片以 base64
+                  存在简历里，浏览器容量约 5MB，
                   放多张大图可能保存失败。重要版本请下载 JSON 备份。
                 </p>
                 <p className="muted">
                   <b>联网范围：</b>
-                  只有「AI 排版」会联网——点发送时把排版参数、板块标题和简历正文发到你填的接口。
+                  只有「AI
+                  排版」会联网——点发送时把排版参数、板块标题和简历正文发到你填的接口。
                   编辑、排版、导出等其余功能都在本机运行。
                 </p>
               </div>

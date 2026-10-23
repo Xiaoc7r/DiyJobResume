@@ -1,6 +1,6 @@
 # 炒肉多
 
-138 0000 2468 | zhangxiaoming@example.com | [github.com/example](https://github.com/example)
+138 0000 2468 | xxiaocr@gmail.com | [github.com/Xiaoc7r](https://github.com/Xiaoc7r)
 
 ## 教育背景
 
@@ -10,7 +10,7 @@
 
 ## 实习经历
 
-### 东京 - 东京控股股份有限公司 | 研发部 | 2026.04 — 2026.07
+### 东京 - 东京控股股份有限公司 | 炒肉多研发部 | 2026.04 — 2026.07
 
 **工作概述**：参与金融 AI 增信场景建设，负责 **Agent 信审能力接入、用户资质解析及增信能力模块**研发，完成用户资质获取、流程引导与结果回流。
 

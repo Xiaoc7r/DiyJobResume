@@ -2066,6 +2066,102 @@ a {
   border-radius: 6px;
 }
 
+.density-control {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: #77736e;
+}
+.density-presets {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 7px;
+}
+.density-presets button {
+  padding: 10px 6px;
+  border: 1px solid #dedbd7;
+  border-radius: 7px;
+  text-align: left;
+}
+.density-presets button[aria-pressed="true"] {
+  background: #f4e9e2;
+  border-color: #b77b60;
+}
+.density-presets small {
+  display: block;
+  margin-top: 4px;
+  color: #756c65;
+  font-size: 11px;
+}
+.density-note {
+  font-size: 12px;
+  color: #756c65;
+  margin: 10px 0 18px;
+}
+.module-group .block-destination {
+  font-size: 10px;
+  margin-top: 6px;
+  color: #998b80;
+}
+.export-review-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: #17171755;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+.export-review {
+  width: min(540px, 100%);
+  max-height: 85dvh;
+  overflow: auto;
+  background: #fcfbf8;
+  border-radius: 15px;
+  padding: 26px;
+  box-shadow: 0 16px 70px #0002;
+}
+.export-review h2 {
+  margin: 0 0 10px;
+  font-size: 21px;
+}
+.export-review p {
+  color: #756c65;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.export-review ul {
+  padding-left: 20px;
+}
+.export-review li {
+  padding: 10px 0;
+  font-size: 14px;
+  line-height: 1.7;
+}
+.export-review li button {
+  display: block;
+  color: #a4664a;
+  text-decoration: underline;
+}
+.export-review .export-note {
+  font-size: 12px;
+}
+.export-review-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+.export-review-actions button {
+  padding: 9px 12px;
+  border-radius: 6px;
+}
+@media print {
+  .export-review-backdrop {
+    display: none !important;
+  }
+}
 /* 排版助手（大模型）浮层 */
 .agent-panel {
   position: fixed;
@@ -2849,4 +2945,3 @@ a {
   border-color: #b87559;
   background: #fdf6f0;
 }
-

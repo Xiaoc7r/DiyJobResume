@@ -1,4 +1,6 @@
 import { demoFor } from "./samples";
+import { experienceBlocks } from "./experience";
+import type { ExperienceBlock } from "./experience";
 export { demoFor } from "./samples";
 export const PAGE = { width: 794, height: 1123 };
 export const STORAGE_KEY = "diyjobresume.document.v2";
@@ -246,7 +248,7 @@ export function applyTemplate(doc: Resume, template: Template): Resume {
     },
   };
 }
-export const modules = [
+export const modules: { name: string; variants: ExperienceBlock[] }[] = [
   {
     name: "教育背景",
     variants: [
@@ -338,7 +340,7 @@ const extraVariants: Record<string, { name: string; body: string }[]> = {
   项目经历: [
     {
       name: "项目卡片 · 链接与技术栈",
-      body: "### 项目名称 | 开始 — 结束\n[项目地址](https://github.com/example)\n`技术一` `技术二` `技术三`\n**项目目标：**解决的问题与使用场景。\n- **个人贡献：**实现与取舍。",
+      body: "### 项目名称 | 开始 — 结束\n[项目地址](https://github.com/Xiaoc7r)\n`技术一` `技术二` `技术三`\n**项目目标：**解决的问题与使用场景。\n- **个人贡献：**实现与取舍。",
     },
     {
       name: "方案拆解 · 编号成果",
@@ -368,6 +370,9 @@ const extraVariants: Record<string, { name: string; body: string }[]> = {
 };
 for (const module of modules)
   module.variants.push(...(extraVariants[module.name] || []));
+for (const module of modules)
+  if (experienceBlocks[module.name])
+    module.variants = experienceBlocks[module.name];
 export function insertModule(doc: Resume, name: string, body: string): Resume {
   if (
     name === "工作经历" &&

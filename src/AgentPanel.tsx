@@ -31,7 +31,7 @@ import type {
   AgentSummary,
   AgentTurn,
 } from "./agent";
-import { layoutSteps, textToLines } from "./importText";
+import { contentToLines } from "./importText";
 
 import type { Resume } from "./flow";
 
@@ -107,7 +107,7 @@ export function AgentPanel({
   docId: string;
   pageCount: number;
   docked?: boolean;
-  onApply: (next: Resume) => void;
+  onApply: (next: Resume, base: Resume) => boolean;
   onPreview: (next: Resume) => void;
   onClearPreview: () => void;
   registerPreviewApi: (
@@ -117,21 +117,20 @@ export function AgentPanel({
 }) {
   const [config, setConfig] = useState(loadAgentConfig),
     [draft, setDraft] = useState(loadAgentConfig),
-    [setupOpen, setSetupOpen] = useState(() => !loadAgentConfig().apiKey),
+    [setupOpen, setSetupOpen] = useState(false),
     [agreed, setAgreed] = useState(noticeAccepted),
     [input, setInput] = useState(""),
-    [tab, setTab] = useState<"chat" | "paste">("chat"),
+    [tab, setTab] = useState<"chat" | "paste">(() =>
+      loadAgentConfig().apiKey ? "chat" : "paste",
+    ),
     [pasteText, setPasteText] = useState(""),
     [running, setRunning] = useState(false),
     [percent, setPercent] = useState(0),
-    [layoutResult, setLayoutResult] = useState<{
-      before: Resume;
-      after: Resume;
-      total: number;
-    } | null>(null),
     [turns, setTurns] = useState<AgentTurn[]>(() => loadTurns(docId)),
     [summary, setSummary] = useState<AgentSummary>(() => loadSummary(docId)),
     [pending, setPending] = useState<{
+      base: Resume;
+      after: Resume;
       actions: AgentAction[];
       notes: string[];
       skipped: string[];
@@ -145,6 +144,19 @@ export function AgentPanel({
     x: Math.max(12, window.innerWidth - 400),
     y: 96,
   }));
+  const current = useRef(doc);
+  current.current = doc;
+  const mounted = useRef(true);
+  const controllers = useRef(new Set<AbortController>());
+  const [aiReview, setAiReview] = useState(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      controllers.current.forEach((c) => c.abort());
+      controllers.current.clear();
+    };
+  }, []);
   const logRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -205,9 +217,14 @@ export function AgentPanel({
       model: draft.model.trim(),
       apiKey: draft.apiKey.trim(),
     };
-    saveAgentConfig(next);
+    try {
+      saveAgentConfig(next);
+      if (agreed) acceptNotice();
+    } catch {
+      setError("接口设置未能保存，请检查浏览器存储空间。");
+      return;
+    }
     setConfig(next);
-    if (agreed) acceptNotice();
     setSetupOpen(false);
     setError("");
   };
@@ -244,7 +261,8 @@ export function AgentPanel({
     if (first.actions.length) return first;
     const retry = await requestAgent(
       config,
-      system + "\n\n重要：必须只输出一个 JSON 对象，并在 actions 里给出动作数组。",
+      system +
+        "\n\n重要：必须只输出一个 JSON 对象，并在 actions 里给出动作数组。",
       history,
       question +
         "\n（只输出 JSON；如果确实不需要任何排版改动，actions 返回空数组，并在 reply 里说明原因。）",
@@ -255,8 +273,8 @@ export function AgentPanel({
 
   const send = async () => {
     const text = input.trim();
-    if (!text || busy) return;
-    if (!config.apiKey.trim() || !config.model.trim()) {
+    if (!text || busy || running) return;
+    if (!config.apiKey.trim() || !config.model.trim() || !agreed) {
       setSetupOpen(true);
       setError("先填好接口地址、模型名和 Key，再点保存。");
       return;
@@ -284,6 +302,7 @@ export function AgentPanel({
       describeDoc(doc, pageCount, true);
     const controller = new AbortController(),
       timer = window.setTimeout(() => controller.abort(), 90000);
+    controllers.current.add(controller);
     try {
       // 超过上下文预算就把最早的对话压成摘要，只带摘要 + 最近几条继续聊
       let active = summary,
@@ -311,13 +330,17 @@ export function AgentPanel({
         ? `${system}\n\n早前对话摘要：\n${active.text}`
         : system;
       const reply = await askModel(withMemory, recent, text, controller.signal);
-      setTurns((all) => [
-        ...all,
-        { role: "assistant", text: reply.reply },
-      ]);
+      if (!mounted.current || controller.signal.aborted) return;
+      if (current.current !== doc) {
+        setError("简历已变化，请基于最新内容重新生成建议。");
+        return;
+      }
+      setTurns((all) => [...all, { role: "assistant", text: reply.reply }]);
       if (reply.actions.length) {
         const applied = applyAgentActions(doc, reply.actions);
         setPending({
+          base: doc,
+          after: applied.doc,
           actions: reply.actions,
           notes: applied.notes,
           skipped: applied.skipped,
@@ -328,6 +351,7 @@ export function AgentPanel({
     } catch (e) {
       setError(errorText(e));
     } finally {
+      controllers.current.delete(controller);
       window.clearTimeout(timer);
       setBusy(false);
     }
@@ -352,10 +376,18 @@ export function AgentPanel({
 
   const accept = () => {
     if (!pending) return;
-    // 按当前文档重算，避免中途改过内容被旧快照覆盖
-    const fresh = applyAgentActions(doc, pending.actions);
-    onApply(fresh.doc);
-    markApplied(pending.turnAt, fresh.notes);
+    // 仅将预览应用到其原始版本，禁止用旧行号修改新内容。
+    if (
+      current.current !== pending.base ||
+      !onApply(pending.after, pending.base)
+    ) {
+      setError("简历已变化，旧建议未应用。请重新生成。");
+      onClearPreview();
+      setPending(null);
+      registerPreviewApi(null);
+      return;
+    }
+    markApplied(pending.turnAt, pending.notes);
     onClearPreview();
     registerPreviewApi(null);
     setPending(null);
@@ -384,7 +416,7 @@ export function AgentPanel({
   const pasteInfo = useMemo(() => {
     if (!pasteText.trim()) return { count: 0, error: "" };
     try {
-      return { count: textToLines(pasteText).length, error: "" };
+      return { count: contentToLines(pasteText).length, error: "" };
     } catch (e) {
       return {
         count: 0,
@@ -392,77 +424,64 @@ export function AgentPanel({
       };
     }
   }, [pasteText]);
-  const wait = (ms: number) =>
-    new Promise((resolve) => window.setTimeout(resolve, ms));
-  // 一键排版：分几步跑给用户看，最后直接写进简历（不再问接受与否）
   const runLayout = async () => {
     const text = pasteText.trim();
-    if (!text || running) return;
-    setError("");
-    setLayoutResult(null);
-    setRunning(true);
-    setPercent(6);
-    const before = doc;
-    try {
-      const stages = Array.from(layoutSteps(text));
-      let last = doc;
-      for (let index = 0; index < stages.length; index++) {
-        await wait(260);
-        last = { ...doc, lines: stages[index].lines };
-        // 本地几步走到 66%，剩下的留给 AI 复核
-        setPercent(8 + Math.round(((index + 1) / stages.length) * 58));
-      }
-
-      if (config.apiKey.trim() && config.model.trim()) {
-        setPercent(70);
-        const controller = new AbortController(),
-          timeout = window.setTimeout(() => controller.abort(), 60000),
-          // 等接口的时候让进度慢慢爬，不要卡死在 70%
-          ticker = window.setInterval(
-            () => setPercent((value) => (value < 92 ? value + 1 : value)),
-            320,
-          );
-        try {
-          // 和对话里「帮我把格式调好」完全同一套动作：排版和文字都能改
-          const reply = await reviewLayout(
-            config,
-            last,
-            text,
-            controller.signal,
-          );
-          const actions = reply.actions.filter((action) =>
-            isReviewAction(String(action.type)),
-          );
-          if (actions.length) {
-            const applied = applyAgentActions(last, actions);
-            if (applied.notes.length) last = applied.doc;
-          }
-        } catch {
-          /* 复核失败就用本地结果 */
-        } finally {
-          window.clearInterval(ticker);
-          window.clearTimeout(timeout);
-        }
-      }
-
-      setPercent(96);
-      await wait(220);
-      onApply(last);
-      setPercent(100);
-      setLayoutResult({ before, after: last, total: last.lines.length });
-    } catch (e) {
-      setError(errorText(e));
-    } finally {
-      setRunning(false);
+    if (!text || running || busy) return;
+    if (
+      aiReview &&
+      (!agreed || !config.apiKey.trim() || !config.model.trim())
+    ) {
+      setSetupOpen(true);
+      setError("请先确认发送简历正文并配置接口，或关闭 AI 复核使用本地排版。");
+      return;
     }
-  };
-  const undoLayout = () => {
-    if (!layoutResult) return;
-    onApply(layoutResult.before);
-    setLayoutResult(null);
+    setError("");
+    setRunning(true);
+    setPercent(10);
+    setPending(null);
+    onClearPreview();
+    const before = doc,
+      controller = new AbortController();
+    controllers.current.add(controller);
+    const timeout = window.setTimeout(() => controller.abort(), 60000);
+    try {
+      let last = { ...before, lines: contentToLines(text) };
+      setPercent(65);
+      if (aiReview) {
+        const reply = await reviewLayout(config, last, text, controller.signal);
+        last = applyAgentActions(
+          last,
+          reply.actions.filter((a) => isReviewAction(String(a.type))),
+        ).doc;
+      }
+      if (!mounted.current || controller.signal.aborted) return;
+      if (current.current !== before) {
+        setError("简历已变化，未替换正文。请重新生成排版。");
+        return;
+      }
+      setPending({
+        base: before,
+        after: last,
+        actions: [{ type: "setContent" }],
+        notes: ["替换当前正文；请先检查右侧预览，接受后生效"],
+        skipped: [],
+        turnAt: -1,
+      });
+      onPreview(last);
+      setPercent(100);
+    } catch (e) {
+      if (mounted.current) setError(errorText(e));
+    } finally {
+      window.clearTimeout(timeout);
+      controllers.current.delete(controller);
+      if (mounted.current) setRunning(false);
+    }
   };
 
   const clear = () => {
+    controllers.current.forEach((c) => c.abort());
+    onClearPreview();
+    registerPreviewApi(null);
     setTurns([]);
     setSummary({ text: "", count: 0 });
     setPending(null);
@@ -546,7 +565,10 @@ export function AgentPanel({
             </span>
           </label>
           <div className="agent-setup-actions">
-            <button disabled={testing || !draft.model} onClick={() => void test()}>
+            <button
+              disabled={testing || !draft.model}
+              onClick={() => void test()}
+            >
               {testing ? "测试中…" : "测试连接"}
             </button>
             <button className="primary" disabled={!agreed} onClick={save}>
@@ -606,7 +628,18 @@ export function AgentPanel({
         </div>
       ) : (
         <div className="agent-paste">
-          <p className="agent-paste-hint">将简历文字内容粘贴即可一键排版</p>
+          <p className="agent-paste-hint">
+            粘贴文字，在本机整理；先预览，接受后替换正文。
+          </p>
+          <label className="agent-notice">
+            <input
+              type="checkbox"
+              checked={aiReview}
+              disabled={running}
+              onChange={(e) => setAiReview(e.target.checked)}
+            />
+            使用 AI 复核（将正文发送到已配置接口，可能改写内容）
+          </label>
           <textarea
             value={pasteText}
             onChange={(e) => setPasteText(e.target.value)}
@@ -626,10 +659,10 @@ export function AgentPanel({
             </span>
             <button
               className="primary"
-              disabled={!pasteInfo.count || running}
+              disabled={!pasteInfo.count || running || busy}
               onClick={() => void runLayout()}
             >
-              {running ? "排版中…" : "开始排版"}
+              {running ? "排版中…" : "生成排版预览"}
             </button>
           </div>
           {running && (
@@ -644,20 +677,6 @@ export function AgentPanel({
                 <i style={{ width: `${percent}%` }} />
               </span>
               <span className="agent-progress-text">正在排版… {percent}%</span>
-            </div>
-          )}
-          {layoutResult && !running && (
-            <div className="agent-done">
-              <span>
-                已排好 {layoutResult.total} 行
-                {doc === layoutResult.after ? "" : "（内容已改动，撤销会一起还原）"}
-              </span>
-              <button
-                onClick={undoLayout}
-                title="回到排版前的样子"
-              >
-                撤销排版
-              </button>
             </div>
           )}
         </div>
@@ -709,7 +728,9 @@ export function AgentPanel({
           ) : (
             <p className="agent-skip">
               这次没有可执行的排版改动
-              {pending.skipped.length ? "：" + pending.skipped.join("；") : "。"}
+              {pending.skipped.length
+                ? "：" + pending.skipped.join("；")
+                : "。"}
             </p>
           )}
         </div>
@@ -740,7 +761,11 @@ export function AgentPanel({
             rows={Math.min(6, Math.max(2, input.split("\n").length))}
             aria-label="告诉助手你想怎么排"
           />
-          <button type="submit" disabled={busy || !input.trim()} aria-label="发送">
+          <button
+            type="submit"
+            disabled={busy || running || !input.trim()}
+            aria-label="发送"
+          >
             <Send size={15} />
           </button>
         </form>
