@@ -10,17 +10,22 @@ function setup() {
     getSelection: () => ({ removeAllRanges: vi.fn() }),
   });
   vi.stubGlobal("window", win);
-  const destination = {
-    dataset: { line: "b" },
+  const row = (id: string, top: number) => ({
+    dataset: { field: id },
     classList: classes(),
-    closest: () => null,
-  };
-  vi.stubGlobal("document", {
-    body: { classList: classes() },
-    elementFromPoint: () => ({ closest: () => destination }),
+    getBoundingClientRect: () => ({ top, height: 20, bottom: top + 20 }),
   });
+  const rows = [row("a", 0), row("b", 40)];
+  const root = {
+    querySelectorAll: () => rows,
+    getBoundingClientRect: () => ({ top: 0, bottom: 400 }),
+    scrollTop: 0,
+  };
+  vi.stubGlobal("document", { body: { classList: classes() } });
   const el = Object.assign(new EventTarget(), {
     classList: classes(),
+    closest: (selector: string) =>
+      selector.includes("simple-editor") ? root : null,
     setPointerCapture: vi.fn(),
     hasPointerCapture: () => true,
     releasePointerCapture: vi.fn(),
@@ -67,16 +72,16 @@ describe("hold to move, click to edit", () => {
   it("moves once after holding and releasing over another block", () => {
     const t = setup();
     vi.advanceTimersByTime(350);
-    t.fire("pointermove", 30, 50);
+    t.fire("pointermove", 30, 45);
     t.fire("pointerup");
-    expect(t.move).toHaveBeenCalledExactlyOnceWith("b");
+    expect(t.move).toHaveBeenCalledExactlyOnceWith("b", false);
     t.fire("pointerup");
     expect(t.move).toHaveBeenCalledTimes(1);
   });
   it("cancels a held move without changing content", () => {
     const t = setup();
     vi.advanceTimersByTime(350);
-    t.fire("pointermove", 30, 50);
+    t.fire("pointermove", 30, 45);
     t.fire("pointercancel");
     t.fire("pointerup");
     expect(t.move).not.toHaveBeenCalled();
