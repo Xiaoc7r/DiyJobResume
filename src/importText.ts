@@ -68,10 +68,12 @@ export function rowsOf(raw: string): string[] {
   for (const source of raw.replace(/\r\n?/g, "\n").split("\n")) {
     const row = tidy(source.replace(/^[\s\u3000]+/, ""));
     if (!row || SEPARATOR_ROW.test(row)) continue;
-    if (/@|电话|手机/.test(row)) {
+    if (/@|(?:电话|手机)\s*[：:]?\s*\+?\d/.test(row)) {
       const key = row.replace(/\s/g, "");
       if (key === lastContact) continue;
       lastContact = key;
+    } else {
+      lastContact = "";
     }
     rows.push(row);
   }
@@ -187,10 +189,14 @@ export function reviewLines(lines: Line[]): Line[] {
       !END_PUNCT.test(previous.text) &&
       current.text.length <= 120
     ) {
-      previous.text += current.text;
+      // 中文断行直接接回；英文单词之间保留被换行替代的空格。
+      const separator = /[A-Za-z0-9]$/.test(previous.text) &&
+        /^[A-Za-z0-9]/.test(current.text) ? " " : "";
+      previous.text += separator + current.text;
       continue;
     }
-    out.push(current);
+    // 各阶段用于进度预览，不能修改前一阶段保留的对象。
+    out.push({ ...current });
   }
   return out;
 }

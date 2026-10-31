@@ -5,6 +5,8 @@ import {
   looksLikeMarkdown,
   looksLikeResumeBlock,
   textToLines,
+  rowsOf,
+  reviewLines,
 } from "./importText";
 
 const RAW = `李景阳
@@ -25,6 +27,39 @@ const RAW = `李景阳
 · 机动车驾驶证`;
 
 describe("pasted resume text", () => {
+  it("keeps repeated body text across different sections", () => {
+    const raw = "项目经历\n负责手机端开发\n工作经历\n负责手机端开发";
+    expect(rowsOf(raw)).toEqual(raw.split("\n"));
+  });
+
+  it("does not mutate input lines while joining wrapped bullets", () => {
+    const lines = [
+      { id: "a", kind: "bullet" as const, text: "负责开发" },
+      { id: "b", kind: "text" as const, text: "和维护" },
+    ];
+    const original = structuredClone(lines);
+    expect(reviewLines(lines)[0].text).toBe("负责开发和维护");
+    expect(lines).toEqual(original);
+    expect(reviewLines(lines)[0].text).toBe("负责开发和维护");
+  });
+
+  it("preserves word boundaries when joining English wrapped lines", () => {
+    const result = reviewLines([
+      { id: "a", kind: "bullet", text: "Developed Java" },
+      { id: "b", kind: "text", text: "backend services" },
+    ]);
+    expect(result[0].text).toBe("Developed Java backend services");
+  });
+
+  it("keeps earlier layout stages unchanged after the generator advances", () => {
+    const steps = layoutSteps("张三\n项目经历\n· 负责开发\n和维护");
+    steps.next();
+    const identified = steps.next().value!;
+    const snapshot = structuredClone(identified);
+    Array.from(steps);
+    expect(identified).toEqual(snapshot);
+  });
+
   it("turns the first lines into name and contact", () => {
     const lines = textToLines(RAW);
     expect(lines[0]).toMatchObject({ kind: "name", text: "李景阳" });
