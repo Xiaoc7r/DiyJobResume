@@ -27,6 +27,14 @@ const RAW = `李景阳
 · 机动车驾驶证`;
 
 describe("pasted resume text", () => {
+  it("does not move or merge body lines that mention phone or email features", () => {
+    const lines = textToLines("张三\n项目经历\n负责手机端开发\n实现邮箱验证码\n工作经历\n负责手机端开发");
+    expect(lines.map(item => [item.kind, item.text])).toEqual([
+      ["name", "张三"], ["section", "项目经历"],
+      ["text", "负责手机端开发"], ["text", "实现邮箱验证码"],
+      ["section", "工作经历"], ["text", "负责手机端开发"],
+    ]);
+  });
   it("keeps repeated body text across different sections", () => {
     const raw = "项目经历\n负责手机端开发\n工作经历\n负责手机端开发";
     expect(rowsOf(raw)).toEqual(raw.split("\n"));

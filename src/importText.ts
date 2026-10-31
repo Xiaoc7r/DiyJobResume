@@ -220,8 +220,9 @@ export function reviewStructure(lines: Line[]): Line[] {
     }
   }
 
-  // 联系方式统一挪到姓名之后
-  const contacts = body.filter(
+  // 只整理页眉；正文里的手机端、邮箱功能描述不能被提取成联系方式。
+  const bodyStart = body.findIndex(item => item.kind !== "name" && item.kind !== "text");
+  const contacts = (bodyStart < 0 ? body : body.slice(0, bodyStart)).filter(
     (item) =>
       item.kind === "text" &&
       /@|电话|手机|邮箱/.test(item.text) &&
@@ -258,9 +259,12 @@ const joinContact = (left: string, right: string) =>
 // 把「正文里明显是经历行」的认出来、清掉空要点。只调整结构，不改字。
 export function reformat(lines: Line[]): Line[] {
   let contact: Line | null = null;
+  let inHeader = true;
   const merged: Line[] = [];
   for (const item of lines) {
+    if (item.kind !== "name" && item.kind !== "text") inHeader = false;
     const isContact =
+      inHeader &&
       item.kind === "text" &&
       CONTACT_LINE.test(item.text) &&
       !DATE.test(item.text);
