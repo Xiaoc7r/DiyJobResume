@@ -4,7 +4,19 @@ import type { Resume } from "./flow";
 import { blankFreePage, sourceFingerprint } from "./freeform";
 import type { FreeDocument } from "./freeform";
 
-FabricObject.customProperties = ["id", "label"];
+FabricObject.customProperties = [
+  "id",
+  "label",
+  "link",
+  "lockMovementX",
+  "lockMovementY",
+  "lockScalingX",
+  "lockScalingY",
+  "lockRotation",
+  "hasControls",
+  "subTargetCheck",
+  "interactive",
+];
 const common = {
   originX: "left" as const,
   originY: "top" as const,

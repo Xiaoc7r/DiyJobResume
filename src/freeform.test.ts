@@ -243,6 +243,52 @@ async function click(container: HTMLElement, name: string) {
   });
 }
 describe("free editor actions in a Node DOM", () => {
+  it("prepares actual vector pages before printing and prevents concurrent duplicate exports", async () => {
+    const e = await mountEditor();
+    let exported = "";
+    const print = vi.spyOn(window, "print").mockImplementation(() => {
+      exported = e.container.querySelector(".free-print")?.innerHTML || "";
+    });
+    try {
+      await act(async () => {
+        await Promise.all([
+          e.apiRef.current!.print(),
+          e.apiRef.current!.print(),
+        ]);
+      });
+      expect(print).toHaveBeenCalledTimes(1);
+      expect(exported).toContain("独立可编辑文字");
+      expect(exported).toContain("<text");
+      expect(exported).not.toContain("<canvas");
+      await act(async () => {
+        window.dispatchEvent(new Event("afterprint"));
+      });
+    } finally {
+      print.mockRestore();
+    }
+  });
+  it("preserves lock settings and links in editable backups", async () => {
+    const c = new StaticCanvas(undefined, { width: 794, height: 1123 });
+    const object = new Rect({ width: 20, height: 20 });
+    object.set({
+      lockMovementX: true,
+      lockMovementY: true,
+      hasControls: false,
+      link: "https://github.com/Xiaoc7r",
+    });
+    c.add(object);
+    const data = draft();
+    data.pages[0].canvas = c.toObject();
+    const saved = readFreeDocument(JSON.parse(JSON.stringify(data)));
+    expect(saved.pages[0].canvas.objects[0].lockMovementX).toBe(true);
+    expect(saved.pages[0].canvas.objects[0].link).toBe(
+      "https://github.com/Xiaoc7r",
+    );
+    await c.loadFromJSON(saved.pages[0].canvas);
+    expect(c.getObjects()[0].lockMovementX).toBe(true);
+    expect(c.getObjects()[0].hasControls).toBe(false);
+    await c.dispose();
+  });
   it("adds shapes, copies, deletes, undoes and redoes without rewriting structured text", async () => {
     const e = await mountEditor();
     await click(e.container, "矩形");

@@ -1460,7 +1460,11 @@ export default function Studio() {
       const { captureFreeform } = await import("./freeCapture");
       const root = workspace.current;
       if (!root) throw new Error("请先返回简历预览，再进入自由模式。");
-      const captured = await captureFreeform(root, ref.current);
+      const sourceDoc = ref.current,
+        sourceId = activeIdRef.current;
+      const captured = await captureFreeform(root, sourceDoc);
+      if (activeIdRef.current !== sourceId || ref.current !== sourceDoc)
+        throw new Error("简历内容已变化，请重新进入自由模式，最新编辑已保留。");
       historyUpdate({ ...ref.current, freeform: captured });
       setMode("free");
     } catch (e) {

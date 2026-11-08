@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import type { CSSProperties, RefObject } from "react";
 import {
   Canvas,
@@ -91,7 +92,19 @@ interface Props {
   onMode: (mode: "simple" | "md") => void;
   onRebuild: () => void;
 }
-FabricObject.customProperties = ["id", "label", "link"];
+FabricObject.customProperties = [
+  "id",
+  "label",
+  "link",
+  "lockMovementX",
+  "lockMovementY",
+  "lockScalingX",
+  "lockScalingY",
+  "lockRotation",
+  "hasControls",
+  "subTargetCheck",
+  "interactive",
+];
 const base = {
   originX: "left" as const,
   originY: "top" as const,
@@ -209,6 +222,7 @@ export default function FreeStudio({
       { svg: string; page: FreePage }[]
     >([]),
     [printing, setPrinting] = useState(false);
+  const exportInFlight = useRef(false);
   const [tableRows, setTableRows] = useState(3),
     [tableCols, setTableCols] = useState(2);
   const [selection, setSelection] = useState<Item[]>([]);
@@ -720,25 +734,31 @@ export default function FreeStudio({
     }
   };
   const print = async () => {
-    if (loading.current) return;
+    if (loading.current || exportInFlight.current) return;
+    exportInFlight.current = true;
     commit();
+    const exportPages = cloneData(model.current.pages);
     setBusy(true);
     setError("");
     try {
       await document.fonts.ready;
-      const result = [];
-      for (const p of model.current.pages)
+      const result: { svg: string; page: FreePage }[] = [];
+      for (const p of exportPages)
         result.push({ svg: await makeSvg(p), page: cloneData(p) });
-      setPrintPages(result);
-      setPrinting(true);
+      if (!alive.current) return;
+      flushSync(() => {
+        setPrintPages(result);
+        setPrinting(true);
+      });
       await new Promise((resolve) =>
         requestAnimationFrame(() => requestAnimationFrame(resolve)),
       );
-      window.print();
+      if (alive.current) window.print();
     } catch {
       setError("导出准备失败，请下载可编辑备份后重试。");
     } finally {
-      setBusy(false);
+      exportInFlight.current = false;
+      if (alive.current) setBusy(false);
     }
   };
   const api = {
