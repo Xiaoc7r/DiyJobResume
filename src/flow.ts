@@ -1,6 +1,8 @@
 import { demoFor } from "./samples";
 import { experienceBlocks } from "./experience";
 import type { ExperienceBlock } from "./experience";
+import { readFreeDocument } from "./freeform";
+import type { FreeDocument } from "./freeform";
 export { demoFor } from "./samples";
 export const PAGE = { width: 794, height: 1123 };
 export const STORAGE_KEY = "diyjobresume.document.v2";
@@ -58,6 +60,7 @@ export interface Settings {
   types: Record<Exclude<Kind, "blank">, TypeStyle>;
 }
 export interface Resume {
+  freeform?: FreeDocument;
   version: 2;
   name: string;
   template: Template;
@@ -602,6 +605,7 @@ export function readResume(raw: unknown): Resume {
       h: numeric(p.h, 72, 24, 300),
       page: Math.floor(numeric(p.page, 0, 0, 500)),
     }));
+  if (r.freeform !== undefined) doc.freeform = readFreeDocument(r.freeform);
   return doc;
 }
 export interface Piece {
