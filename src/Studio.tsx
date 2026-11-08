@@ -1,4 +1,6 @@
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -83,6 +85,9 @@ import {
 import type { Density, ExportIssue } from "./productTools";
 import { ExportReview } from "./ExportReview";
 import { AgentPanel } from "./AgentPanel";
+import type { FreeStudioApi } from "./FreeStudio";
+import type { FreeDocument } from "./freeform";
+const FreeStudio = lazy(() => import("./FreeStudio"));
 
 function saveFile(name: string, content: string, type: string) {
   const url = URL.createObjectURL(new Blob([content], { type })),
@@ -470,6 +475,9 @@ export default function Studio() {
     () =>
       boot.library.items.find((item) => item.id === boot.library.activeId)!.doc,
   );
+  const freeApi = useRef<FreeStudioApi | null>(null);
+  const [freeEntering, setFreeEntering] = useState(false);
+  const freeRebuild = useRef(false);
   const ref = useRef(doc);
   ref.current = doc;
   const [past, setPast] = useState<Resume[]>([]),
@@ -477,7 +485,7 @@ export default function Studio() {
     lastGroup = useRef({ key: "", time: 0 });
   const [notice, setNotice] = useState(boot.notice),
     [saved, setSaved] = useState("已保存到本机"),
-    [mode, setMode] = useState<"simple" | "md">("simple"),
+    [mode, setMode] = useState<"simple" | "md" | "free">("simple"),
     [tab, setTab] = useState<"templates" | "modules">("templates");
   const [selected, setSelected] = useState(""),
     [armed, setArmed] = useState(""),
@@ -643,6 +651,7 @@ export default function Studio() {
     );
   // 把当前文档写回简历列表（切文档、新建、删除前也会调用一次）
   const flushSave = () => {
+    freeApi.current?.flush();
     const current = ref.current,
       name = current.name.trim() || "未命名简历",
       id = activeIdRef.current;
@@ -687,6 +696,7 @@ export default function Studio() {
       setNotice("无法保存，未切换或删除简历。请先下载备份。");
       return false;
     }
+    setMode(entry.doc.freeform && mode === "free" ? "free" : "simple");
     docsRef.current = items;
     setDocs(items);
     activeIdRef.current = entry.id;
@@ -766,6 +776,7 @@ export default function Studio() {
   }, []);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
+      if (mode === "free") return;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
         e.preventDefault();
         if (e.shiftKey) redo();
@@ -1426,6 +1437,46 @@ export default function Studio() {
     el.addEventListener("pointerup", end);
     el.addEventListener("pointercancel", end);
   };
+  const updateFreeform = (data: FreeDocument) => {
+    if (activeIdRef.current !== activeId) return;
+    const next = { ...ref.current, freeform: data };
+    ref.current = next;
+    setDoc(next);
+  };
+  const enterFree = async (rebuild = false) => {
+    if (freeEntering) return;
+    (document.activeElement as HTMLElement)?.blur();
+    cancelPreview();
+    if (ref.current.freeform && !rebuild) {
+      setMode("free");
+      return;
+    }
+    setFreeEntering(true);
+    setMobile("preview");
+    try {
+      await new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      );
+      const { captureFreeform } = await import("./freeCapture");
+      const root = workspace.current;
+      if (!root) throw new Error("请先返回简历预览，再进入自由模式。");
+      const captured = await captureFreeform(root, ref.current);
+      historyUpdate({ ...ref.current, freeform: captured });
+      setMode("free");
+    } catch (e) {
+      setNotice(
+        e instanceof Error ? e.message : "自由模式未能打开，原简历已保留。",
+      );
+    } finally {
+      setFreeEntering(false);
+    }
+  };
+  useEffect(() => {
+    if (mode !== "free" && freeRebuild.current) {
+      freeRebuild.current = false;
+      void enterFree(true);
+    }
+  }, [mode]);
   const cancelPreview = () => {
     if (agentPreviewApi.current) {
       agentPreviewApi.current.reject();
@@ -1567,7 +1618,7 @@ export default function Studio() {
   };
   return (
     <div
-      className="studio"
+      className={`studio ${mode === "free" ? "free-mode" : ""}`}
       style={{ "--editor-width": leftWidth + "px" } as CSSProperties}
     >
       <style>{customCss}</style>
@@ -1693,8 +1744,10 @@ export default function Studio() {
               className="icon-button"
               title="撤销 Ctrl+Z"
               aria-label="撤销"
-              disabled={!past.length}
-              onClick={undo}
+              disabled={mode !== "free" && !past.length}
+              onClick={() =>
+                mode === "free" ? freeApi.current?.undo() : undo()
+              }
             >
               <Undo2 size={18} />
             </button>
@@ -1702,8 +1755,10 @@ export default function Studio() {
               className="icon-button"
               title="重做 Ctrl+Shift+Z"
               aria-label="重做"
-              disabled={!future.length}
-              onClick={redo}
+              disabled={mode !== "free" && !future.length}
+              onClick={() =>
+                mode === "free" ? freeApi.current?.redo() : redo()
+              }
             >
               <Redo2 size={18} />
             </button>
@@ -1774,9 +1829,10 @@ export default function Studio() {
               <div className="file-menu">
                 <button
                   onClick={() => {
+                    freeApi.current?.flush();
                     saveFile(
                       doc.name + ".json",
-                      JSON.stringify(doc, null, 2),
+                      JSON.stringify(ref.current, null, 2),
                       "application/json",
                     );
                     setFileMenu(false);
@@ -1787,12 +1843,12 @@ export default function Studio() {
                 </button>
                 <button
                   onClick={() => {
-                    saveFile(doc.name + ".md", source, "text/markdown");
+                    saveFile(doc.name + "-板块稿.md", source, "text/markdown");
                     setFileMenu(false);
                   }}
                 >
                   <Download size={15} />
-                  导出 Markdown
+                  导出板块稿 Markdown
                 </button>
                 <button
                   onClick={() => {
@@ -1810,6 +1866,10 @@ export default function Studio() {
             className="primary"
             disabled={exportBusy}
             onClick={async () => {
+              if (mode === "free") {
+                await freeApi.current?.print();
+                return;
+              }
               if (exportLock.current) return;
               exportLock.current = true;
               setExportBusy(true);
@@ -1862,876 +1922,966 @@ export default function Studio() {
           </button>
         </div>
       )}
-      <div className="workbench">
-        {editorOpen && (
-          <>
-            <aside
-              className={`editor-panel ${mobile === "editor" ? "mobile-active" : ""}`}
-            >
-              <div className="editor-heading">
-                <div className="mode-tabs" role="tablist" aria-label="编辑方式">
-                  <button
-                    role="tab"
-                    aria-selected={mode === "simple"}
-                    onClick={() => setMode("simple")}
+      {mode === "free" && doc.freeform ? (
+        <Suspense
+          fallback={
+            <div className="free-entering" role="status">
+              正在打开自由画布…
+            </div>
+          }
+        >
+          <FreeStudio
+            key={activeId}
+            doc={doc}
+            apiRef={freeApi}
+            onChange={updateFreeform}
+            onMode={(next) => {
+              freeApi.current?.flush();
+              setMode(next);
+              setEditorOpen(true);
+            }}
+            onRebuild={() => {
+              freeRebuild.current = true;
+              setMode("simple");
+            }}
+          />
+        </Suspense>
+      ) : (
+        <div className="workbench">
+          {editorOpen && (
+            <>
+              <aside
+                className={`editor-panel ${mobile === "editor" ? "mobile-active" : ""}`}
+              >
+                <div className="editor-heading">
+                  <div
+                    className="mode-tabs"
+                    role="tablist"
+                    aria-label="编辑方式"
                   >
-                    简单编辑
-                  </button>
-                  <button
-                    role="tab"
-                    aria-selected={mode === "md"}
-                    onClick={() => setMode("md")}
-                  >
-                    Markdown <span>.md</span>
-                  </button>
+                    <button
+                      role="tab"
+                      aria-selected={mode === "simple"}
+                      onClick={() => setMode("simple")}
+                    >
+                      简单编辑
+                    </button>
+                    <button
+                      role="tab"
+                      aria-selected={mode === "md"}
+                      onClick={() => setMode("md")}
+                    >
+                      Markdown <span>.md</span>
+                    </button>
+                    <button
+                      role="tab"
+                      aria-selected={false}
+                      disabled={freeEntering}
+                      onClick={() => {
+                        void enterFree();
+                      }}
+                    >
+                      自由模式
+                    </button>
+                  </div>
+                  <div className="history-buttons">
+                    <button
+                      title="收起编辑区"
+                      aria-label="收起编辑区"
+                      onClick={() => setEditorOpen(false)}
+                    >
+                      <PanelLeft size={16} />
+                    </button>
+                  </div>
                 </div>
-                <div className="history-buttons">
-                  <button
-                    title="收起编辑区"
-                    aria-label="收起编辑区"
-                    onClick={() => setEditorOpen(false)}
-                  >
-                    <PanelLeft size={16} />
-                  </button>
-                </div>
-              </div>
-              <div className="editor-hint">
-                {mode === "simple"
-                  ? "直接输入 · 选中文字设置格式 · 长按一行可以拖动排序"
-                  : "选中文字设置格式 · 支持一级至六级标题与列表"}
-              </div>
-              {mode === "md" ? (
-                <textarea
-                  ref={mdRef}
-                  className="markdown-editor"
-                  spellCheck={false}
-                  aria-label="Markdown 简历内容"
-                  value={source}
-                  onClick={jumpFromCaret}
-                  onSelect={jumpFromCaret}
-                  onScroll={() => {
-                    if (markScrolling.current) {
-                      const el = mdRef.current;
-                      window.clearTimeout(mdShowTimer.current);
-                      mdShowTimer.current = window.setTimeout(() => {
-                        if (el) showPendingMdMark(el);
-                      }, 130);
-                      return;
-                    }
-                    if (mdMarkRef.current)
-                      mdMarkRef.current.style.display = "none";
-                  }}
-                  onKeyUp={(e) => {
-                    if (
-                      [
-                        "ArrowUp",
-                        "ArrowDown",
-                        "PageUp",
-                        "PageDown",
-                        "Home",
-                        "End",
-                      ].includes(e.key)
-                    )
-                      jumpFromCaret();
-                  }}
-                  onChange={(e) => {
-                    try {
-                      historyUpdate(
-                        {
-                          ...doc,
-                          lines: parseMarkdown(e.target.value, doc.lines),
-                        },
-                        "markdown",
-                      );
-                    } catch (err) {
-                      setNotice((err as Error).message);
-                    }
-                  }}
-                />
-              ) : (
-                <div ref={editorRef} className="simple-editor">
-                  {doc.lines
-                    .filter((l) => l.kind !== "blank")
-                    .map((line, index) => (
-                      <div
-                        key={line.id}
-                        data-field={line.id}
-                        className={`edit-field field-${line.kind} ${selected === line.id ? "active" : ""} ${hovered === line.id ? "hovered" : ""} ${flash === line.id ? "flash-line" : ""}`}
-                        onMouseEnter={() => setHovered(line.id)}
-                        onMouseLeave={() => setHovered("")}
-                        onClick={(e) => {
-                          if ((e.target as HTMLElement).closest("button"))
-                            return;
-                          setSelected(line.id);
-                          scrollPaperTo(line.id);
-                        }}
-                        onPointerDown={(e) =>
-                          holdDrag(
-                            e,
-                            line.id,
-                            (target, after) =>
-                              dropLineAt(line.id, target, after),
-                            350,
-                            blockAllow(line.id),
+                {doc.freeform && (
+                  <div className="free-source-banner">
+                    <span>自由排版稿已保留</span>
+                    <button
+                      onClick={() => {
+                        void enterFree();
+                      }}
+                    >
+                      继续自由编辑
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            "重新生成会替换当前自由稿。建议先从文件菜单下载可编辑备份。板块稿不受影响。",
                           )
-                        }
-                      >
-                        <div className="block-gutter">
-                          <div>
-                            <button
-                              aria-label={`添加内容 ${index + 1}`}
-                              title="选择要添加的内容"
-                              onClick={() => openBlockMenu(line.id)}
-                            >
-                              <Plus size={13} />
-                            </button>
-                          </div>
-                        </div>
-                        <SimpleInput
-                          line={line}
-                          index={index}
-                          onFocus={() => {
+                        )
+                          void enterFree(true);
+                      }}
+                    >
+                      重新生成自由稿
+                    </button>
+                  </div>
+                )}
+                {freeEntering && (
+                  <div className="free-entering" role="status">
+                    正在将简历转换为可编辑元素…
+                  </div>
+                )}
+                <div className="editor-hint">
+                  {mode === "simple"
+                    ? "直接输入 · 选中文字设置格式 · 长按一行可以拖动排序"
+                    : "选中文字设置格式 · 支持一级至六级标题与列表"}
+                </div>
+                {mode === "md" ? (
+                  <textarea
+                    ref={mdRef}
+                    className="markdown-editor"
+                    spellCheck={false}
+                    aria-label="Markdown 简历内容"
+                    value={source}
+                    onClick={jumpFromCaret}
+                    onSelect={jumpFromCaret}
+                    onScroll={() => {
+                      if (markScrolling.current) {
+                        const el = mdRef.current;
+                        window.clearTimeout(mdShowTimer.current);
+                        mdShowTimer.current = window.setTimeout(() => {
+                          if (el) showPendingMdMark(el);
+                        }, 130);
+                        return;
+                      }
+                      if (mdMarkRef.current)
+                        mdMarkRef.current.style.display = "none";
+                    }}
+                    onKeyUp={(e) => {
+                      if (
+                        [
+                          "ArrowUp",
+                          "ArrowDown",
+                          "PageUp",
+                          "PageDown",
+                          "Home",
+                          "End",
+                        ].includes(e.key)
+                      )
+                        jumpFromCaret();
+                    }}
+                    onChange={(e) => {
+                      try {
+                        historyUpdate(
+                          {
+                            ...doc,
+                            lines: parseMarkdown(e.target.value, doc.lines),
+                          },
+                          "markdown",
+                        );
+                      } catch (err) {
+                        setNotice((err as Error).message);
+                      }
+                    }}
+                  />
+                ) : (
+                  <div ref={editorRef} className="simple-editor">
+                    {doc.lines
+                      .filter((l) => l.kind !== "blank")
+                      .map((line, index) => (
+                        <div
+                          key={line.id}
+                          data-field={line.id}
+                          className={`edit-field field-${line.kind} ${selected === line.id ? "active" : ""} ${hovered === line.id ? "hovered" : ""} ${flash === line.id ? "flash-line" : ""}`}
+                          onMouseEnter={() => setHovered(line.id)}
+                          onMouseLeave={() => setHovered("")}
+                          onClick={(e) => {
+                            if ((e.target as HTMLElement).closest("button"))
+                              return;
                             setSelected(line.id);
-                            revealInPaper(line.id);
+                            scrollPaperTo(line.id);
                           }}
-                          onChange={(value) => updateLine(line.id, value)}
-                          onEnter={() =>
-                            addLine(
+                          onPointerDown={(e) =>
+                            holdDrag(
+                              e,
                               line.id,
-                              ["bullet", "ordered"].includes(line.kind)
-                                ? line.kind
-                                : "text",
-                              "simple",
+                              (target, after) =>
+                                dropLineAt(line.id, target, after),
+                              350,
+                              blockAllow(line.id),
                             )
                           }
-                          onSlash={() => openBlockMenu(line.id)}
-                          onBackspace={() => backspaceLine(line.id)}
-                        />
-                      </div>
+                        >
+                          <div className="block-gutter">
+                            <div>
+                              <button
+                                aria-label={`添加内容 ${index + 1}`}
+                                title="选择要添加的内容"
+                                onClick={() => openBlockMenu(line.id)}
+                              >
+                                <Plus size={13} />
+                              </button>
+                            </div>
+                          </div>
+                          <SimpleInput
+                            line={line}
+                            index={index}
+                            onFocus={() => {
+                              setSelected(line.id);
+                              revealInPaper(line.id);
+                            }}
+                            onChange={(value) => updateLine(line.id, value)}
+                            onEnter={() =>
+                              addLine(
+                                line.id,
+                                ["bullet", "ordered"].includes(line.kind)
+                                  ? line.kind
+                                  : "text",
+                                "simple",
+                              )
+                            }
+                            onSlash={() => openBlockMenu(line.id)}
+                            onBackspace={() => backspaceLine(line.id)}
+                          />
+                        </div>
+                      ))}
+                    <button
+                      className="add-paragraph"
+                      onClick={() => {
+                        const line = {
+                          id: uid(),
+                          kind: "text" as Kind,
+                          text: "补充内容",
+                        };
+                        historyUpdate({ ...doc, lines: [...doc.lines, line] });
+                      }}
+                    >
+                      <Plus size={15} />
+                      添加一段内容
+                    </button>
+                  </div>
+                )}
+                <footer className="editor-footer">
+                  内容自动保存到本机 · 无需登录
+                </footer>
+              </aside>
+              <div
+                role="separator"
+                aria-label="调整编辑区宽度"
+                aria-orientation="vertical"
+                aria-valuenow={Math.round(leftWidth)}
+                tabIndex={0}
+                className="panel-resizer"
+                onPointerDown={resizeSidebar}
+                onKeyDown={(e) => {
+                  if (e.key === "ArrowLeft")
+                    setLeftWidth((w) => Math.max(260, w - 20));
+                  if (e.key === "ArrowRight")
+                    setLeftWidth((w) =>
+                      Math.min(window.innerWidth * 0.6, w + 20),
+                    );
+                }}
+              >
+                <GripVertical size={12} />
+              </div>
+            </>
+          )}
+          <main
+            className={`preview-panel ${mobile === "preview" ? "mobile-active" : ""}`}
+          >
+            <div className="preview-toolbar">
+              <div className="zoom-control">
+                <span>预览大小</span>
+                <input
+                  type="range"
+                  aria-label="预览缩放"
+                  min="25"
+                  max="140"
+                  value={Math.round(zoom * 100)}
+                  onChange={(e) => {
+                    setAutoZoom(false);
+                    setZoom(Number(e.target.value) / 100);
+                  }}
+                />
+                <button title="自动适应窗口" onClick={() => setAutoZoom(true)}>
+                  {Math.round(zoom * 100)}%
+                </button>
+                <span className="page-count">A4 · {pages.length} 页</span>
+              </div>
+              <div className="format-toolbar">
+                <label className="density-control">
+                  <span>密度</span>
+                  <select
+                    aria-label="排版密度"
+                    value={activeDensity(doc.settings)}
+                    title="只调整行距、段距和上下留白，保留文字与字号"
+                    onChange={(e) =>
+                      historyUpdate({
+                        ...ref.current,
+                        settings: applyDensity(
+                          ref.current.settings,
+                          e.target.value as Density,
+                        ),
+                      })
+                    }
+                  >
+                    <option value="custom" disabled>
+                      自定义
+                    </option>
+                    {densities.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
                     ))}
-                  <button
-                    className="add-paragraph"
-                    onClick={() => {
-                      const line = {
-                        id: uid(),
-                        kind: "text" as Kind,
-                        text: "补充内容",
-                      };
-                      historyUpdate({ ...doc, lines: [...doc.lines, line] });
+                  </select>
+                </label>
+                <button
+                  title="间距与字号"
+                  aria-label="间距与字号"
+                  onClick={() => setModal("type")}
+                >
+                  <SlidersHorizontal size={17} />
+                </button>
+                <label title="正文颜色" className="color-control">
+                  <span>正文</span>
+                  <input
+                    type="color"
+                    aria-label="正文颜色"
+                    value={doc.settings.color}
+                    onChange={(e) => settings({ color: e.target.value })}
+                  />
+                </label>
+                <label title="主题颜色" className="color-control">
+                  <span>主题</span>
+                  <input
+                    type="color"
+                    aria-label="主题颜色"
+                    value={doc.settings.accent}
+                    onChange={(e) => settings({ accent: e.target.value })}
+                  />
+                </label>
+                <i />
+                <button
+                  title="上传证件照"
+                  aria-label="上传证件照"
+                  onClick={() => {
+                    setImageKind("证件照");
+                    imageRef.current?.click();
+                  }}
+                >
+                  <ImagePlus size={17} />
+                </button>
+                <button
+                  title="上传校徽"
+                  aria-label="上传校徽"
+                  onClick={() => {
+                    setImageKind("校徽");
+                    imageRef.current?.click();
+                  }}
+                >
+                  <GraduationCap size={19} />
+                </button>
+                <button
+                  title="自定义 CSS"
+                  aria-label="自定义 CSS"
+                  onClick={() => setCssOpen(true)}
+                >
+                  <Code2 size={19} />
+                </button>
+                <i />
+                <NumberField
+                  label="上下"
+                  value={doc.settings.top}
+                  min={12}
+                  onChange={(n) => settings({ top: n, bottom: n })}
+                />
+                <NumberField
+                  label="左右"
+                  value={doc.settings.left}
+                  min={12}
+                  onChange={(n) => settings({ left: n, right: n })}
+                />
+                <select
+                  aria-label="简历字体"
+                  value={doc.settings.font}
+                  onChange={(e) =>
+                    settings({ font: e.target.value as Settings["font"] })
+                  }
+                >
+                  <option value="sans">Noto 黑体</option>
+                  <option value="serif">Noto 宋体</option>
+                  <option value="nunito">Nunito</option>
+                </select>
+              </div>
+            </div>
+            <div className="preview-spacer" />
+            {preview && (
+              <div className="preview-banner" role="status">
+                <span>
+                  <b>{preview.kind === "agent" ? "排版预览" : "插入预览"}</b>{" "}
+                  {preview.label}
+                  {preview.kind === "agent"
+                    ? "。这是助手改完的效果，确认后才写进简历。"
+                    : "。单击固定预览，双击卡片直接加入。"}
+                </span>
+                <button onClick={confirmPreview}>
+                  {preview.kind === "agent" ? "接受" : "确认应用"}
+                </button>
+                <button onClick={cancelPreview}>
+                  {preview.kind === "agent" ? "不接受" : "取消"}
+                </button>
+              </div>
+            )}
+            <div
+              ref={workspace}
+              onMouseMove={(e) => {
+                const row = (e.target as HTMLElement).closest<HTMLElement>(
+                  "[data-line]",
+                );
+                setHoverGroup(row ? sectionStart(row.dataset.line!) : "");
+              }}
+              onMouseLeave={() => setHoverGroup("")}
+              onScroll={() => {
+                if (!caretMark.current) return;
+                hideCaretMark();
+                window.clearTimeout(markTimer.current);
+                markTimer.current = window.setTimeout(() => {
+                  const mark = caretMark.current;
+                  if (mark) showCaretMark(mark.id, mark.offset);
+                }, 240);
+              }}
+              className="paper-workspace"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) {
+                  setArmed("");
+                  setPicSelection("");
+                }
+              }}
+            >
+              {pages.map((pieces, page) => (
+                <div
+                  className="page-frame"
+                  key={page}
+                  style={{
+                    width: PAGE.width * zoom,
+                    height: PAGE.height * zoom,
+                  }}
+                >
+                  <span className="page-caption">第 {page + 1} 页</span>
+                  <article
+                    className={`resume-paper template-${view.template}`}
+                    data-page={page}
+                    style={{
+                      ...resumeStyle,
+                      width: PAGE.width,
+                      height: PAGE.height,
+                      padding: `${view.settings.top}px ${view.settings.right}px ${view.settings.bottom}px ${view.settings.left}px`,
+                      transform: `scale(${zoom})`,
                     }}
                   >
-                    <Plus size={15} />
-                    添加一段内容
-                  </button>
+                    {pieces.map((piece) => (
+                      <Editable
+                        key={piece.line.id + "-" + piece.start}
+                        piece={piece}
+                        template={view.template}
+                        contact={piece.line.id === contactId}
+                        settings={view.settings}
+                        ghost={preview?.ids.includes(piece.line.id)}
+                        flashing={flash === piece.line.id}
+                        allowDrop={blockAllow(piece.line.id)}
+                        selected={
+                          selected === piece.line.id ||
+                          hovered === piece.line.id ||
+                          inHoveredGroup(piece.line.id)
+                        }
+                        armed={armed === piece.line.id}
+                        onSelect={() => {
+                          if (armed !== piece.line.id) setArmed("");
+                          locate(piece.line.id);
+                          setPicSelection("");
+                        }}
+                        onChange={(text) => updatePiece(piece, text)}
+                        onEnter={() =>
+                          addLine(
+                            piece.line.id,
+                            piece.line.kind === "bullet" ? "bullet" : "text",
+                          )
+                        }
+                        onRemove={() => removeLine(piece.line.id)}
+                        onDrop={(id) => {
+                          if (id) dropLineAt(id, piece.line.id, false);
+                          setArmed("");
+                        }}
+                        onMove={(target, after) => {
+                          dropLineAt(piece.line.id, target, after);
+                          setArmed("");
+                        }}
+                        onBlur={() => setArmed("")}
+                      />
+                    ))}
+                    {doc.pictures
+                      .filter(
+                        (p) => Math.min(p.page, pages.length - 1) === page,
+                      )
+                      .map((p) => (
+                        <div
+                          key={p.id}
+                          className={`floating-picture ${picSelection === p.id ? "chosen" : ""}`}
+                          style={{
+                            left: p.x,
+                            top: p.y,
+                            width: p.w,
+                            height: p.h,
+                          }}
+                          onPointerDown={(e) => dragPicture(e, p)}
+                          tabIndex={0}
+                          role="img"
+                          aria-label={p.label + "，拖动调整位置"}
+                          onKeyDown={(e) => {
+                            if (e.key === "Delete") {
+                              historyUpdate({
+                                ...doc,
+                                pictures: doc.pictures.filter(
+                                  (x) => x.id !== p.id,
+                                ),
+                              });
+                            }
+                            if (
+                              [
+                                "ArrowUp",
+                                "ArrowDown",
+                                "ArrowLeft",
+                                "ArrowRight",
+                              ].includes(e.key)
+                            ) {
+                              e.preventDefault();
+                              historyUpdate(
+                                {
+                                  ...doc,
+                                  pictures: doc.pictures.map((x) =>
+                                    x.id === p.id
+                                      ? {
+                                          ...x,
+                                          x: Math.max(
+                                            0,
+                                            Math.min(
+                                              PAGE.width - x.w,
+                                              x.x +
+                                                (e.key === "ArrowLeft"
+                                                  ? -2
+                                                  : e.key === "ArrowRight"
+                                                    ? 2
+                                                    : 0),
+                                            ),
+                                          ),
+                                          y: Math.max(
+                                            0,
+                                            Math.min(
+                                              PAGE.height - x.h,
+                                              x.y +
+                                                (e.key === "ArrowUp"
+                                                  ? -2
+                                                  : e.key === "ArrowDown"
+                                                    ? 2
+                                                    : 0),
+                                            ),
+                                          ),
+                                        }
+                                      : x,
+                                  ),
+                                },
+                                "picture",
+                              );
+                            }
+                          }}
+                        >
+                          <img src={p.src} alt={p.label} draggable={false} />
+                          {picSelection === p.id && (
+                            <>
+                              <button
+                                className="picture-delete"
+                                aria-label={"删除" + p.label}
+                                onPointerDown={(e) => e.stopPropagation()}
+                                onClick={() =>
+                                  historyUpdate({
+                                    ...doc,
+                                    pictures: doc.pictures.filter(
+                                      (x) => x.id !== p.id,
+                                    ),
+                                  })
+                                }
+                              >
+                                <X size={16} />
+                              </button>
+                              <button
+                                className="picture-resize"
+                                aria-label={"调整" + p.label + "大小"}
+                                onPointerDown={(e) => dragPicture(e, p, true)}
+                              />
+                              <div
+                                className="picture-page"
+                                onPointerDown={(e) => e.stopPropagation()}
+                              >
+                                <label>
+                                  页{" "}
+                                  <select
+                                    aria-label="图片所在页"
+                                    value={page}
+                                    onChange={(e) =>
+                                      historyUpdate({
+                                        ...doc,
+                                        pictures: doc.pictures.map((x) =>
+                                          x.id === p.id
+                                            ? {
+                                                ...x,
+                                                page: Number(e.target.value),
+                                              }
+                                            : x,
+                                        ),
+                                      })
+                                    }
+                                  >
+                                    {pages.map((_, i) => (
+                                      <option value={i} key={i}>
+                                        {i + 1}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      ))}
+                  </article>
                 </div>
-              )}
-              <footer className="editor-footer">
-                内容自动保存到本机 · 无需登录
-              </footer>
-            </aside>
+              ))}
+              <div className="paper-end">内容写到哪里，纸张就延伸到哪里。</div>
+            </div>
+          </main>
+          {(agentOpen || libraryOpen) && (
             <div
               role="separator"
-              aria-label="调整编辑区宽度"
+              aria-label="调整右侧面板宽度"
               aria-orientation="vertical"
-              aria-valuenow={Math.round(leftWidth)}
+              aria-valuenow={Math.round(rightWidth)}
               tabIndex={0}
-              className="panel-resizer"
-              onPointerDown={resizeSidebar}
+              className="panel-resizer panel-resizer-right"
+              onPointerDown={resizeRight}
               onKeyDown={(e) => {
                 if (e.key === "ArrowLeft")
-                  setLeftWidth((w) => Math.max(260, w - 20));
-                if (e.key === "ArrowRight")
-                  setLeftWidth((w) =>
-                    Math.min(window.innerWidth * 0.6, w + 20),
+                  setRightWidth((w) =>
+                    Math.min(window.innerWidth * 0.5, w + 20),
                   );
+                if (e.key === "ArrowRight")
+                  setRightWidth((w) => Math.max(220, w - 20));
               }}
             >
               <GripVertical size={12} />
             </div>
-          </>
-        )}
-        <main
-          className={`preview-panel ${mobile === "preview" ? "mobile-active" : ""}`}
-        >
-          <div className="preview-toolbar">
-            <div className="zoom-control">
-              <span>预览大小</span>
-              <input
-                type="range"
-                aria-label="预览缩放"
-                min="25"
-                max="140"
-                value={Math.round(zoom * 100)}
-                onChange={(e) => {
-                  setAutoZoom(false);
-                  setZoom(Number(e.target.value) / 100);
-                }}
-              />
-              <button title="自动适应窗口" onClick={() => setAutoZoom(true)}>
-                {Math.round(zoom * 100)}%
-              </button>
-              <span className="page-count">A4 · {pages.length} 页</span>
-            </div>
-            <div className="format-toolbar">
-              <label className="density-control">
-                <span>密度</span>
-                <select
-                  aria-label="排版密度"
-                  value={activeDensity(doc.settings)}
-                  title="只调整行距、段距和上下留白，保留文字与字号"
-                  onChange={(e) =>
-                    historyUpdate({
-                      ...ref.current,
-                      settings: applyDensity(
-                        ref.current.settings,
-                        e.target.value as Density,
-                      ),
-                    })
-                  }
-                >
-                  <option value="custom" disabled>
-                    自定义
-                  </option>
-                  {densities.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button
-                title="间距与字号"
-                aria-label="间距与字号"
-                onClick={() => setModal("type")}
-              >
-                <SlidersHorizontal size={17} />
-              </button>
-              <label title="正文颜色" className="color-control">
-                <span>正文</span>
-                <input
-                  type="color"
-                  aria-label="正文颜色"
-                  value={doc.settings.color}
-                  onChange={(e) => settings({ color: e.target.value })}
-                />
-              </label>
-              <label title="主题颜色" className="color-control">
-                <span>主题</span>
-                <input
-                  type="color"
-                  aria-label="主题颜色"
-                  value={doc.settings.accent}
-                  onChange={(e) => settings({ accent: e.target.value })}
-                />
-              </label>
-              <i />
-              <button
-                title="上传证件照"
-                aria-label="上传证件照"
-                onClick={() => {
-                  setImageKind("证件照");
-                  imageRef.current?.click();
-                }}
-              >
-                <ImagePlus size={17} />
-              </button>
-              <button
-                title="上传校徽"
-                aria-label="上传校徽"
-                onClick={() => {
-                  setImageKind("校徽");
-                  imageRef.current?.click();
-                }}
-              >
-                <GraduationCap size={19} />
-              </button>
-              <button
-                title="自定义 CSS"
-                aria-label="自定义 CSS"
-                onClick={() => setCssOpen(true)}
-              >
-                <Code2 size={19} />
-              </button>
-              <i />
-              <NumberField
-                label="上下"
-                value={doc.settings.top}
-                min={12}
-                onChange={(n) => settings({ top: n, bottom: n })}
-              />
-              <NumberField
-                label="左右"
-                value={doc.settings.left}
-                min={12}
-                onChange={(n) => settings({ left: n, right: n })}
-              />
-              <select
-                aria-label="简历字体"
-                value={doc.settings.font}
-                onChange={(e) =>
-                  settings({ font: e.target.value as Settings["font"] })
-                }
-              >
-                <option value="sans">Noto 黑体</option>
-                <option value="serif">Noto 宋体</option>
-                <option value="nunito">Nunito</option>
-              </select>
-            </div>
-          </div>
-          <div className="preview-spacer" />
-          {preview && (
-            <div className="preview-banner" role="status">
-              <span>
-                <b>{preview.kind === "agent" ? "排版预览" : "插入预览"}</b>{" "}
-                {preview.label}
-                {preview.kind === "agent"
-                  ? "。这是助手改完的效果，确认后才写进简历。"
-                  : "。单击固定预览，双击卡片直接加入。"}
-              </span>
-              <button onClick={confirmPreview}>
-                {preview.kind === "agent" ? "接受" : "确认应用"}
-              </button>
-              <button onClick={cancelPreview}>
-                {preview.kind === "agent" ? "不接受" : "取消"}
-              </button>
-            </div>
           )}
-          <div
-            ref={workspace}
-            onMouseMove={(e) => {
-              const row = (e.target as HTMLElement).closest<HTMLElement>(
-                "[data-line]",
-              );
-              setHoverGroup(row ? sectionStart(row.dataset.line!) : "");
-            }}
-            onMouseLeave={() => setHoverGroup("")}
-            onScroll={() => {
-              if (!caretMark.current) return;
-              hideCaretMark();
-              window.clearTimeout(markTimer.current);
-              markTimer.current = window.setTimeout(() => {
-                const mark = caretMark.current;
-                if (mark) showCaretMark(mark.id, mark.offset);
-              }, 240);
-            }}
-            className="paper-workspace"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) {
-                setArmed("");
-                setPicSelection("");
-              }
-            }}
-          >
-            {pages.map((pieces, page) => (
-              <div
-                className="page-frame"
-                key={page}
-                style={{ width: PAGE.width * zoom, height: PAGE.height * zoom }}
-              >
-                <span className="page-caption">第 {page + 1} 页</span>
-                <article
-                  className={`resume-paper template-${view.template}`}
-                  data-page={page}
-                  style={{
-                    ...resumeStyle,
-                    width: PAGE.width,
-                    height: PAGE.height,
-                    padding: `${view.settings.top}px ${view.settings.right}px ${view.settings.bottom}px ${view.settings.left}px`,
-                    transform: `scale(${zoom})`,
-                  }}
-                >
-                  {pieces.map((piece) => (
-                    <Editable
-                      key={piece.line.id + "-" + piece.start}
-                      piece={piece}
-                      template={view.template}
-                      contact={piece.line.id === contactId}
-                      settings={view.settings}
-                      ghost={preview?.ids.includes(piece.line.id)}
-                      flashing={flash === piece.line.id}
-                      allowDrop={blockAllow(piece.line.id)}
-                      selected={
-                        selected === piece.line.id ||
-                        hovered === piece.line.id ||
-                        inHoveredGroup(piece.line.id)
-                      }
-                      armed={armed === piece.line.id}
-                      onSelect={() => {
-                        if (armed !== piece.line.id) setArmed("");
-                        locate(piece.line.id);
-                        setPicSelection("");
-                      }}
-                      onChange={(text) => updatePiece(piece, text)}
-                      onEnter={() =>
-                        addLine(
-                          piece.line.id,
-                          piece.line.kind === "bullet" ? "bullet" : "text",
-                        )
-                      }
-                      onRemove={() => removeLine(piece.line.id)}
-                      onDrop={(id) => {
-                        if (id) dropLineAt(id, piece.line.id, false);
-                        setArmed("");
-                      }}
-                      onMove={(target, after) => {
-                        dropLineAt(piece.line.id, target, after);
-                        setArmed("");
-                      }}
-                      onBlur={() => setArmed("")}
-                    />
-                  ))}
-                  {doc.pictures
-                    .filter((p) => Math.min(p.page, pages.length - 1) === page)
-                    .map((p) => (
-                      <div
-                        key={p.id}
-                        className={`floating-picture ${picSelection === p.id ? "chosen" : ""}`}
-                        style={{ left: p.x, top: p.y, width: p.w, height: p.h }}
-                        onPointerDown={(e) => dragPicture(e, p)}
-                        tabIndex={0}
-                        role="img"
-                        aria-label={p.label + "，拖动调整位置"}
-                        onKeyDown={(e) => {
-                          if (e.key === "Delete") {
-                            historyUpdate({
-                              ...doc,
-                              pictures: doc.pictures.filter(
-                                (x) => x.id !== p.id,
-                              ),
-                            });
-                          }
-                          if (
-                            [
-                              "ArrowUp",
-                              "ArrowDown",
-                              "ArrowLeft",
-                              "ArrowRight",
-                            ].includes(e.key)
-                          ) {
-                            e.preventDefault();
-                            historyUpdate(
-                              {
-                                ...doc,
-                                pictures: doc.pictures.map((x) =>
-                                  x.id === p.id
-                                    ? {
-                                        ...x,
-                                        x: Math.max(
-                                          0,
-                                          Math.min(
-                                            PAGE.width - x.w,
-                                            x.x +
-                                              (e.key === "ArrowLeft"
-                                                ? -2
-                                                : e.key === "ArrowRight"
-                                                  ? 2
-                                                  : 0),
-                                          ),
-                                        ),
-                                        y: Math.max(
-                                          0,
-                                          Math.min(
-                                            PAGE.height - x.h,
-                                            x.y +
-                                              (e.key === "ArrowUp"
-                                                ? -2
-                                                : e.key === "ArrowDown"
-                                                  ? 2
-                                                  : 0),
-                                          ),
-                                        ),
-                                      }
-                                    : x,
-                                ),
-                              },
-                              "picture",
-                            );
-                          }
-                        }}
-                      >
-                        <img src={p.src} alt={p.label} draggable={false} />
-                        {picSelection === p.id && (
-                          <>
-                            <button
-                              className="picture-delete"
-                              aria-label={"删除" + p.label}
-                              onPointerDown={(e) => e.stopPropagation()}
-                              onClick={() =>
-                                historyUpdate({
-                                  ...doc,
-                                  pictures: doc.pictures.filter(
-                                    (x) => x.id !== p.id,
-                                  ),
-                                })
-                              }
-                            >
-                              <X size={16} />
-                            </button>
-                            <button
-                              className="picture-resize"
-                              aria-label={"调整" + p.label + "大小"}
-                              onPointerDown={(e) => dragPicture(e, p, true)}
-                            />
-                            <div
-                              className="picture-page"
-                              onPointerDown={(e) => e.stopPropagation()}
-                            >
-                              <label>
-                                页{" "}
-                                <select
-                                  aria-label="图片所在页"
-                                  value={page}
-                                  onChange={(e) =>
-                                    historyUpdate({
-                                      ...doc,
-                                      pictures: doc.pictures.map((x) =>
-                                        x.id === p.id
-                                          ? {
-                                              ...x,
-                                              page: Number(e.target.value),
-                                            }
-                                          : x,
-                                      ),
-                                    })
-                                  }
-                                >
-                                  {pages.map((_, i) => (
-                                    <option value={i} key={i}>
-                                      {i + 1}
-                                    </option>
-                                  ))}
-                                </select>
-                              </label>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    ))}
-                </article>
-              </div>
-            ))}
-            <div className="paper-end">内容写到哪里，纸张就延伸到哪里。</div>
-          </div>
-        </main>
-        {(agentOpen || libraryOpen) && (
-          <div
-            role="separator"
-            aria-label="调整右侧面板宽度"
-            aria-orientation="vertical"
-            aria-valuenow={Math.round(rightWidth)}
-            tabIndex={0}
-            className="panel-resizer panel-resizer-right"
-            onPointerDown={resizeRight}
-            onKeyDown={(e) => {
-              if (e.key === "ArrowLeft")
-                setRightWidth((w) => Math.min(window.innerWidth * 0.5, w + 20));
-              if (e.key === "ArrowRight")
-                setRightWidth((w) => Math.max(220, w - 20));
-            }}
-          >
-            <GripVertical size={12} />
-          </div>
-        )}
-        {agentOpen ? (
-          <aside
-            className={`library-panel agent-side ${mobile === "library" ? "mobile-active" : ""}`}
-            style={{ width: rightWidth, minWidth: rightWidth }}
-            aria-label="排版助手"
-          >
-            <AgentPanel
-              key={activeId}
-              docked
-              doc={doc}
-              docId={activeId}
-              pageCount={pages.length}
-              onApply={(next, base) => {
-                if (activeIdRef.current !== activeId || ref.current !== base)
-                  return false;
-                historyUpdate(next);
-                return true;
-              }}
-              onPreview={(next) => {
-                if (activeIdRef.current !== activeId) return;
-                pinnedPreview.current = false;
-                previewScroll.current = workspace.current?.scrollTop ?? 0;
-                previewReveal.current = false;
-                setPreview({
-                  key: "agent",
-                  doc: next,
-                  ids: [],
-                  label: "排版助手建议",
-                  kind: "agent",
-                });
-              }}
-              onClearPreview={() => {
-                agentPreviewApi.current = null;
-                setPreview(null);
-                previewScroll.current = null;
-              }}
-              registerPreviewApi={registerAgentPreview}
-              onClose={() => {
-                agentPreviewApi.current = null;
-                setPreview(null);
-                setAgentOpen(false);
-                setLibraryOpen(true);
-              }}
-            />
-          </aside>
-        ) : (
-          libraryOpen && (
+          {agentOpen ? (
             <aside
-              className={`library-panel ${mobile === "library" ? "mobile-active" : ""}`}
+              className={`library-panel agent-side ${mobile === "library" ? "mobile-active" : ""}`}
               style={{ width: rightWidth, minWidth: rightWidth }}
+              aria-label="排版助手"
             >
-              <div className="library-heading">
-                <div className="library-heading-row">
-                  <h2>简历样式</h2>
+              <AgentPanel
+                key={activeId}
+                docked
+                doc={doc}
+                docId={activeId}
+                pageCount={pages.length}
+                onApply={(next, base) => {
+                  if (activeIdRef.current !== activeId || ref.current !== base)
+                    return false;
+                  historyUpdate(next);
+                  return true;
+                }}
+                onPreview={(next) => {
+                  if (activeIdRef.current !== activeId) return;
+                  pinnedPreview.current = false;
+                  previewScroll.current = workspace.current?.scrollTop ?? 0;
+                  previewReveal.current = false;
+                  setPreview({
+                    key: "agent",
+                    doc: next,
+                    ids: [],
+                    label: "排版助手建议",
+                    kind: "agent",
+                  });
+                }}
+                onClearPreview={() => {
+                  agentPreviewApi.current = null;
+                  setPreview(null);
+                  previewScroll.current = null;
+                }}
+                registerPreviewApi={registerAgentPreview}
+                onClose={() => {
+                  agentPreviewApi.current = null;
+                  setPreview(null);
+                  setAgentOpen(false);
+                  setLibraryOpen(true);
+                }}
+              />
+            </aside>
+          ) : (
+            libraryOpen && (
+              <aside
+                className={`library-panel ${mobile === "library" ? "mobile-active" : ""}`}
+                style={{ width: rightWidth, minWidth: rightWidth }}
+              >
+                <div className="library-heading">
+                  <div className="library-heading-row">
+                    <h2>简历样式</h2>
+                    <button
+                      className="icon-button"
+                      title="收起样式面板"
+                      aria-label="收起样式面板"
+                      onClick={() => setLibraryOpen(false)}
+                    >
+                      <PanelRight size={16} />
+                    </button>
+                  </div>
+                  <p>先选统一风格，再补充你的经历。</p>
+                </div>
+                <div
+                  className="library-tabs"
+                  role="tablist"
+                  aria-label="模板与内容"
+                >
                   <button
-                    className="icon-button"
-                    title="收起样式面板"
-                    aria-label="收起样式面板"
-                    onClick={() => setLibraryOpen(false)}
+                    role="tab"
+                    aria-selected={tab === "templates"}
+                    onClick={() => setTab("templates")}
                   >
-                    <PanelRight size={16} />
+                    整套模板
+                  </button>
+                  <button
+                    role="tab"
+                    aria-selected={tab === "modules"}
+                    onClick={() => setTab("modules")}
+                  >
+                    拼接内容
                   </button>
                 </div>
-                <p>先选统一风格，再补充你的经历。</p>
-              </div>
-              <div
-                className="library-tabs"
-                role="tablist"
-                aria-label="模板与内容"
-              >
-                <button
-                  role="tab"
-                  aria-selected={tab === "templates"}
-                  onClick={() => setTab("templates")}
-                >
-                  整套模板
-                </button>
-                <button
-                  role="tab"
-                  aria-selected={tab === "modules"}
-                  onClick={() => setTab("modules")}
-                >
-                  拼接内容
-                </button>
-              </div>
-              <div className="library-scroll">
-                {tab === "templates" ? (
-                  <>
-                    {templates.map((t) => (
-                      <button
-                        className={`template-card ${doc.template === t.id ? "active" : ""}`}
-                        key={t.id}
-                        aria-label={"使用" + t.name + "模板"}
-                        onClick={() => historyUpdate(applyTemplate(doc, t.id))}
-                      >
-                        <div
-                          className={`mini-paper mini-${t.id}`}
-                          style={{ "--mini-accent": t.color } as CSSProperties}
+                <div className="library-scroll">
+                  {tab === "templates" ? (
+                    <>
+                      {templates.map((t) => (
+                        <button
+                          className={`template-card ${doc.template === t.id ? "active" : ""}`}
+                          key={t.id}
+                          aria-label={"使用" + t.name + "模板"}
+                          onClick={() =>
+                            historyUpdate(applyTemplate(doc, t.id))
+                          }
                         >
-                          <strong>炒肉多</strong>
-                          <small>138 0000 2468 | xxiaocr@gmail.com</small>
-                          {["教育背景", "实习经历", "项目经历", "专业技能"].map(
-                            (s, i) => (
+                          <div
+                            className={`mini-paper mini-${t.id}`}
+                            style={
+                              { "--mini-accent": t.color } as CSSProperties
+                            }
+                          >
+                            <strong>炒肉多</strong>
+                            <small>138 0000 2468 | xxiaocr@gmail.com</small>
+                            {[
+                              "教育背景",
+                              "实习经历",
+                              "项目经历",
+                              "专业技能",
+                            ].map((s, i) => (
                               <div key={s}>
                                 <b>{s}</b>
                                 <span />
                                 <span />
                                 <span className={i === 1 ? "long" : ""} />
                               </div>
-                            ),
-                          )}
-                        </div>
-                        <div className="template-name">
-                          {t.name}
-                          {doc.template === t.id && <Check size={15} />}
-                        </div>
-                        <p>{t.desc}</p>
-                      </button>
-                    ))}
-                    <button
-                      className="custom-module"
-                      onClick={() => {
-                        historyUpdate(initialResume(doc.template));
-                        setNotice("已载入当前模板示例，可撤销回到原稿。");
-                      }}
-                    >
-                      载入当前模板示例
-                    </button>
-                    <p className="library-note">
-                      已改写的内容会保留。载入示例可重新开始，也可撤销。
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <div className="current-style">
-                      <span style={{ background: doc.settings.accent }} />
-                      {currentTemplate.name}
-                      <small>所有新增内容沿用这套风格</small>
-                    </div>
-                    <section className="module-group">
-                      <h3>个人信息 · 表头形式</h3>
+                            ))}
+                          </div>
+                          <div className="template-name">
+                            {t.name}
+                            {doc.template === t.id && <Check size={15} />}
+                          </div>
+                          <p>{t.desc}</p>
+                        </button>
+                      ))}
                       <button
-                        onMouseEnter={() => previewHeader("center")}
-                        onFocus={() => previewHeader("center")}
-                        onMouseLeave={leavePreview}
+                        className="custom-module"
                         onClick={() => {
-                          pinnedPreview.current = false;
-                          previewHeader("center");
-                          pinnedPreview.current = true;
+                          historyUpdate(initialResume(doc.template));
+                          setNotice("已载入当前模板示例，可撤销回到原稿。");
                         }}
-                        onDoubleClick={() => confirmHeader("center")}
                       >
-                        <span>
-                          <strong>姓名与联系方式居中</strong>
-                          <small>保留内容，调整表头排列</small>
-                        </span>
-                        <Check size={15} />
+                        载入当前模板示例
                       </button>
-                      <button
-                        onMouseEnter={() => previewHeader("left")}
-                        onFocus={() => previewHeader("left")}
-                        onMouseLeave={leavePreview}
-                        onClick={() => {
-                          pinnedPreview.current = false;
-                          previewHeader("left");
-                          pinnedPreview.current = true;
-                        }}
-                        onDoubleClick={() => confirmHeader("left")}
-                      >
-                        <span>
-                          <strong>姓名与联系方式左对齐</strong>
-                          <small>与当前标题风格保持一致</small>
-                        </span>
-                        <Check size={15} />
-                      </button>
-                    </section>
-                    {modules.map((module) => (
-                      <section className="module-group" key={module.name}>
-                        <h3>{module.name}</h3>
-                        {module.variants.map((v) => (
-                          <button
-                            key={v.name}
-                            onMouseEnter={() =>
-                              previewModule(module.name, v.body, v.name)
-                            }
-                            onFocus={() =>
-                              previewModule(module.name, v.body, v.name)
-                            }
-                            onMouseLeave={leavePreview}
-                            onClick={() => {
-                              pinnedPreview.current = false;
-                              previewModule(module.name, v.body, v.name);
-                              pinnedPreview.current = true;
-                              if (window.innerWidth <= 900)
-                                setMobile("preview");
-                            }}
-                            onDoubleClick={() =>
-                              confirmModule(module.name, v.body, v.name)
-                            }
-                            className={
-                              preview?.key === module.name + v.name
-                                ? "previewing"
-                                : ""
-                            }
-                            title="单击固定预览 · 双击加入"
-                          >
-                            <span>
-                              <strong>{v.name}</strong>
-                              <small>
-                                {v.description ||
-                                  (module.name === "专业技能"
-                                    ? "同一风格，不同表达方式"
-                                    : `预览加入「${module.name}」末尾`)}
-                              </small>
-                              {v.description && (
-                                <small className="block-destination">
-                                  悬停看效果 · 单击固定 · 双击加入
-                                </small>
-                              )}
-                            </span>
-                            <Plus size={16} />
-                          </button>
-                        ))}
+                      <p className="library-note">
+                        已改写的内容会保留。载入示例可重新开始，也可撤销。
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="current-style">
+                        <span style={{ background: doc.settings.accent }} />
+                        {currentTemplate.name}
+                        <small>所有新增内容沿用这套风格</small>
+                      </div>
+                      <section className="module-group">
+                        <h3>个人信息 · 表头形式</h3>
+                        <button
+                          onMouseEnter={() => previewHeader("center")}
+                          onFocus={() => previewHeader("center")}
+                          onMouseLeave={leavePreview}
+                          onClick={() => {
+                            pinnedPreview.current = false;
+                            previewHeader("center");
+                            pinnedPreview.current = true;
+                          }}
+                          onDoubleClick={() => confirmHeader("center")}
+                        >
+                          <span>
+                            <strong>姓名与联系方式居中</strong>
+                            <small>保留内容，调整表头排列</small>
+                          </span>
+                          <Check size={15} />
+                        </button>
+                        <button
+                          onMouseEnter={() => previewHeader("left")}
+                          onFocus={() => previewHeader("left")}
+                          onMouseLeave={leavePreview}
+                          onClick={() => {
+                            pinnedPreview.current = false;
+                            previewHeader("left");
+                            pinnedPreview.current = true;
+                          }}
+                          onDoubleClick={() => confirmHeader("left")}
+                        >
+                          <span>
+                            <strong>姓名与联系方式左对齐</strong>
+                            <small>与当前标题风格保持一致</small>
+                          </span>
+                          <Check size={15} />
+                        </button>
                       </section>
-                    ))}
-                    <button
-                      className="custom-module"
-                      onMouseEnter={() =>
-                        previewModule(
-                          "自定义板块",
-                          "填写你的补充经历。",
-                          "自定义内容",
-                        )
-                      }
-                      onFocus={() =>
-                        previewModule(
-                          "自定义板块",
-                          "填写你的补充经历。",
-                          "自定义内容",
-                        )
-                      }
-                      onMouseLeave={leavePreview}
-                      onClick={() => {
-                        pinnedPreview.current = false;
-                        previewModule(
-                          "自定义板块",
-                          "填写你的补充经历。",
-                          "自定义内容",
-                        );
-                        pinnedPreview.current = true;
-                        if (window.innerWidth <= 900) setMobile("preview");
-                      }}
-                      onDoubleClick={() =>
-                        confirmModule(
-                          "自定义板块",
-                          "填写你的补充经历。",
-                          "自定义内容",
-                        )
-                      }
-                      title="单击固定预览 · 双击加入"
-                    >
-                      <Plus size={15} />
-                      添加自定义板块
-                    </button>
-                  </>
-                )}
-              </div>
-            </aside>
-          )
-        )}
-      </div>
-      <nav className="mobile-nav">
-        <button
-          className={mobile === "editor" ? "active" : ""}
-          onClick={() => {
-            setEditorOpen(true);
-            setMobile("editor");
-          }}
-        >
-          <PanelLeft size={17} />
-          编辑
-        </button>
-        <button
-          className={mobile === "preview" ? "active" : ""}
-          onClick={() => setMobile("preview")}
-        >
-          <FileText size={17} />
-          简历
-        </button>
-        <button
-          className={mobile === "library" ? "active" : ""}
-          onClick={() => {
-            if (!agentOpen) setLibraryOpen(true);
-            setMobile("library");
-          }}
-        >
-          <PanelRight size={17} />
-          模板与内容
-        </button>
-      </nav>
+                      {modules.map((module) => (
+                        <section className="module-group" key={module.name}>
+                          <h3>{module.name}</h3>
+                          {module.variants.map((v) => (
+                            <button
+                              key={v.name}
+                              onMouseEnter={() =>
+                                previewModule(module.name, v.body, v.name)
+                              }
+                              onFocus={() =>
+                                previewModule(module.name, v.body, v.name)
+                              }
+                              onMouseLeave={leavePreview}
+                              onClick={() => {
+                                pinnedPreview.current = false;
+                                previewModule(module.name, v.body, v.name);
+                                pinnedPreview.current = true;
+                                if (window.innerWidth <= 900)
+                                  setMobile("preview");
+                              }}
+                              onDoubleClick={() =>
+                                confirmModule(module.name, v.body, v.name)
+                              }
+                              className={
+                                preview?.key === module.name + v.name
+                                  ? "previewing"
+                                  : ""
+                              }
+                              title="单击固定预览 · 双击加入"
+                            >
+                              <span>
+                                <strong>{v.name}</strong>
+                                <small>
+                                  {v.description ||
+                                    (module.name === "专业技能"
+                                      ? "同一风格，不同表达方式"
+                                      : `预览加入「${module.name}」末尾`)}
+                                </small>
+                                {v.description && (
+                                  <small className="block-destination">
+                                    悬停看效果 · 单击固定 · 双击加入
+                                  </small>
+                                )}
+                              </span>
+                              <Plus size={16} />
+                            </button>
+                          ))}
+                        </section>
+                      ))}
+                      <button
+                        className="custom-module"
+                        onMouseEnter={() =>
+                          previewModule(
+                            "自定义板块",
+                            "填写你的补充经历。",
+                            "自定义内容",
+                          )
+                        }
+                        onFocus={() =>
+                          previewModule(
+                            "自定义板块",
+                            "填写你的补充经历。",
+                            "自定义内容",
+                          )
+                        }
+                        onMouseLeave={leavePreview}
+                        onClick={() => {
+                          pinnedPreview.current = false;
+                          previewModule(
+                            "自定义板块",
+                            "填写你的补充经历。",
+                            "自定义内容",
+                          );
+                          pinnedPreview.current = true;
+                          if (window.innerWidth <= 900) setMobile("preview");
+                        }}
+                        onDoubleClick={() =>
+                          confirmModule(
+                            "自定义板块",
+                            "填写你的补充经历。",
+                            "自定义内容",
+                          )
+                        }
+                        title="单击固定预览 · 双击加入"
+                      >
+                        <Plus size={15} />
+                        添加自定义板块
+                      </button>
+                    </>
+                  )}
+                </div>
+              </aside>
+            )
+          )}
+        </div>
+      )}
+      {mode !== "free" && (
+        <nav className="mobile-nav">
+          <button
+            className={mobile === "editor" ? "active" : ""}
+            onClick={() => {
+              setEditorOpen(true);
+              setMobile("editor");
+            }}
+          >
+            <PanelLeft size={17} />
+            编辑
+          </button>
+          <button
+            className={mobile === "preview" ? "active" : ""}
+            onClick={() => setMobile("preview")}
+          >
+            <FileText size={17} />
+            简历
+          </button>
+          <button
+            className={mobile === "library" ? "active" : ""}
+            onClick={() => {
+              if (!agentOpen) setLibraryOpen(true);
+              setMobile("library");
+            }}
+          >
+            <PanelRight size={17} />
+            模板与内容
+          </button>
+        </nav>
+      )}
       <div ref={markWord} className="caret-word" aria-hidden="true" />
       <div ref={markBar} className="caret-bar" aria-hidden="true" />
       <div ref={mdMarkRef} className="md-line-mark" aria-hidden="true" />
