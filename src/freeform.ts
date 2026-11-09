@@ -1,4 +1,49 @@
 import type { Resume } from "./flow";
+import type { CSSProperties } from "react";
+
+export interface SourceDesign {
+  dx?: number;
+  dy?: number;
+  width?: number;
+  fontSize?: number;
+  fontFamily?: string;
+  lineHeight?: number;
+  color?: string;
+  backgroundColor?: string;
+  borderColor?: string;
+  borderWidth?: number;
+  borderRadius?: number;
+  padding?: number;
+  tags?: Record<string, Omit<SourceDesign, "tags">>;
+}
+export const sourceContentStyle = (design?: SourceDesign): CSSProperties => {
+  if (!design) return {};
+  const { dx: _x, dy: _y, width: _w, tags: _tags, ...style } = design;
+  return {
+    ...style,
+    ...(design.borderWidth !== undefined ? { borderStyle: "solid" } : {}),
+  };
+};
+export const sourceFrameStyle = (design?: SourceDesign): CSSProperties =>
+  design
+    ? {
+        ...(design.dx || design.dy
+          ? { transform: `translate(${design.dx || 0}px, ${design.dy || 0}px)` }
+          : {}),
+        ...(design.width !== undefined ? { width: design.width } : {}),
+      }
+    : {};
+export function applySourceContentStyle(
+  element: HTMLElement,
+  design?: SourceDesign,
+) {
+  for (const [key, value] of Object.entries(sourceContentStyle(design))) {
+    (element.style as unknown as Record<string, string>)[key] =
+      typeof value === "number" && key !== "lineHeight"
+        ? `${value}px`
+        : String(value);
+  }
+}
 
 export interface FreePage {
   id: string;
@@ -11,6 +56,8 @@ export interface FreeDocument {
   version: 1;
   source: string;
   pages: FreePage[];
+  base?: "flow";
+  sourceDesign?: Record<string, SourceDesign>;
 }
 export const blankFreePage = (): FreePage => ({
   id: crypto.randomUUID(),
@@ -90,6 +137,49 @@ export function readFreeDocument(raw: unknown): FreeDocument {
           )))
     )
       throw new Error("自由稿包含不支持的图片滤镜。");
+    const safeStyles = (value: unknown, level = 0) => {
+      if (!value || typeof value !== "object" || level > 8) return;
+      for (const [key, v] of Object.entries(value)) {
+        if (["__proto__", "constructor", "prototype"].includes(key))
+          throw new Error("自由稿包含不支持的属性。");
+        if (typeof v === "number" && !Number.isFinite(v))
+          throw new Error("自由稿包含无效数值。");
+        if (
+          [
+            "fill",
+            "stroke",
+            "backgroundColor",
+            "textBackgroundColor",
+            "color",
+          ].includes(key) &&
+          v != null &&
+          v !== "" &&
+          (typeof v !== "string" ||
+            !/^(#[a-f\d]{3,8}|[a-z]+|rgba?\([\d.,\s%]+\)|hsla?\([\d.,\s%]+\))$/i.test(
+              v,
+            ))
+        )
+          throw new Error("自由稿包含不支持的颜色。");
+        if (
+          key === "fontFamily" &&
+          (typeof v !== "string" || /[<>"'&\\]/.test(v))
+        )
+          throw new Error("自由稿字体格式不正确。");
+        if (
+          key === "shadow" &&
+          typeof v === "string" &&
+          /[<>"'&\\]|url\(/i.test(v)
+        )
+          throw new Error("自由稿阴影格式不正确。");
+        if (
+          v &&
+          typeof v === "object" &&
+          !["objects", "clipPath", "path"].includes(key)
+        )
+          safeStyles(v, level + 1);
+      }
+    };
+    safeStyles(o);
     if (o.clipPath) validate(o.clipPath, depth + 1);
     if (o.objects) {
       if (!Array.isArray(o.objects)) throw new Error("自由稿组合格式不正确。");
@@ -124,10 +214,58 @@ export function readFreeDocument(raw: unknown): FreeDocument {
     page.canvas.objects.forEach((o) => validate(o, 0));
     page.canvas = { version: "7.4.0", objects: page.canvas.objects };
   }
+  const sourceDesign: Record<string, SourceDesign> = {};
+  const normalizeDesign = (raw: unknown, tags = true): SourceDesign => {
+    const value =
+      raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+    const result: Record<string, unknown> = {};
+    for (const key of [
+      "dx",
+      "dy",
+      "width",
+      "fontSize",
+      "lineHeight",
+      "borderWidth",
+      "borderRadius",
+      "padding",
+    ]) {
+      if (typeof value[key] === "number" && Number.isFinite(value[key]))
+        result[key] = Math.max(
+          key === "dx" || key === "dy" ? -5000 : 0,
+          Math.min(5000, value[key] as number),
+        );
+    }
+    for (const key of ["color", "backgroundColor", "borderColor"])
+      if (
+        typeof value[key] === "string" &&
+        /^(#[a-f\d]{3,8}|rgba?\([\d.,\s%]+\)|transparent|none)$/i.test(
+          value[key] as string,
+        )
+      )
+        result[key] = value[key];
+    if (
+      typeof value.fontFamily === "string" &&
+      /^[\w\s,-]{1,120}$/.test(value.fontFamily)
+    )
+      result.fontFamily = value.fontFamily;
+    if (tags && value.tags && typeof value.tags === "object")
+      result.tags = Object.fromEntries(
+        Object.entries(value.tags)
+          .filter(([k]) => /^\d{1,4}$/.test(k))
+          .slice(0, 200)
+          .map(([k, v]) => [k, normalizeDesign(v, false)]),
+      );
+    return result as SourceDesign;
+  };
+  if (data.sourceDesign && typeof data.sourceDesign === "object")
+    for (const [id, design] of Object.entries(data.sourceDesign).slice(0, 2000))
+      if (/^[a-z\d_-]{1,80}$/i.test(id))
+        sourceDesign[id] = normalizeDesign(design);
   return {
     version: 1,
     source: typeof data.source === "string" ? data.source : "",
     pages: data.pages,
+    ...(data.base === "flow" ? { base: "flow" as const, sourceDesign } : {}),
   };
 }
 

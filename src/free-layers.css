@@ -1,0 +1,23 @@
+.free-layer-svg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.free-layer-svg svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.free-layer-background {
+  z-index: 0;
+}
+.free-layer-foreground {
+  z-index: 3;
+}
+.resume-paper > .paper-row {
+  position: relative;
+  z-index: 1;
+}
+.resume-paper > .floating-picture {
+  z-index: 2;
+}

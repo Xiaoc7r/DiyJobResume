@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { flushSync } from "react-dom";
-import type { CSSProperties, RefObject } from "react";
+import type { CSSProperties, RefObject, ReactNode } from "react";
 import {
   Canvas,
   StaticCanvas,
@@ -73,12 +73,22 @@ import {
   Pencil,
 } from "lucide-react";
 import { NumericInput } from "./interaction";
+import "./freeScene";
+import { SourceInspector } from "./SourceInspector";
+import type { SourceSelection } from "./SourceInspector";
+import type { SourceDesign } from "./freeform";
+import type { LayerSvg } from "./FreeLayers";
 import { blankFreePage, sourceFingerprint, freeText } from "./freeform";
 import type { FreeDocument, FreePage } from "./freeform";
 import type { Resume } from "./flow";
 import "./free-studio.css";
 
-type Item = FabricObject & { id?: string; label?: string; link?: string };
+type Item = FabricObject & {
+  id?: string;
+  label?: string;
+  link?: string;
+  plane?: "background" | "foreground";
+};
 export interface FreeStudioApi {
   flush: () => void;
   undo: () => void;
@@ -91,20 +101,19 @@ interface Props {
   onChange: (data: FreeDocument) => void;
   onMode: (mode: "simple" | "md") => void;
   onRebuild: () => void;
+  renderPaper?: (
+    page: number,
+    scale?: number,
+    options?: { hideDecorations?: boolean; layers?: LayerSvg },
+  ) => ReactNode;
+  sourcePageCount?: number;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
+  onSourceText?: (id: string, text: string) => void;
 }
-FabricObject.customProperties = [
-  "id",
-  "label",
-  "link",
-  "lockMovementX",
-  "lockMovementY",
-  "lockScalingX",
-  "lockScalingY",
-  "lockRotation",
-  "hasControls",
-  "subTargetCheck",
-  "interactive",
-];
+
 const base = {
   originX: "left" as const,
   originY: "top" as const,
@@ -175,6 +184,13 @@ export default function FreeStudio({
   onChange,
   onMode,
   onRebuild,
+  renderPaper,
+  sourcePageCount = 0,
+  onUndo,
+  onRedo,
+  canUndo,
+  canRedo,
+  onSourceText,
 }: Props) {
   const host = useRef<HTMLDivElement>(null),
     scroll = useRef<HTMLDivElement>(null),
@@ -200,6 +216,19 @@ export default function FreeStudio({
       left: number;
       top: number;
     } | null>(null);
+  const emitted = useRef(doc.freeform);
+  const loadAbort = useRef<AbortController | null>(null);
+  const publish = (data: FreeDocument) => {
+    const next = cloneData(data);
+    emitted.current = next;
+    onChangeRef.current(next);
+  };
+  const frontLayer = useRef<HTMLDivElement>(null);
+  const [sourceSelection, setSourceSelection] =
+    useState<SourceSelection | null>(null);
+  const flowBase = doc.freeform?.base === "flow" && !!renderPaper;
+  const zoomRef = useRef(0.75),
+    toolRef = useRef<"select" | "hand" | "draw">("select");
   const [pageIndex, setPageIndex] = useState(0),
     [revision, setRevision] = useState(0),
     [busy, setBusy] = useState(true),
@@ -219,7 +248,7 @@ export default function FreeStudio({
   const [help, setHelp] = useState(false),
     [confirm, setConfirm] = useState<"reset" | "delete-page" | null>(null);
   const [printPages, setPrintPages] = useState<
-      { svg: string; page: FreePage }[]
+      { svg: string; page: FreePage; layers?: LayerSvg; sourceIndex?: number }[]
     >([]),
     [printing, setPrinting] = useState(false);
   const exportInFlight = useRef(false);
@@ -238,10 +267,18 @@ export default function FreeStudio({
     (selectedTextStyle.fontStyle ?? text?.fontStyle) === "italic";
   const textUnderline = selectedTextStyle.underline ?? text?.underline;
   const textStrike = selectedTextStyle.linethrough ?? text?.linethrough;
-  const changedSource = model.current.source !== sourceFingerprint(doc);
+  const signature = useMemo(
+    () => sourceFingerprint(doc),
+    [doc.lines, doc.settings, doc.template, doc.pictures],
+  );
+  const changedSource = !flowBase && model.current.source !== signature;
+  zoomRef.current = zoom;
+  toolRef.current = tool;
 
   const reflect = () => {
-    setSelection((scene.current?.getActiveObjects() || []) as Item[]);
+    const selected = (scene.current?.getActiveObjects() || []) as Item[];
+    setSelection(selected);
+    if (selected.length) setSourceSelection(null);
     setRevision((n) => n + 1);
   };
   updateRef.current = reflect;
@@ -269,7 +306,7 @@ export default function FreeStudio({
       )
         history.current.shift();
       cursor.current = history.current.length - 1;
-      onChangeRef.current(cloneData(data));
+      publish(data);
     }
     reflect();
   };
@@ -277,15 +314,23 @@ export default function FreeStudio({
   const loadPage = async (index: number) => {
     const c = scene.current;
     if (!c) return;
+    loadAbort.current?.abort();
+    const controller = new AbortController();
+    loadAbort.current = controller;
     loading.current = true;
     setBusy(true);
     c.discardActiveObject();
     try {
       const p = model.current.pages[index];
-      await c.loadFromJSON(p.canvas);
-      if (!alive.current || scene.current !== c) return;
-      c.backgroundColor = p.background;
-      c.setDimensions({ width: p.width, height: p.height });
+      await c.loadFromJSON(p.canvas, undefined, { signal: controller.signal });
+      if (!alive.current || scene.current !== c || controller.signal.aborted)
+        return;
+      c.backgroundColor = flowBase ? "" : p.background;
+      c.setDimensions({
+        width: p.width * zoomRef.current,
+        height: p.height * zoomRef.current,
+      });
+      c.setZoom(zoomRef.current);
       c.getObjects().forEach((o) => {
         o.set({ ...base });
         o.setCoords();
@@ -295,10 +340,10 @@ export default function FreeStudio({
       setSelection([]);
       c.requestRenderAll();
     } catch {
-      if (scene.current === c)
+      if (scene.current === c && !controller.signal.aborted)
         setError("这页暂时无法打开。原始自由稿仍在，可从文件菜单下载备份。");
     } finally {
-      if (scene.current === c) {
+      if (scene.current === c && loadAbort.current === controller) {
         loading.current = false;
         if (alive.current) {
           setBusy(false);
@@ -309,6 +354,11 @@ export default function FreeStudio({
   };
   const travel = async (direction: number) => {
     if (loading.current) return;
+    if (flowBase && onUndo && onRedo) {
+      commit();
+      direction < 0 ? onUndo() : onRedo();
+      return;
+    }
     commit();
     const next = cursor.current + direction;
     if (next < 0 || next >= history.current.length) return;
@@ -317,7 +367,7 @@ export default function FreeStudio({
     await loadPage(
       Math.min(activePage.current, model.current.pages.length - 1),
     );
-    onChangeRef.current(cloneData(model.current));
+    publish(model.current);
     reflect();
   };
   const withScene = (action: (c: Canvas) => void) => {
@@ -341,7 +391,19 @@ export default function FreeStudio({
           ]
         : items;
       objects.forEach((o) => {
-        o.set({ ...base, id: crypto.randomUUID(), label: o.label || label });
+        o.set({
+          ...base,
+          id: crypto.randomUUID(),
+          label: o.label || label,
+          plane:
+            flowBase &&
+            (o instanceof Rect ||
+              o instanceof Circle ||
+              o instanceof Triangle ||
+              o instanceof FabricLine)
+              ? "background"
+              : "foreground",
+        });
         c.add(o);
       });
       c.setActiveObject(
@@ -552,10 +614,15 @@ export default function FreeStudio({
   const insertIcon = async (name: keyof typeof iconSet) => {
     // Lucide nodes are static application assets, never user-provided SVG markup.
     const Icon = iconSet[name];
-    const { renderToStaticMarkup } = await import("react-dom/server");
-    const result = await loadSVGFromString(
-      renderToStaticMarkup(<Icon size={28} color={doc.settings.accent} />),
+    const { createRoot } = await import("react-dom/client");
+    const rootNode = document.createElement("div");
+    const root = createRoot(rootNode);
+    flushSync(() =>
+      root.render(<Icon size={28} color={doc.settings.accent} />),
     );
+    const markup = rootNode.innerHTML;
+    root.unmount();
+    const result = await loadSVGFromString(markup);
     const object = util.groupSVGElements(
       result.objects.filter((o): o is FabricObject => !!o),
       result.options,
@@ -707,31 +774,88 @@ export default function FreeStudio({
       c.remove(...objects);
     });
   };
-  const makeSvg = async (p: FreePage) => {
-    const c = new StaticCanvas(undefined, {
-      width: p.width,
-      height: p.height,
-      backgroundColor: p.background,
-      renderOnAddRemove: false,
-    });
+  const makeSvg = async (p: FreePage) =>
+    (await import("./freeScene")).sceneSvg(p);
+  const exportImage = async (format: "png" | "svg") => {
+    if (exportInFlight.current) return;
+    exportInFlight.current = true;
+    commit();
+    setBusy(true);
     try {
-      await c.loadFromJSON(p.canvas);
-      c.backgroundColor = p.background;
-      const links = (objects: Item[]) =>
-        objects.forEach((o) => {
-          if (o.link && /^(https?:\/\/|mailto:)[^\s<>"']+$/i.test(o.link)) {
-            const original = o.toSVG.bind(o),
-              href = o.link.replaceAll("&", "&amp;");
-            o.toSVG = (reviver) =>
-              `<a xlink:href="${href}" target="_blank">${original(reviver)}</a>`;
-          }
-          if (o instanceof Group) links(o.getObjects());
+      let url: string;
+      if (flowBase) {
+        const p = cloneData(model.current.pages[activePage.current]);
+        const { sceneSvg } = await import("./freeScene");
+        const layers = {
+          background: await sceneSvg(p, "background"),
+          foreground: await sceneSvg(p, "foreground"),
+        };
+        flushSync(() =>
+          setPrintPages([
+            { svg: "", page: p, layers, sourceIndex: activePage.current },
+          ]),
+        );
+        const root = flowRoot.current!;
+        root.style.cssText =
+          "display:block;position:fixed;left:-20000px;top:0;pointer-events:none";
+        await new Promise((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(resolve)),
+        );
+        const paper = root.querySelector<HTMLElement>(".resume-paper");
+        if (!paper) throw new Error("原稿尚未准备好");
+        url = await (await import("./domExport")).exportPaper(paper, format);
+      } else if (format === "svg") {
+        const svg = await makeSvg(page);
+        download(`${doc.name}-第${pageIndex + 1}页.svg`, svg, "image/svg+xml");
+        return;
+      } else {
+        const c = new StaticCanvas(undefined, {
+          width: page.width,
+          height: page.height,
         });
-      links(c.getObjects());
-      return c.toSVG({ suppressPreamble: true });
+        try {
+          await c.loadFromJSON(page.canvas);
+          c.backgroundColor = page.background;
+          url = c.toDataURL({ format: "png", multiplier: 2 });
+        } finally {
+          await c.dispose();
+        }
+      }
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${doc.name}-第${pageIndex + 1}页.${format}`;
+      a.click();
+    } catch {
+      setError("导出失败，请下载可编辑备份后重试。");
     } finally {
-      await c.dispose();
+      if (flowRoot.current) flowRoot.current.style.cssText = "";
+      setPrintPages([]);
+      exportInFlight.current = false;
+      setBusy(false);
     }
+  };
+  const setSourceDesign = (patch: Partial<SourceDesign>, frame = false) => {
+    if (!sourceSelection) return;
+    const id = sourceSelection.id,
+      current = model.current.sourceDesign?.[id] || {};
+    let design: SourceDesign;
+    if (sourceSelection.tag !== undefined && !frame)
+      design = {
+        ...current,
+        tags: {
+          ...current.tags,
+          [sourceSelection.tag]: {
+            ...current.tags?.[sourceSelection.tag],
+            ...patch,
+          },
+        },
+      };
+    else design = { ...current, ...patch };
+    model.current.sourceDesign = {
+      ...model.current.sourceDesign,
+      [id]: design,
+    };
+    commit();
   };
   const print = async () => {
     if (loading.current || exportInFlight.current) return;
@@ -742,9 +866,29 @@ export default function FreeStudio({
     setError("");
     try {
       await document.fonts.ready;
-      const result: { svg: string; page: FreePage }[] = [];
+      const result: {
+        svg: string;
+        page: FreePage;
+        layers?: LayerSvg;
+        sourceIndex?: number;
+      }[] = [];
       for (const p of exportPages)
-        result.push({ svg: await makeSvg(p), page: cloneData(p) });
+        result.push({
+          svg: flowBase ? "" : await makeSvg(p),
+          page: cloneData(p),
+          ...(flowBase
+            ? {
+                layers: {
+                  background: await (
+                    await import("./freeScene")
+                  ).sceneSvg(p, "background"),
+                  foreground: await (
+                    await import("./freeScene")
+                  ).sceneSvg(p, "foreground"),
+                },
+              }
+            : {}),
+        });
       if (!alive.current) return;
       flushSync(() => {
         setPrintPages(result);
@@ -790,6 +934,72 @@ export default function FreeStudio({
     const modified = () => commitRef.current();
     const select = () => updateRef.current();
     c.on("object:modified", modified);
+    const hidden: Item[] = [];
+    c.on("before:render", () => {
+      if (!flowBase) return;
+      hidden.length = 0;
+      c.getObjects().forEach((item) => {
+        const o = item as Item;
+        if (o.visible && o.plane !== "background") {
+          hidden.push(o);
+          o.visible = false;
+        }
+      });
+    });
+    c.on("after:render", () => {
+      hidden.forEach((o) => {
+        o.visible = true;
+      });
+      if (flowBase && frontLayer.current) {
+        const svg = c
+          .getObjects()
+          .filter((o) => o.visible && (o as Item).plane !== "background")
+          .map((o) => {
+            const markup = o.toSVG();
+            return o.group instanceof ActiveSelection
+              ? `<g transform="matrix(${o.group.calcTransformMatrix().join(" ")})">${markup}</g>`
+              : markup;
+          })
+          .join("");
+        frontLayer.current.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 ${model.current.pages[activePage.current].width} ${model.current.pages[activePage.current].height}">${svg}</svg>`;
+      }
+      if (flowBase) {
+        if (toolRef.current !== "select") {
+          c.upperCanvasEl.style.clipPath = "";
+          return;
+        }
+        const z = zoomRef.current,
+          paths: string[] = [];
+        const rectangle = (x: number, y: number, w: number, h: number) =>
+          paths.push(`M${x * z} ${y * z}h${w * z}v${h * z}h${-w * z}Z`);
+        c.getObjects()
+          .filter((o) => o.visible)
+          .forEach((item) => {
+            const r = item.getBoundingRect(),
+              pad = c.getActiveObjects().includes(item) ? 42 : 4;
+            if ((item as Item).plane === "background") {
+              rectangle(r.left - pad, r.top - pad, r.width + pad * 2, pad + 5);
+              rectangle(
+                r.left - pad,
+                r.top + r.height - 5,
+                r.width + pad * 2,
+                pad + 5,
+              );
+              rectangle(r.left - pad, r.top, pad + 5, r.height);
+              rectangle(r.left + r.width - 5, r.top, pad + 5, r.height);
+            } else
+              rectangle(
+                r.left - pad,
+                r.top - pad,
+                r.width + pad * 2,
+                r.height + pad * 2,
+              );
+          });
+        c.upperCanvasEl.style.clipPath = paths.length
+          ? `path('${paths.join(" ")}')`
+          : "inset(50%)";
+      }
+    });
     c.on("selection:created", select);
     c.on("selection:updated", select);
     c.on("selection:cleared", select);
@@ -842,11 +1052,11 @@ export default function FreeStudio({
         h = host.current?.querySelector<HTMLElement>(".free-guide-h");
       if (v) {
         v.style.display = guides.current.x < 0 ? "none" : "block";
-        v.style.left = guides.current.x + "px";
+        v.style.left = guides.current.x * zoomRef.current + "px";
       }
       if (h) {
         h.style.display = guides.current.y < 0 ? "none" : "block";
-        h.style.top = guides.current.y + "px";
+        h.style.top = guides.current.y * zoomRef.current + "px";
       }
     });
     c.on("mouse:up", () =>
@@ -867,6 +1077,27 @@ export default function FreeStudio({
     };
   }, []);
   useEffect(() => {
+    if (!flowBase || !doc.freeform || emitted.current === doc.freeform) return;
+    emitted.current = doc.freeform;
+    model.current = cloneData(doc.freeform);
+    void loadPage(Math.min(activePage.current, model.current.pages.length - 1));
+  }, [doc.freeform]);
+  useEffect(() => {
+    if (!sourceSelection || !flowBase) return;
+    const row = host.current?.querySelector<HTMLElement>(
+      `[data-line="${sourceSelection.id}"]`,
+    );
+    const target =
+      sourceSelection.tag === undefined
+        ? row
+        : row?.querySelector<HTMLElement>(
+            `code[data-free-tag="${sourceSelection.tag}"]`,
+          );
+    if (!target) setSourceSelection(null);
+    else if (target !== sourceSelection.target)
+      setSourceSelection({ ...sourceSelection, target });
+  }, [doc.lines]);
+  useEffect(() => {
     const c = scene.current;
     if (!c) return;
     c.isDrawingMode = tool === "draw";
@@ -875,6 +1106,41 @@ export default function FreeStudio({
     c.defaultCursor = tool === "hand" ? "grab" : "default";
     c.requestRenderAll();
   }, [tool]);
+  useEffect(() => {
+    const c = scene.current;
+    if (!c) return;
+    c.setDimensions({ width: page.width * zoom, height: page.height * zoom });
+    c.setZoom(zoom);
+    c.requestRenderAll();
+  }, [zoom, page.width, page.height]);
+  useEffect(() => {
+    if (!flowBase) return;
+    const data = model.current,
+      previous = data.pages.length,
+      size = data.pages[0],
+      needed = Math.min(20, sourcePageCount);
+    while (data.pages.length < needed)
+      data.pages.push({
+        ...blankFreePage(),
+        width: size.width,
+        height: size.height,
+        background: size.background,
+      });
+    while (
+      data.pages.length > Math.max(1, needed) &&
+      !data.pages.at(-1)!.canvas.objects.length
+    )
+      data.pages.pop();
+    if (previous !== data.pages.length) {
+      commit();
+      if (activePage.current >= data.pages.length)
+        void loadPage(data.pages.length - 1);
+    }
+    if (sourcePageCount > 20)
+      setError(
+        "自由模式最多支持20页，超出部分仍保留在简单编辑与 Markdown 中。",
+      );
+  }, [sourcePageCount]);
   useEffect(() => {
     if (!autoFit || !scroll.current) return;
     const fit = () => {
@@ -1246,7 +1512,7 @@ export default function FreeStudio({
               <section>
                 <h3>自由排版稿</h3>
                 <p>
-                  文字、图形和图片都可独立调整。自由稿与板块稿分别保留，一起存入可编辑备份。
+                  文字、图形和图片都可独立调整。原稿与装饰在三种模式间保持一致，一起存入可编辑备份。
                 </p>
                 {changedSource && (
                   <p className="free-warning">
@@ -1355,7 +1621,9 @@ export default function FreeStudio({
           <i />
           <Tool
             name="自由模式撤销"
-            disabled={cursor.current < 1 || busy}
+            disabled={
+              (flowBase && onUndo ? !canUndo : cursor.current < 1) || busy
+            }
             onClick={() => {
               void travel(-1);
             }}
@@ -1364,7 +1632,11 @@ export default function FreeStudio({
           </Tool>
           <Tool
             name="自由模式重做"
-            disabled={cursor.current >= history.current.length - 1 || busy}
+            disabled={
+              (flowBase && onRedo
+                ? !canRedo
+                : cursor.current >= history.current.length - 1) || busy
+            }
             onClick={() => {
               void travel(1);
             }}
@@ -1486,15 +1758,42 @@ export default function FreeStudio({
               第 {pageIndex + 1} 页 / 共 {model.current.pages.length} 页
             </span>
             <div
-              className={`free-canvas-host ${grid ? "with-grid" : ""}`}
-              ref={host}
-              style={{
-                width: page.width,
-                height: page.height,
-                transform: `scale(${zoom})`,
-                background: page.background,
+              className={`free-canvas-host ${grid ? "with-grid" : ""} ${flowBase ? "with-source" : ""}`}
+              onPointerDownCapture={(e) => {
+                if (!flowBase) return;
+                const row = (e.target as HTMLElement).closest<HTMLElement>(
+                  "[data-line]",
+                );
+                if (!row) return;
+                const tag = (e.target as HTMLElement).closest<HTMLElement>(
+                  "code[data-free-tag]",
+                );
+                scene.current?.discardActiveObject();
+                scene.current?.requestRenderAll();
+                setSourceSelection({
+                  id: row.dataset.line!,
+                  ...(tag ? { tag: tag.dataset.freeTag } : {}),
+                  target: tag || row,
+                });
               }}
+              ref={host}
+              style={
+                {
+                  width: page.width * zoom,
+                  height: page.height * zoom,
+                  "--grid-step": `${20 * zoom}px`,
+                  background: page.background,
+                } as CSSProperties
+              }
             >
+              {flowBase && (
+                <div className="free-source-paper">
+                  {renderPaper?.(pageIndex, zoom, { hideDecorations: true })}
+                </div>
+              )}
+              {flowBase && (
+                <div ref={frontLayer} className="free-front-scene" />
+              )}
               <div className="free-guide free-guide-v" />
               <div className="free-guide free-guide-h" />
             </div>
@@ -1553,6 +1852,15 @@ export default function FreeStudio({
             </Tool>
           </div>
           <div className="free-zoom">
+            <button
+              aria-label="100% 原始大小"
+              onClick={() => {
+                setAutoFit(false);
+                setZoom(1);
+              }}
+            >
+              100%
+            </button>
             <Tool
               name="缩小画布"
               onClick={() => {
@@ -1594,7 +1902,23 @@ export default function FreeStudio({
           </h2>
         </div>
         <div className="free-side-scroll">
-          {selection.length ? (
+          {sourceSelection && flowBase ? (
+            <SourceInspector
+              selection={sourceSelection}
+              container={host.current}
+              line={doc.lines.find((l) => l.id === sourceSelection.id)}
+              design={
+                sourceSelection.tag !== undefined
+                  ? model.current.sourceDesign?.[sourceSelection.id]?.tags?.[
+                      sourceSelection.tag
+                    ] || {}
+                  : model.current.sourceDesign?.[sourceSelection.id] || {}
+              }
+              onChange={setSourceDesign}
+              onFrame={(patch) => setSourceDesign(patch, true)}
+              onText={(value) => onSourceText?.(sourceSelection.id, value)}
+            />
+          ) : selection.length ? (
             <>
               <section>
                 <h3>位置与尺寸</h3>
@@ -2030,6 +2354,23 @@ export default function FreeStudio({
               </section>
               <section>
                 <h3>层级与保护</h3>
+                {flowBase && (
+                  <label className="free-full-label">
+                    与正文的关系
+                    <select
+                      aria-label="图层位置"
+                      value={one?.plane || "foreground"}
+                      onChange={(e) => patch({ plane: e.target.value })}
+                    >
+                      <option value="foreground">
+                        在正文前面（图标、图片）
+                      </option>
+                      <option value="background">
+                        在正文后面（底色、方框）
+                      </option>
+                    </select>
+                  </label>
+                )}
                 <div className="free-text-tools">
                   <Tool name="置于顶层" onClick={() => order("front")}>
                     <ChevronsUp size={16} />
@@ -2107,7 +2448,15 @@ export default function FreeStudio({
                         const p = model.current.pages[pageIndex];
                         p.width = e.target.value === "a4" ? 794 : 1123;
                         p.height = e.target.value === "a4" ? 1123 : 794;
-                        c.setDimensions({ width: p.width, height: p.height });
+                        if (flowBase)
+                          model.current.pages.forEach((other) => {
+                            other.width = p.width;
+                            other.height = p.height;
+                          });
+                        c.setDimensions({
+                          width: p.width * zoomRef.current,
+                          height: p.height * zoomRef.current,
+                        });
                       });
                     }}
                   >
@@ -2128,9 +2477,17 @@ export default function FreeStudio({
                         onChange={(n) =>
                           withScene((c) => {
                             model.current.pages[pageIndex][key] = n;
+                            if (flowBase)
+                              model.current.pages.forEach((other) => {
+                                other[key] = n;
+                              });
                             c.setDimensions({
-                              width: model.current.pages[pageIndex].width,
-                              height: model.current.pages[pageIndex].height,
+                              width:
+                                model.current.pages[pageIndex].width *
+                                zoomRef.current,
+                              height:
+                                model.current.pages[pageIndex].height *
+                                zoomRef.current,
                             });
                           })
                         }
@@ -2176,11 +2533,15 @@ export default function FreeStudio({
                     复制本页
                   </button>
                   <button
-                    disabled={busy || model.current.pages.length < 2}
+                    disabled={
+                      busy || (!flowBase && model.current.pages.length < 2)
+                    }
                     onClick={() => setConfirm("delete-page")}
                   >
                     <Trash2 size={15} />
-                    删除本页
+                    {flowBase && pageIndex < sourcePageCount
+                      ? "清空本页装饰"
+                      : "删除本页"}
                   </button>
                 </div>
               </section>
@@ -2216,14 +2577,7 @@ export default function FreeStudio({
               <button
                 disabled={busy}
                 onClick={() => {
-                  commit();
-                  void makeSvg(page).then((svg) =>
-                    download(
-                      `${doc.name}-第${pageIndex + 1}页.svg`,
-                      svg,
-                      "image/svg+xml",
-                    ),
-                  );
+                  void exportImage("svg");
                 }}
               >
                 本页 SVG
@@ -2231,13 +2585,7 @@ export default function FreeStudio({
               <button
                 disabled={busy}
                 onClick={() => {
-                  const c = scene.current;
-                  if (!c) return;
-                  const url = c.toDataURL({ format: "png", multiplier: 2 });
-                  const a = document.createElement("a");
-                  a.href = url;
-                  a.download = `${doc.name}-第${pageIndex + 1}页.png`;
-                  a.click();
+                  void exportImage("png");
                 }}
               >
                 本页 PNG
@@ -2259,7 +2607,9 @@ export default function FreeStudio({
                   commit();
                   download(
                     doc.name + "-自由稿文字.txt",
-                    freeText(snapshot()),
+                    (flowBase
+                      ? doc.lines.map((l) => l.text).join("\n") + "\n"
+                      : "") + freeText(snapshot()),
                     "text/plain",
                   );
                 }}
@@ -2312,12 +2662,16 @@ export default function FreeStudio({
             <h2 id="free-confirm-title">
               {confirm === "reset"
                 ? "重新生成自由排版稿？"
-                : "删除当前自由页？"}
+                : flowBase && pageIndex < sourcePageCount
+                  ? "清空本页装饰？"
+                  : "删除当前自由页？"}
             </h2>
             <p>
               {confirm === "reset"
                 ? "当前自由稿会被板块稿的排版替换。建议先下载备份。板块稿本身不受影响。"
-                : "本页的元素会一起删除，操作后可以撤销。其他页面保持不变。"}
+                : flowBase && pageIndex < sourcePageCount
+                  ? "只清空本页新增的图形、图标和图片，原简历正文保留；可以撤销。"
+                  : "本页的元素会一起删除，操作后可以撤销。其他页面保持不变。"}
             </p>
             <div>
               <button autoFocus onClick={() => setConfirm(null)}>
@@ -2330,8 +2684,12 @@ export default function FreeStudio({
                   setConfirm(null);
                   snapshot();
                   if (action === "delete-page") {
-                    model.current.pages.splice(pageIndex, 1);
-                    await loadPage(Math.max(0, pageIndex - 1));
+                    if (flowBase && pageIndex < sourcePageCount)
+                      model.current.pages[pageIndex].canvas.objects = [];
+                    else model.current.pages.splice(pageIndex, 1);
+                    await loadPage(
+                      Math.min(pageIndex, model.current.pages.length - 1),
+                    );
                     commit();
                   } else {
                     onRebuild();
@@ -2353,7 +2711,7 @@ export default function FreeStudio({
             )
             .join("")}
         </style>
-        {printPages.map(({ svg, page: p }, i) => (
+        {printPages.map(({ svg, page: p, layers, sourceIndex }, i) => (
           <article
             key={p.id}
             style={
@@ -2363,8 +2721,13 @@ export default function FreeStudio({
                 height: (p.height * 25.4) / 96 + "mm",
               } as CSSProperties
             }
-            dangerouslySetInnerHTML={{ __html: svg }}
-          />
+          >
+            {flowBase ? (
+              renderPaper?.(sourceIndex ?? i, 1, { layers })
+            ) : (
+              <div dangerouslySetInnerHTML={{ __html: svg }} />
+            )}
+          </article>
         ))}
       </div>
     </div>

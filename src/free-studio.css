@@ -215,7 +215,56 @@
   background-image:
     linear-gradient(#7772 1px, transparent 1px),
     linear-gradient(90deg, #7772 1px, transparent 1px);
-  background-size: 20px 20px;
+  background-size: var(--grid-step, 20px) var(--grid-step, 20px);
+}
+.free-canvas-host.with-source .canvas-container {
+  display: contents;
+}
+.free-canvas-host.with-source .lower-canvas {
+  position: absolute !important;
+  inset: 0;
+  z-index: 0;
+}
+.free-source-paper {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+.free-source-paper > .resume-paper {
+  background: transparent !important;
+  box-shadow: none;
+}
+.free-front-scene {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+.free-front-scene svg {
+  display: block;
+  overflow: visible;
+}
+.free-canvas-host.with-source .upper-canvas {
+  position: absolute !important;
+  inset: 0;
+  z-index: 3;
+}
+.free-canvas-host .moveable-control-box {
+  z-index: 5;
+}
+.source-inspector {
+  width: 100%;
+}
+.free-source-drag {
+  position: absolute;
+  z-index: 6;
+  padding: 3px 9px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: white;
+  background: #a26649;
+  cursor: move;
+  touch-action: none;
 }
 .free-guide {
   display: none;
@@ -568,4 +617,16 @@
     height: 100%;
     display: block;
   }
+}
+
+.free-print .paper-row {
+  background: transparent !important;
+  outline: none !important;
+  box-shadow: none !important;
+  animation: none !important;
+}
+.free-print .picture-delete,
+.free-print .picture-resize,
+.free-print .picture-page {
+  display: none !important;
 }

@@ -98,6 +98,17 @@ const draft = (): FreeDocument => {
   );
 };
 describe("free document persistence and boundaries", () => {
+  it("rejects SVG paint injection and external style resources in nested text runs", () => {
+    const doc = draft();
+    doc.pages[0].canvas.objects[0].fill = "url(https://example.com/x)";
+    expect(() => readFreeDocument(doc)).toThrow("颜色");
+    doc.pages[0].canvas.objects[0].fill = "#171717";
+    doc.pages[0].canvas.objects[0].styles = {
+      0: { 0: { fill: 'red" onload="alert(1)' } },
+    };
+    expect(() => readFreeDocument(doc)).toThrow("颜色");
+  });
+
   it("preserves the complete free draft through backup, library migration and copy without changing structured content", () => {
     const doc = initialResume(),
       original = structuredClone(doc.lines);
@@ -173,7 +184,7 @@ describe("free document persistence and boundaries", () => {
     await c.dispose();
     await restored.dispose();
   });
-  it("captures real rich text and geometry instead of flattening a page to an image", async () => {
+  it("reuses source rendering without converting or mutating any original markup", async () => {
     const root = document.createElement("div");
     root.innerHTML =
       '<article class="resume-paper"><div data-edit="name" style="font-size:24px;line-height:36px;text-align:center"><strong>测试姓名</strong></div><div data-edit="body" style="font-size:13px;line-height:19.5px"><span>正文 <em>斜体</em></span></div></article>';
@@ -184,13 +195,11 @@ describe("free document persistence and boundaries", () => {
       el.getBoundingClientRect = () =>
         ({ left: 42, top: 40 + i * 40, width: 710, height: 36 }) as DOMRect;
     });
+    const original = root.innerHTML;
     const captured = await captureFreeform(root, initialResume());
-    expect(freeText(captured)).toContain("测试姓名");
-    expect(freeText(captured)).toContain("正文 斜体");
-    expect(
-      captured.pages[0].canvas.objects.every((o) => o.type === "Textbox"),
-    ).toBe(true);
-    expect(captured.pages[0].canvas.objects[0].left).toBe(42);
+    expect(captured.base).toBe("flow");
+    expect(captured.pages[0].canvas.objects).toEqual([]);
+    expect(root.innerHTML).toBe(original);
     readFreeDocument(captured);
   });
 });

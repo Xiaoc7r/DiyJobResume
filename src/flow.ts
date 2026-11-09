@@ -61,6 +61,7 @@ export interface Settings {
 }
 export interface Resume {
   freeform?: FreeDocument;
+  freeformArchive?: FreeDocument;
   version: 2;
   name: string;
   template: Template;
@@ -606,6 +607,7 @@ export function readResume(raw: unknown): Resume {
       page: Math.floor(numeric(p.page, 0, 0, 500)),
     }));
   if (r.freeform !== undefined) doc.freeform = readFreeDocument(r.freeform);
+  if (r.freeformArchive !== undefined) doc.freeformArchive = readFreeDocument(r.freeformArchive);
   return doc;
 }
 export interface Piece {
