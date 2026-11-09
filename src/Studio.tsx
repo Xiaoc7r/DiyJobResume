@@ -86,7 +86,14 @@ import type { Density, ExportIssue } from "./productTools";
 import { ExportReview } from "./ExportReview";
 import { AgentPanel } from "./AgentPanel";
 import type { FreeStudioApi } from "./FreeStudio";
-import type { FreeDocument } from "./freeform";
+import type { FreeDocument, SourceDesign } from "./freeform";
+import {
+  sourceContentStyle,
+  sourceFrameStyle,
+  applySourceContentStyle,
+} from "./freeform";
+import { FreeLayers } from "./FreeLayers";
+import type { LayerSvg } from "./FreeLayers";
 const FreeStudio = lazy(() => import("./FreeStudio"));
 
 function saveFile(name: string, content: string, type: string) {
@@ -208,7 +215,9 @@ function measureRow(
   line: Line,
   text: string,
   continued: boolean,
+  design?: SourceDesign,
 ) {
+  node.style.cssText = "";
   node.className = `flow-row row-${line.kind} ${contact ? "row-contact" : ""} ${continued ? "continued" : ""}`;
   node.dataset.order = String(line.order || 1);
   const st = rowStyle(line, settings, continued);
@@ -218,7 +227,12 @@ function measureRow(
     paddingBottom: st.paddingBottom + "px",
     lineHeight: String(st.lineHeight),
   });
+  applySourceContentStyle(node, design);
+  if (design?.width) node.style.width = design.width + "px";
   node.innerHTML = lineHtml(line, text, template);
+  node
+    .querySelectorAll<HTMLElement>("code")
+    .forEach((code, i) => applySourceContentStyle(code, design?.tags?.[i]));
   return Math.ceil(node.getBoundingClientRect().height * 100) / 100 + 0.25;
 }
 function SimpleInput({
@@ -327,8 +341,12 @@ function Editable({
   ghost = false,
   flashing = false,
   allowDrop,
+  design,
+  freeMode = false,
 }: {
   piece: Piece;
+  design?: SourceDesign;
+  freeMode?: boolean;
   template: Template;
   contact: boolean;
   settings: Settings;
@@ -359,16 +377,23 @@ function Editable({
       el.current.innerHTML = html;
       if (offset !== null) placeCursor(el.current, offset);
     }
-  }, [html, piece]);
+    el.current?.querySelectorAll<HTMLElement>("code").forEach((code, i) => {
+      code.dataset.freeTag = String(i);
+      code.removeAttribute("style");
+      applySourceContentStyle(code, design?.tags?.[i]);
+    });
+  }, [html, piece, design]);
   const flush = () => {
     if (el.current && !composing.current) onChange(editableText(el.current));
   };
   return (
     <div
       className={`paper-row ${ghost ? "ghost-row" : ""} ${selected ? "selected" : ""} ${armed ? "armed" : ""} ${flashing ? "flash-row" : ""}`}
+      style={sourceFrameStyle(design)}
       data-preview={ghost ? "true" : undefined}
       onPointerDown={(e) => {
-        if (!ghost) holdDrag(e, piece.line.id, onMove, 350, allowDrop);
+        if (!ghost && !freeMode)
+          holdDrag(e, piece.line.id, onMove, 350, allowDrop);
       }}
       data-line={piece.line.id}
       data-start={piece.start}
@@ -395,7 +420,10 @@ function Editable({
         contentEditable={!ghost}
         suppressContentEditableWarning
         className={`flow-row row-${piece.line.kind} ${contact ? "row-contact" : ""} ${piece.continued ? "continued" : ""}`}
-        style={rowStyle(piece.line, settings, piece.continued)}
+        style={{
+          ...rowStyle(piece.line, settings, piece.continued),
+          ...sourceContentStyle(design),
+        }}
         onFocus={onSelect}
         onClick={onSelect}
         onInput={flush}
@@ -540,6 +568,12 @@ export default function Studio() {
     y: number;
   } | null>(null);
   const view = preview?.doc ?? doc;
+  const paperWidth =
+    view.freeform?.base === "flow" ? view.freeform.pages[0].width : PAGE.width;
+  const paperHeight =
+    view.freeform?.base === "flow"
+      ? view.freeform.pages[0].height
+      : PAGE.height;
   const customCss = useMemo(() => {
     try {
       return compileCustomCss(view.settings.customCss);
@@ -852,6 +886,7 @@ export default function Studio() {
         line,
         text,
         continued,
+        view.freeform?.sourceDesign?.[line.id],
       );
     const active = document.activeElement as HTMLElement;
     if (!preview && active?.dataset.edit) {
@@ -871,7 +906,7 @@ export default function Studio() {
     setPages(
       paginate(
         view.lines,
-        PAGE.height - view.settings.top - view.settings.bottom,
+        paperHeight - view.settings.top - view.settings.bottom,
         measure,
       ),
     );
@@ -879,7 +914,10 @@ export default function Studio() {
     view.lines,
     view.settings,
     view.template,
+    paperWidth,
+    paperHeight,
     fontVersion,
+    JSON.stringify(view.freeform?.sourceDesign || {}),
     headerContactHeight,
     contactId,
   ]);
@@ -921,14 +959,14 @@ export default function Studio() {
     const fit = () => {
       if (autoZoom)
         setZoom(
-          Math.max(0.25, Math.min(1, (el.clientWidth - 64) / PAGE.width)),
+          Math.max(0.25, Math.min(1, (el.clientWidth - 64) / paperWidth)),
         );
     };
     fit();
     const observer = new ResizeObserver(fit);
     observer.observe(el);
     return () => observer.disconnect();
-  }, [autoZoom, leftWidth, mobile]);
+  }, [autoZoom, leftWidth, mobile, paperWidth]);
   // Markdown 里把「跳到的那一行」画一条高亮带（不抢焦点，右边还能继续编辑）
   const showMdLineMark = (
     el: HTMLTextAreaElement,
@@ -1286,16 +1324,20 @@ export default function Studio() {
     const target = e.currentTarget;
     target.setPointerCapture(e.pointerId);
     const move = (event: PointerEvent) => {
-      const dx = (event.clientX - startX) / zoom,
-        dy = (event.clientY - startY) / zoom;
+      const paper = target.closest(".resume-paper") as HTMLElement | null;
+      const scale = paper
+        ? paper.getBoundingClientRect().width / paperWidth
+        : zoom;
+      const dx = (event.clientX - startX) / scale,
+        dy = (event.clientY - startY) / scale;
       const patch = resize
         ? {
-            w: Math.max(24, Math.min(300, PAGE.width - pic.x, pic.w + dx)),
-            h: Math.max(24, Math.min(300, PAGE.height - pic.y, pic.h + dy)),
+            w: Math.max(24, Math.min(300, paperWidth - pic.x, pic.w + dx)),
+            h: Math.max(24, Math.min(300, paperHeight - pic.y, pic.h + dy)),
           }
         : {
-            x: Math.max(0, Math.min(PAGE.width - pic.w, pic.x + dx)),
-            y: Math.max(0, Math.min(PAGE.height - pic.h, pic.y + dy)),
+            x: Math.max(0, Math.min(paperWidth - pic.w, pic.x + dx)),
+            y: Math.max(0, Math.min(paperHeight - pic.h, pic.y + dy)),
           };
       const next = {
         ...ref.current,
@@ -1440,14 +1482,23 @@ export default function Studio() {
   const updateFreeform = (data: FreeDocument) => {
     if (activeIdRef.current !== activeId) return;
     const next = { ...ref.current, freeform: data };
-    ref.current = next;
-    setDoc(next);
+    historyUpdate(next);
   };
   const enterFree = async (rebuild = false) => {
     if (freeEntering) return;
     (document.activeElement as HTMLElement)?.blur();
     cancelPreview();
-    if (ref.current.freeform && !rebuild) {
+    if (ref.current.freeform?.base === "flow" && !rebuild) {
+      setMode("free");
+      return;
+    }
+    if (
+      ref.current.freeform &&
+      !rebuild &&
+      !window.confirm(
+        "将按当前简历启用无损编辑，旧自由稿会完整保留为备份。取消可继续编辑旧稿。是否继续？",
+      )
+    ) {
       setMode("free");
       return;
     }
@@ -1465,7 +1516,15 @@ export default function Studio() {
       const captured = await captureFreeform(root, sourceDoc);
       if (activeIdRef.current !== sourceId || ref.current !== sourceDoc)
         throw new Error("简历内容已变化，请重新进入自由模式，最新编辑已保留。");
-      historyUpdate({ ...ref.current, freeform: captured });
+      const next = {
+        ...ref.current,
+        ...(ref.current.freeform && !ref.current.freeformArchive
+          ? { freeformArchive: ref.current.freeform }
+          : {}),
+        freeform: captured,
+      };
+      ref.current = next;
+      setDoc(next);
       setMode("free");
     } catch (e) {
       setNotice(
@@ -1620,12 +1679,221 @@ export default function Studio() {
     } else addLine(blockMenu.id, kind, "simple", columns);
     setBlockMenu(null);
   };
+  const renderPaper = (
+    page: number,
+    scale = 1,
+    options: { hideDecorations?: boolean; layers?: LayerSvg } = {},
+  ) => {
+    const pieces = pages[page] || [];
+    return (
+      <article
+        className={`resume-paper template-${view.template}`}
+        data-page={page}
+        style={{
+          ...resumeStyle,
+          backgroundColor:
+            view.freeform?.base === "flow"
+              ? view.freeform.pages[page]?.background
+              : undefined,
+          width: paperWidth,
+          height: paperHeight,
+          padding: `${view.settings.top}px ${view.settings.right}px ${view.settings.bottom}px ${view.settings.left}px`,
+          transform: scale === 1 ? undefined : `scale(${scale})`,
+        }}
+      >
+        {view.freeform?.base === "flow" && !options.hideDecorations && (
+          <FreeLayers
+            page={view.freeform.pages[page]}
+            plane="background"
+            ready={options.layers}
+          />
+        )}
+        {pieces.map((piece) => (
+          <Editable
+            key={piece.line.id + "-" + piece.start}
+            piece={piece}
+            freeMode={mode === "free"}
+            design={view.freeform?.sourceDesign?.[piece.line.id]}
+            template={view.template}
+            contact={piece.line.id === contactId}
+            settings={view.settings}
+            ghost={preview?.ids.includes(piece.line.id)}
+            flashing={flash === piece.line.id}
+            allowDrop={blockAllow(piece.line.id)}
+            selected={
+              selected === piece.line.id ||
+              hovered === piece.line.id ||
+              inHoveredGroup(piece.line.id)
+            }
+            armed={armed === piece.line.id}
+            onSelect={() => {
+              if (armed !== piece.line.id) setArmed("");
+              locate(piece.line.id);
+              setPicSelection("");
+            }}
+            onChange={(text) => updatePiece(piece, text)}
+            onEnter={() =>
+              addLine(
+                piece.line.id,
+                piece.line.kind === "bullet" ? "bullet" : "text",
+              )
+            }
+            onRemove={() => removeLine(piece.line.id)}
+            onDrop={(id) => {
+              if (id) dropLineAt(id, piece.line.id, false);
+              setArmed("");
+            }}
+            onMove={(target, after) => {
+              dropLineAt(piece.line.id, target, after);
+              setArmed("");
+            }}
+            onBlur={() => setArmed("")}
+          />
+        ))}
+        {doc.pictures
+          .filter((p) => Math.min(p.page, pages.length - 1) === page)
+          .map((p) => (
+            <div
+              key={p.id}
+              className={`floating-picture ${picSelection === p.id ? "chosen" : ""}`}
+              style={{
+                left: p.x,
+                top: p.y,
+                width: p.w,
+                height: p.h,
+              }}
+              onPointerDown={(e) => dragPicture(e, p)}
+              tabIndex={0}
+              role="img"
+              aria-label={p.label + "，拖动调整位置"}
+              onKeyDown={(e) => {
+                if (e.key === "Delete") {
+                  historyUpdate({
+                    ...doc,
+                    pictures: doc.pictures.filter((x) => x.id !== p.id),
+                  });
+                }
+                if (
+                  ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(
+                    e.key,
+                  )
+                ) {
+                  e.preventDefault();
+                  historyUpdate(
+                    {
+                      ...doc,
+                      pictures: doc.pictures.map((x) =>
+                        x.id === p.id
+                          ? {
+                              ...x,
+                              x: Math.max(
+                                0,
+                                Math.min(
+                                  paperWidth - x.w,
+                                  x.x +
+                                    (e.key === "ArrowLeft"
+                                      ? -2
+                                      : e.key === "ArrowRight"
+                                        ? 2
+                                        : 0),
+                                ),
+                              ),
+                              y: Math.max(
+                                0,
+                                Math.min(
+                                  paperHeight - x.h,
+                                  x.y +
+                                    (e.key === "ArrowUp"
+                                      ? -2
+                                      : e.key === "ArrowDown"
+                                        ? 2
+                                        : 0),
+                                ),
+                              ),
+                            }
+                          : x,
+                      ),
+                    },
+                    "picture",
+                  );
+                }
+              }}
+            >
+              <img src={p.src} alt={p.label} draggable={false} />
+              {picSelection === p.id && (
+                <>
+                  <button
+                    className="picture-delete"
+                    aria-label={"删除" + p.label}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={() =>
+                      historyUpdate({
+                        ...doc,
+                        pictures: doc.pictures.filter((x) => x.id !== p.id),
+                      })
+                    }
+                  >
+                    <X size={16} />
+                  </button>
+                  <button
+                    className="picture-resize"
+                    aria-label={"调整" + p.label + "大小"}
+                    onPointerDown={(e) => dragPicture(e, p, true)}
+                  />
+                  <div
+                    className="picture-page"
+                    onPointerDown={(e) => e.stopPropagation()}
+                  >
+                    <label>
+                      页{" "}
+                      <select
+                        aria-label="图片所在页"
+                        value={page}
+                        onChange={(e) =>
+                          historyUpdate({
+                            ...doc,
+                            pictures: doc.pictures.map((x) =>
+                              x.id === p.id
+                                ? {
+                                    ...x,
+                                    page: Number(e.target.value),
+                                  }
+                                : x,
+                            ),
+                          })
+                        }
+                      >
+                        {pages.map((_, i) => (
+                          <option value={i} key={i}>
+                            {i + 1}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                </>
+              )}
+            </div>
+          ))}
+        {view.freeform?.base === "flow" && !options.hideDecorations && (
+          <FreeLayers
+            page={view.freeform.pages[page]}
+            plane="foreground"
+            ready={options.layers}
+          />
+        )}
+      </article>
+    );
+  };
   return (
     <div
       className={`studio ${mode === "free" ? "free-mode" : ""}`}
       style={{ "--editor-width": leftWidth + "px" } as CSSProperties}
     >
       <style>{customCss}</style>
+      {view.freeform?.base === "flow" && (
+        <style>{`@media print{@page{size:${(paperWidth * 25.4) / 96}mm ${(paperHeight * 25.4) / 96}mm;margin:0}html,body,#root,.studio,.workbench,.preview-panel,.paper-workspace,.page-frame{width:${(paperWidth * 25.4) / 96}mm!important}.page-frame{height:${(paperHeight * 25.4) / 96}mm!important}}`}</style>
+      )}
       {cssOpen && (
         <CustomCss
           value={doc.settings.customCss}
@@ -1883,6 +2151,15 @@ export default function Studio() {
                 await new Promise((resolve) =>
                   requestAnimationFrame(() => requestAnimationFrame(resolve)),
                 );
+                if (ref.current.freeform?.base === "flow") {
+                  const { sceneSvg } = await import("./freeScene");
+                  await Promise.all(
+                    ref.current.freeform.pages.flatMap((p) => [
+                      sceneSvg(p, "background"),
+                      sceneSvg(p, "foreground"),
+                    ]),
+                  );
+                }
                 let timeout: ReturnType<typeof setTimeout> | undefined;
                 const fontsReady = await Promise.race([
                   document.fonts.ready.then(() => true),
@@ -1939,6 +2216,13 @@ export default function Studio() {
             doc={doc}
             apiRef={freeApi}
             onChange={updateFreeform}
+            renderPaper={renderPaper}
+            sourcePageCount={pages.length}
+            onUndo={undo}
+            onRedo={redo}
+            canUndo={!!past.length}
+            canRedo={!!future.length}
+            onSourceText={(id, value) => updateLine(id, value)}
             onMode={(next) => {
               freeApi.current?.flush();
               setMode(next);
@@ -2000,7 +2284,28 @@ export default function Studio() {
                 </div>
                 {doc.freeform && (
                   <div className="free-source-banner">
-                    <span>自由排版稿已保留</span>
+                    <span>
+                      {doc.freeform.base === "flow"
+                        ? "排版与图层在三种模式中保持一致"
+                        : "旧版自由稿已保留，进入时可启用无损编辑"}
+                    </span>
+                    {doc.freeformArchive && (
+                      <button
+                        onClick={() =>
+                          saveFile(
+                            doc.name + "-旧版自由稿.json",
+                            JSON.stringify({
+                              ...doc,
+                              freeform: doc.freeformArchive,
+                              freeformArchive: undefined,
+                            }),
+                            "application/json",
+                          )
+                        }
+                      >
+                        下载旧版自由稿
+                      </button>
+                    )}
                     <button
                       onClick={() => {
                         void enterFree();
@@ -2354,204 +2659,29 @@ export default function Studio() {
                 }
               }}
             >
-              {pages.map((pieces, page) => (
-                <div
-                  className="page-frame"
-                  key={page}
-                  style={{
-                    width: PAGE.width * zoom,
-                    height: PAGE.height * zoom,
-                  }}
-                >
-                  <span className="page-caption">第 {page + 1} 页</span>
-                  <article
-                    className={`resume-paper template-${view.template}`}
-                    data-page={page}
+              {Array.from(
+                {
+                  length: Math.max(
+                    pages.length,
+                    view.freeform?.base === "flow"
+                      ? view.freeform.pages.length
+                      : 0,
+                  ),
+                },
+                (_, page) => (
+                  <div
+                    className="page-frame"
+                    key={page}
                     style={{
-                      ...resumeStyle,
-                      width: PAGE.width,
-                      height: PAGE.height,
-                      padding: `${view.settings.top}px ${view.settings.right}px ${view.settings.bottom}px ${view.settings.left}px`,
-                      transform: `scale(${zoom})`,
+                      width: paperWidth * zoom,
+                      height: paperHeight * zoom,
                     }}
                   >
-                    {pieces.map((piece) => (
-                      <Editable
-                        key={piece.line.id + "-" + piece.start}
-                        piece={piece}
-                        template={view.template}
-                        contact={piece.line.id === contactId}
-                        settings={view.settings}
-                        ghost={preview?.ids.includes(piece.line.id)}
-                        flashing={flash === piece.line.id}
-                        allowDrop={blockAllow(piece.line.id)}
-                        selected={
-                          selected === piece.line.id ||
-                          hovered === piece.line.id ||
-                          inHoveredGroup(piece.line.id)
-                        }
-                        armed={armed === piece.line.id}
-                        onSelect={() => {
-                          if (armed !== piece.line.id) setArmed("");
-                          locate(piece.line.id);
-                          setPicSelection("");
-                        }}
-                        onChange={(text) => updatePiece(piece, text)}
-                        onEnter={() =>
-                          addLine(
-                            piece.line.id,
-                            piece.line.kind === "bullet" ? "bullet" : "text",
-                          )
-                        }
-                        onRemove={() => removeLine(piece.line.id)}
-                        onDrop={(id) => {
-                          if (id) dropLineAt(id, piece.line.id, false);
-                          setArmed("");
-                        }}
-                        onMove={(target, after) => {
-                          dropLineAt(piece.line.id, target, after);
-                          setArmed("");
-                        }}
-                        onBlur={() => setArmed("")}
-                      />
-                    ))}
-                    {doc.pictures
-                      .filter(
-                        (p) => Math.min(p.page, pages.length - 1) === page,
-                      )
-                      .map((p) => (
-                        <div
-                          key={p.id}
-                          className={`floating-picture ${picSelection === p.id ? "chosen" : ""}`}
-                          style={{
-                            left: p.x,
-                            top: p.y,
-                            width: p.w,
-                            height: p.h,
-                          }}
-                          onPointerDown={(e) => dragPicture(e, p)}
-                          tabIndex={0}
-                          role="img"
-                          aria-label={p.label + "，拖动调整位置"}
-                          onKeyDown={(e) => {
-                            if (e.key === "Delete") {
-                              historyUpdate({
-                                ...doc,
-                                pictures: doc.pictures.filter(
-                                  (x) => x.id !== p.id,
-                                ),
-                              });
-                            }
-                            if (
-                              [
-                                "ArrowUp",
-                                "ArrowDown",
-                                "ArrowLeft",
-                                "ArrowRight",
-                              ].includes(e.key)
-                            ) {
-                              e.preventDefault();
-                              historyUpdate(
-                                {
-                                  ...doc,
-                                  pictures: doc.pictures.map((x) =>
-                                    x.id === p.id
-                                      ? {
-                                          ...x,
-                                          x: Math.max(
-                                            0,
-                                            Math.min(
-                                              PAGE.width - x.w,
-                                              x.x +
-                                                (e.key === "ArrowLeft"
-                                                  ? -2
-                                                  : e.key === "ArrowRight"
-                                                    ? 2
-                                                    : 0),
-                                            ),
-                                          ),
-                                          y: Math.max(
-                                            0,
-                                            Math.min(
-                                              PAGE.height - x.h,
-                                              x.y +
-                                                (e.key === "ArrowUp"
-                                                  ? -2
-                                                  : e.key === "ArrowDown"
-                                                    ? 2
-                                                    : 0),
-                                            ),
-                                          ),
-                                        }
-                                      : x,
-                                  ),
-                                },
-                                "picture",
-                              );
-                            }
-                          }}
-                        >
-                          <img src={p.src} alt={p.label} draggable={false} />
-                          {picSelection === p.id && (
-                            <>
-                              <button
-                                className="picture-delete"
-                                aria-label={"删除" + p.label}
-                                onPointerDown={(e) => e.stopPropagation()}
-                                onClick={() =>
-                                  historyUpdate({
-                                    ...doc,
-                                    pictures: doc.pictures.filter(
-                                      (x) => x.id !== p.id,
-                                    ),
-                                  })
-                                }
-                              >
-                                <X size={16} />
-                              </button>
-                              <button
-                                className="picture-resize"
-                                aria-label={"调整" + p.label + "大小"}
-                                onPointerDown={(e) => dragPicture(e, p, true)}
-                              />
-                              <div
-                                className="picture-page"
-                                onPointerDown={(e) => e.stopPropagation()}
-                              >
-                                <label>
-                                  页{" "}
-                                  <select
-                                    aria-label="图片所在页"
-                                    value={page}
-                                    onChange={(e) =>
-                                      historyUpdate({
-                                        ...doc,
-                                        pictures: doc.pictures.map((x) =>
-                                          x.id === p.id
-                                            ? {
-                                                ...x,
-                                                page: Number(e.target.value),
-                                              }
-                                            : x,
-                                        ),
-                                      })
-                                    }
-                                  >
-                                    {pages.map((_, i) => (
-                                      <option value={i} key={i}>
-                                        {i + 1}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </label>
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      ))}
-                  </article>
-                </div>
-              ))}
+                    <span className="page-caption">第 {page + 1} 页</span>
+                    {renderPaper(page, zoom)}
+                  </div>
+                ),
+              )}
               <div className="paper-end">内容写到哪里，纸张就延伸到哪里。</div>
             </div>
           </main>
@@ -2967,7 +3097,7 @@ export default function Studio() {
         aria-hidden="true"
         style={{
           ...resumeStyle,
-          width: PAGE.width - view.settings.left - view.settings.right,
+          width: paperWidth - view.settings.left - view.settings.right,
         }}
       />
       <input
