@@ -247,13 +247,7 @@ test("all six templates preserve their entire source DOM when opening free mode"
           s.fontSize,
         ];
       });
-    if (await page.locator(".free-source-banner").count()) {
-      page.once("dialog", (dialog) => dialog.accept());
-      await page
-        .getByRole("button", { name: "重新生成自由稿", exact: true })
-        .click();
-    } else
-      await page.getByRole("tab", { name: "自由模式", exact: true }).click();
+    await page.getByRole("tab", { name: "自由模式", exact: true }).click();
     await expect(page.locator(".free-source-paper")).toBeVisible();
     expect(await tagGeometry(page), template).toEqual(before);
     expect(
@@ -354,6 +348,17 @@ test("mobile users can enter free mode, add an icon and return with source intac
   await expect(page.locator(".free-source-paper .row-name")).toHaveText(
     "炒肉多",
   );
+  const header = await page
+    .locator(".app-header")
+    .evaluate((el) => ({
+      brand: el.querySelector(".brand")!.getBoundingClientRect().right,
+      docs: el.querySelector(".doc-switch")!.getBoundingClientRect().left,
+      docsRight: el.querySelector(".doc-switch")!.getBoundingClientRect().right,
+      actions: el.querySelector(".header-actions")!.getBoundingClientRect()
+        .left,
+    }));
+  expect(header.brand).toBeLessThanOrEqual(header.docs);
+  expect(header.docsRight).toBeLessThanOrEqual(header.actions);
   await page.screenshot({ path: testInfo.outputPath("mobile-free.png") });
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth),
@@ -434,16 +439,19 @@ test("upgrading a previous free draft keeps an accessible editable archive", asy
   await page.getByRole("tab", { name: "自由模式", exact: true }).click();
   await expect(page.locator(".free-source-paper")).toBeVisible();
   await page.getByRole("tab", { name: "简单编辑", exact: true }).click();
+  await page.getByRole("button", { name: "文件", exact: true }).click();
   const pending = page.waitForEvent("download");
   await page
-    .getByRole("button", { name: "下载旧版自由稿", exact: true })
+    .getByRole("button", { name: "下载可编辑备份", exact: true })
     .click();
   const download = await pending,
     output = testInfo.outputPath("old-draft.json");
   await download.saveAs(output);
   const fs = await import("node:fs/promises"),
     doc = JSON.parse(await fs.readFile(output, "utf8"));
-  expect(doc.freeform.pages[0].canvas.objects[0].text).toBe("保留的旧自由稿");
+  expect(doc.freeformArchive.pages[0].canvas.objects[0].text).toBe(
+    "保留的旧自由稿",
+  );
   expect(doc.lines[0].text).toBe("炒肉多");
 });
 

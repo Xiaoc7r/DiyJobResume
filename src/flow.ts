@@ -1,3 +1,4 @@
+import { defaultPictures } from "./defaultPictures";
 import { demoFor } from "./samples";
 import { experienceBlocks } from "./experience";
 import type { ExperienceBlock } from "./experience";
@@ -32,6 +33,7 @@ export interface Line {
   order?: number;
 }
 export interface Picture {
+  anchor?: string;
   id: string;
   src: string;
   label: string;
@@ -62,6 +64,12 @@ export interface Settings {
 export interface Resume {
   freeform?: FreeDocument;
   freeformArchive?: FreeDocument;
+  freeformBaseline?: {
+    settings: Settings;
+    template: Template;
+    pictures: Picture[];
+    freeform?: FreeDocument;
+  };
   version: 2;
   name: string;
   template: Template;
@@ -167,7 +175,7 @@ export function parseMarkdown(source: string, previous: Line[] = []): Line[] {
   if (rows.length > 2000)
     throw new Error("内容超过 2000 行，请拆分为不同简历。");
   const parsed: Line[] = rows.map((row) => {
-    const m = /^(#{1,6})\s+(.*)$/.exec(row);
+    const m = /^(#{1,6})[ \t](.*)$/.exec(row);
     let kind: Kind = "text",
       text = row;
     if (m) {
@@ -185,7 +193,7 @@ export function parseMarkdown(source: string, previous: Line[] = []): Line[] {
         text: row.replace(/^\d+[.)]\s+/, ""),
         order: Number(row.match(/^\d+/)![0]),
       };
-    } else if (!row.trim()) {
+    } else if (!row.length) {
       kind = "blank";
       text = "";
     }
@@ -226,16 +234,17 @@ export const toMarkdown = (lines: Line[]) =>
     .join("\n");
 export const demo = demoFor("blue");
 export function initialResume(template: Template = "blue"): Resume {
+  const lines = parseMarkdown(demoFor(template));
   return {
     version: 2,
-    name: "炒肉多的简历",
+    name: "炒肉多示例简历",
     template,
-    lines: parseMarkdown(demoFor(template)),
+    lines,
     settings: {
       ...defaultSettings(),
       accent: templates.find((t) => t.id === template)!.color,
     },
-    pictures: [],
+    pictures: defaultPictures(lines),
   };
 }
 export function applyTemplate(doc: Resume, template: Template): Resume {
@@ -401,6 +410,7 @@ export function insertModule(doc: Resume, name: string, body: string): Resume {
   return { ...doc, lines };
 }
 export function groupEnd(lines: Line[], start: number) {
+  if (!lines[start]) return Math.max(0, Math.min(lines.length, start + 1));
   const k = lines[start].kind;
   if (k !== "section" && k !== "entry") return start + 1;
   let end = start + 1;
@@ -597,17 +607,40 @@ export function readResume(raw: unknown): Resume {
         /^data:image\/(png|jpeg|webp);base64,[a-z\d+/=]+$/i.test(p.src),
     )
     .map((p: any) => ({
-      id: uid(),
+      id:
+        typeof p.id === "string" && /^[a-z\d_-]{1,80}$/i.test(p.id)
+          ? p.id
+          : uid(),
+      ...(typeof p.anchor === "string" &&
+      doc.lines.some((l) => l.id === p.anchor)
+        ? { anchor: p.anchor }
+        : {}),
       src: p.src,
       label: str(p.label, "图片"),
       x: numeric(p.x, 42, 0, 700),
       y: numeric(p.y, 36, 0, 1000),
-      w: numeric(p.w, 72, 24, 300),
-      h: numeric(p.h, 72, 24, 300),
+      w: numeric(p.w, 72, 1, 300),
+      h: numeric(p.h, 72, 1, 300),
       page: Math.floor(numeric(p.page, 0, 0, 500)),
     }));
   if (r.freeform !== undefined) doc.freeform = readFreeDocument(r.freeform);
-  if (r.freeformArchive !== undefined) doc.freeformArchive = readFreeDocument(r.freeformArchive);
+  if (r.freeformArchive !== undefined)
+    doc.freeformArchive = readFreeDocument(r.freeformArchive);
+  if (r.freeformBaseline && typeof r.freeformBaseline === "object") {
+    const baseline = readResume({
+      ...r,
+      ...r.freeformBaseline,
+      freeformBaseline: undefined,
+      freeformArchive: undefined,
+      freeform: r.freeformBaseline.freeform,
+    });
+    doc.freeformBaseline = {
+      settings: baseline.settings,
+      template: baseline.template,
+      pictures: baseline.pictures,
+      ...(baseline.freeform ? { freeform: baseline.freeform } : {}),
+    };
+  }
   return doc;
 }
 export interface Piece {

@@ -97,15 +97,17 @@ a {
 .brand > span {
   font-size: 18px;
   font-weight: 650;
-  letter-spacing: 2px;
+  letter-spacing: -0.25px;
+  white-space: nowrap;
   color: #292723;
 }
 .brand small {
   display: block;
   font-size: 9px;
   font-weight: 400;
-  letter-spacing: 2px;
-  color: #8a857d;
+  letter-spacing: 1.4px;
+  white-space: nowrap;
+  color: #756e66;
   margin-top: 2px;
 }
 .document-name {
@@ -922,7 +924,8 @@ a {
   background: #ece9e2;
 }
 .mini-paper {
-  height: 196px;
+  aspect-ratio: 210 / 297;
+  height: auto;
   background: white;
   margin: 0 6px 12px;
   padding: 12px 14px;
@@ -1559,7 +1562,7 @@ a {
   border-right: 1px solid #e8e3dc;
   padding-right: 8px;
 }
-.entry-cell:has(> br:only-child)::before {
+.simple-entry .entry-cell:has(> br:only-child)::before {
   content: attr(data-placeholder);
   color: #aaa;
   font-weight: 400;
@@ -2944,4 +2947,47 @@ a {
 .agent-done button:hover {
   border-color: #b87559;
   background: #fdf6f0;
+}
+
+/* The template rail stays fixed; only the writing panel has a resize handle. */
+.library-panel:not(.agent-side) {
+  width: 248px !important;
+  min-width: 248px !important;
+}
+@media (max-width: 900px) {
+  .library-panel:not(.agent-side) {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+}
+
+.mini-paper {
+  height: auto !important;
+  aspect-ratio: 210/297;
+}
+
+@media (max-width: 700px) {
+  .app-header {
+    gap: 6px;
+  }
+  .brand {
+    gap: 6px;
+    flex: none;
+  }
+  .brand > span {
+    font-size: 14px;
+  }
+  .doc-switch {
+    flex: none;
+    padding-left: 4px;
+  }
+  .doc-toggle {
+    padding: 4px;
+  }
+  .doc-toggle small {
+    display: none;
+  }
+  .header-actions {
+    gap: 4px;
+  }
 }

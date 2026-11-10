@@ -74,7 +74,7 @@ describe("requested examples", () => {
         source = toMarkdown(doc.lines);
       expect(source).toContain("DoVideoAI");
       expect(source).not.toContain("CityHub");
-      expect(source).toContain("138 0000 2468");
+      expect(source).toContain("123 4567 8910");
       expect(readResume(doc).template).toBe(template);
       expect(source).toContain("github.com/Xiaoc7r");
       expect(source).toContain("xxiaocr@gmail.com");

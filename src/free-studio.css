@@ -630,3 +630,48 @@
 .free-print .picture-page {
   display: none !important;
 }
+
+.free-restore {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  margin-left: 5px;
+  white-space: nowrap;
+  color: #85523e;
+  border-color: #d8c9bd;
+  background: #faf6f1;
+}
+.free-restore:hover {
+  background: #efe3d8;
+  border-color: #b87559;
+}
+
+@media (min-width: 901px) {
+  .free-studio {
+    grid-template-columns: var(--editor-width, 300px) minmax(0, 1fr) 248px;
+  }
+  .free-left {
+    position: relative;
+  }
+  .free-left-resizer {
+    position: absolute;
+    right: -3px;
+    top: 0;
+    bottom: 0;
+    width: 6px;
+    cursor: col-resize;
+    z-index: 8;
+    touch-action: none;
+  }
+  .free-left-resizer:hover,
+  .free-left-resizer:focus-visible {
+    background: #b87559;
+    outline: none;
+  }
+}
+@media (max-width: 900px) {
+  .free-left-resizer {
+    display: none;
+  }
+}
