@@ -175,6 +175,7 @@ test("default sample is one A4 with the supplied school and anchored entry icons
         );
       }),
     );
+  expect(aligned).toHaveLength(3);
   for (const delta of aligned) expect(Math.abs(delta - 3)).toBeLessThan(0.6);
   expect(boxes[0].x).toBeCloseTo(40, 0);
   expect(boxes[0].y).toBeCloseTo(20, 0);

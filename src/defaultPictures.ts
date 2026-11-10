@@ -28,9 +28,9 @@ export function defaultPictures(lines: Line[]): Picture[] {
     picture("吉林大学校徽", school, 40, 20, 60, 60),
     ...entries
       .filter((l) => l.text.includes("东京 -"))
-      .map((l) => picture("公司图标", company, 42, 3, 16, 16, l.id)),
+      .map((l) => picture("京东.png", company, 42, 3, 16, 16, l.id)),
     ...entries
       .filter((l) => l.text.includes("DoVideoAI"))
-      .map((l) => picture("项目图标", video, 42, 3, 16, 16, l.id)),
+      .map((l) => picture("视频.png", video, 42, 3, 16, 16, l.id)),
   ];
 }

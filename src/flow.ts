@@ -124,8 +124,8 @@ export const templates: {
 export const defaultSettings = (): Settings => ({
   customCss: "",
   headerAlign: "template",
-  top: 31,
-  bottom: 28,
+  top: 30,
+  bottom: 30,
   left: 42,
   right: 42,
   color: "#171717",

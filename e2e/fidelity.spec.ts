@@ -80,16 +80,68 @@ test("native canvas backing resolution follows zoom instead of scaling a bitmap 
   expect(dimensions.transform).toBe("none");
 });
 
-test("the complete paper is pixel-identical before and after switching, not just the text strings", async ({
+test("source text pixels and layout survive switching while entry icons become editable SVG images", async ({
   page,
 }, testInfo) => {
+  let iconRects: { x: number; y: number; right: number; bottom: number }[] = [];
+  const sameSourcePixels = async (before: Buffer, after: Buffer) => {
+    const { loadImage, createCanvas } = await import("@napi-rs/canvas"),
+      a = await loadImage(before),
+      b = await loadImage(after);
+    expect([b.width, b.height]).toEqual([a.width, a.height]);
+    const canvas = createCanvas(a.width, a.height),
+      ctx = canvas.getContext("2d");
+    ctx.drawImage(a, 0, 0);
+    const original = ctx.getImageData(0, 0, a.width, a.height).data;
+    ctx.clearRect(0, 0, a.width, a.height);
+    ctx.drawImage(b, 0, 0);
+    const changed = ctx.getImageData(0, 0, a.width, a.height).data;
+    let outsideDifferences = 0,
+      total = 0;
+    for (let i = 0; i < original.length; i += 4) {
+      const x = (i / 4) % a.width,
+        y = Math.floor(i / 4 / a.width),
+        icon = iconRects.some(
+          (r) =>
+            x >= r.x - 1 &&
+            x <= r.right + 1 &&
+            y >= r.y - 1 &&
+            y <= r.bottom + 1,
+        );
+      for (let channel = 0; channel < 3; channel++) {
+        const diff = Math.abs(original[i + channel] - changed[i + channel]);
+        total += diff;
+        if (!icon && diff > 1) outsideDifferences++;
+      }
+    }
+    // Native <img> and editable SVG images sample fractional edge pixels differently.
+    // No movement or change in the source text is allowed outside those three icon rectangles.
+    expect(outsideDifferences).toBe(0);
+    expect(total / (a.width * a.height * 3)).toBeLessThan(0.05);
+  };
   const capture = async (name: string) => {
+    const free = (await page.locator(".free-canvas-host").count()) > 0;
+    if (free)
+      await expect(page.locator(".free-front-scene svg image")).toHaveCount(3);
+    else if (name !== "before")
+      await expect(
+        page.locator(".free-layer-foreground svg image"),
+      ).toHaveCount(3);
     const style = await page.addStyleTag({
       content:
-        ".studio .resume-paper,.free-source-paper>.resume-paper{position:fixed!important;left:0!important;top:0!important;transform:none!important;background:white!important;z-index:9999!important;}.paper-row.selected,.paper-row:hover,.paper-row:has([contenteditable=true]:focus){background:transparent!important;outline:none!important;box-shadow:none!important;}.app-header,.caret-word,.caret-bar,.moveable-control-box,.free-source-drag,.free-page-label{display:none!important;}",
+        ".studio:not(.free-mode) .resume-paper,.free-canvas-host{position:fixed!important;left:0!important;top:0!important;transform:none!important;background:white!important;z-index:9999!important;}.free-source-paper>.resume-paper{transform:none!important;}.resume-paper,.free-front-scene{opacity:.999999;}.paper-row.selected,.paper-row:hover,.paper-row:has([contenteditable=true]:focus){background:transparent!important;outline:none!important;box-shadow:none!important;}.app-header,.caret-word,.caret-bar,.moveable-control-box,.free-source-drag,.free-page-label{display:none!important;}",
     });
+    if (name === "before")
+      iconRects = await page
+        .locator(".floating-picture[data-anchor]")
+        .evaluateAll((els) =>
+          els.map((el) => {
+            const r = el.getBoundingClientRect();
+            return { x: r.left, y: r.top, right: r.right, bottom: r.bottom };
+          }),
+        );
     const result = await page
-      .locator(".resume-paper")
+      .locator(free ? ".free-canvas-host" : ".resume-paper")
       .first()
       .screenshot({
         path: testInfo.outputPath(name + ".png"),
@@ -103,9 +155,9 @@ test("the complete paper is pixel-identical before and after switching, not just
   await page.getByRole("tab", { name: "自由模式", exact: true }).click();
   await expect(page.locator(".free-source-paper")).toBeVisible();
   const free = await capture("free");
-  expect(free.equals(before)).toBe(true);
+  await sameSourcePixels(before, free);
   await page.getByRole("tab", { name: "Markdown .md", exact: true }).click();
-  expect((await capture("markdown")).equals(before)).toBe(true);
+  await sameSourcePixels(before, await capture("markdown"));
 });
 
 test("dragging the original text uses shared geometry and undo, without replacing the text with a bitmap", async ({
@@ -348,15 +400,12 @@ test("mobile users can enter free mode, add an icon and return with source intac
   await expect(page.locator(".free-source-paper .row-name")).toHaveText(
     "炒肉多",
   );
-  const header = await page
-    .locator(".app-header")
-    .evaluate((el) => ({
-      brand: el.querySelector(".brand")!.getBoundingClientRect().right,
-      docs: el.querySelector(".doc-switch")!.getBoundingClientRect().left,
-      docsRight: el.querySelector(".doc-switch")!.getBoundingClientRect().right,
-      actions: el.querySelector(".header-actions")!.getBoundingClientRect()
-        .left,
-    }));
+  const header = await page.locator(".app-header").evaluate((el) => ({
+    brand: el.querySelector(".brand")!.getBoundingClientRect().right,
+    docs: el.querySelector(".doc-switch")!.getBoundingClientRect().left,
+    docsRight: el.querySelector(".doc-switch")!.getBoundingClientRect().right,
+    actions: el.querySelector(".header-actions")!.getBoundingClientRect().left,
+  }));
   expect(header.brand).toBeLessThanOrEqual(header.docs);
   expect(header.docsRight).toBeLessThanOrEqual(header.actions);
   await page.screenshot({ path: testInfo.outputPath("mobile-free.png") });

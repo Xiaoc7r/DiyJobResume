@@ -175,7 +175,7 @@ function measureRow(
   node
     .querySelectorAll<HTMLElement>("code")
     .forEach((code, i) => applySourceContentStyle(code, design?.tags?.[i]));
-  return Math.ceil(node.getBoundingClientRect().height * 100) / 100 + 0.25;
+  return Math.ceil(node.getBoundingClientRect().height * 100) / 100;
 }
 function SimpleInput({
   line,
@@ -466,11 +466,11 @@ export default function Studio() {
       Math.min(
         window.innerWidth * 0.6,
         readViewPrefs().leftWidth ??
-          Math.min(520, Math.max(360, window.innerWidth * 0.21)),
+          Math.min(760, Math.max(360, window.innerWidth * 0.26)),
       ),
     ),
-    [zoom, setZoom] = useState(() => readViewPrefs().zoom ?? 0.75),
-    [autoZoom, setAutoZoom] = useState(() => readViewPrefs().autoZoom ?? true),
+    [zoom, setZoom] = useState(() => readViewPrefs().zoom ?? 1),
+    [autoZoom, setAutoZoom] = useState(() => readViewPrefs().autoZoom ?? false),
     [modal, setModal] = useState<"type" | "help" | null>(null),
     [fileMenu, setFileMenu] = useState(false),
     [docMenu, setDocMenu] = useState(false),
@@ -1547,12 +1547,15 @@ export default function Studio() {
       await new Promise((resolve) =>
         requestAnimationFrame(() => requestAnimationFrame(resolve)),
       );
-      const { captureFreeform } = await import("./freeCapture");
+      const { captureFreeform, promoteAnchoredPictures } = await import(
+        "./freeCapture"
+      );
       const root = workspace.current;
       if (!root) throw new Error("请先返回简历预览，再进入自由模式。");
       const sourceDoc = ref.current,
         sourceId = activeIdRef.current;
       const captured = await captureFreeform(root, sourceDoc);
+      const prepared = await promoteAnchoredPictures(root, sourceDoc, captured);
       if (activeIdRef.current !== sourceId || ref.current !== sourceDoc)
         throw new Error("简历内容已变化，请重新进入自由模式，最新编辑已保留。");
       const next = {
@@ -1560,7 +1563,19 @@ export default function Studio() {
         ...(ref.current.freeform && !ref.current.freeformArchive
           ? { freeformArchive: ref.current.freeform }
           : {}),
-        freeform: captured,
+        freeform: prepared.freeform,
+        pictures: prepared.pictures,
+        ...(prepared.promoted &&
+        sourceDoc.freeformBaseline &&
+        !sourceDoc.freeformBaseline.freeform
+          ? {
+              freeformBaseline: {
+                ...sourceDoc.freeformBaseline,
+                freeform: structuredClone(prepared.freeform),
+                pictures: structuredClone(prepared.pictures),
+              },
+            }
+          : {}),
       };
       ref.current = next;
       setDoc(next);
@@ -1736,7 +1751,7 @@ export default function Studio() {
                   ]
                 : [];
             }
-            top += Math.max(0, piece.height - 0.25);
+            top += piece.height;
           }
         }
         return [];
@@ -1811,6 +1826,8 @@ export default function Studio() {
         {visiblePictures.map((p) => (
           <div
             key={p.id}
+            data-picture-id={p.id}
+            data-anchor={p.anchor}
             className={`floating-picture ${picSelection === p.id ? "chosen" : ""}`}
             style={{
               left: p.x,
