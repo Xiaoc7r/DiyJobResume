@@ -94,6 +94,8 @@ import {
 } from "./freeform";
 import { FreeLayers } from "./FreeLayers";
 import type { LayerSvg } from "./FreeLayers";
+import { readViewPrefs, saveViewPrefs } from "./viewPrefs";
+import { cursorOffset, placeCursor, textRangeOf } from "./editorDom";
 const FreeStudio = lazy(() => import("./FreeStudio"));
 
 function saveFile(name: string, content: string, type: string) {
@@ -103,66 +105,6 @@ function saveFile(name: string, content: string, type: string) {
   a.download = name;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-function cursorOffset(el: HTMLElement) {
-  const selection = window.getSelection();
-  if (!selection?.rangeCount || !el.contains(selection.anchorNode)) return null;
-  const range = selection.getRangeAt(0).cloneRange();
-  range.selectNodeContents(el);
-  range.setEnd(selection.anchorNode!, selection.anchorOffset);
-  return range.toString().length;
-}
-function placeCursor(el: HTMLElement, offset: number) {
-  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-  let node = walker.nextNode();
-  while (node) {
-    const len = node.textContent?.length || 0;
-    if (offset <= len) {
-      const range = document.createRange();
-      range.setStart(node, offset);
-      range.collapse(true);
-      const selection = window.getSelection();
-      selection?.removeAllRanges();
-      selection?.addRange(range);
-      return;
-    }
-    offset -= len;
-    node = walker.nextNode();
-  }
-  const range = document.createRange();
-  range.selectNodeContents(el);
-  range.collapse(false);
-  const selection = window.getSelection();
-  selection?.removeAllRanges();
-  selection?.addRange(range);
-}
-function textRangeOf(root: HTMLElement, start: number, end: number) {
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  let node = walker.nextNode(),
-    pos = 0,
-    startNode: Node | null = null,
-    startOffset = 0,
-    endNode: Node | null = null,
-    endOffset = 0;
-  while (node) {
-    const len = node.textContent?.length || 0;
-    if (!startNode && start <= pos + len) {
-      startNode = node;
-      startOffset = start - pos;
-    }
-    if (startNode && end <= pos + len) {
-      endNode = node;
-      endOffset = Math.max(startOffset, end - pos);
-      break;
-    }
-    pos += len;
-    node = walker.nextNode();
-  }
-  if (!startNode || !endNode) return null;
-  const range = document.createRange();
-  range.setStart(startNode, startOffset);
-  range.setEnd(endNode, endOffset);
-  return range;
 }
 function mdCaretTop(el: HTMLTextAreaElement, position: number) {
   const style = window.getComputedStyle(el),
@@ -371,7 +313,11 @@ function Editable({
       template,
     );
   useLayoutEffect(() => {
-    if (el.current && !composing.current && el.current.innerHTML !== html) {
+    if (
+      el.current &&
+      !composing.current &&
+      editableText(el.current) !== piece.line.text.slice(piece.start, piece.end)
+    ) {
       const offset =
         document.activeElement === el.current ? cursorOffset(el.current) : null;
       el.current.innerHTML = html;
@@ -505,7 +451,6 @@ export default function Studio() {
   );
   const freeApi = useRef<FreeStudioApi | null>(null);
   const [freeEntering, setFreeEntering] = useState(false);
-  const freeRebuild = useRef(false);
   const ref = useRef(doc);
   ref.current = doc;
   const [past, setPast] = useState<Resume[]>([]),
@@ -518,15 +463,23 @@ export default function Studio() {
   const [selected, setSelected] = useState(""),
     [armed, setArmed] = useState(""),
     [leftWidth, setLeftWidth] = useState(() =>
-      Math.min(560, Math.max(420, window.innerWidth * 0.28)),
+      Math.min(
+        window.innerWidth * 0.6,
+        readViewPrefs().leftWidth ??
+          Math.min(520, Math.max(360, window.innerWidth * 0.21)),
+      ),
     ),
-    [zoom, setZoom] = useState(0.75),
-    [autoZoom, setAutoZoom] = useState(true),
+    [zoom, setZoom] = useState(() => readViewPrefs().zoom ?? 0.75),
+    [autoZoom, setAutoZoom] = useState(() => readViewPrefs().autoZoom ?? true),
     [modal, setModal] = useState<"type" | "help" | null>(null),
     [fileMenu, setFileMenu] = useState(false),
     [docMenu, setDocMenu] = useState(false),
     [confirmDelete, setConfirmDelete] = useState(false),
     [mobile, setMobile] = useState<"editor" | "preview" | "library">("preview");
+  useEffect(
+    () => saveViewPrefs({ zoom, leftWidth, autoZoom }),
+    [zoom, leftWidth, autoZoom],
+  );
   const [pages, setPages] = useState<Piece[][]>([[]]),
     [fontVersion, setFontVersion] = useState(0),
     [picSelection, setPicSelection] = useState(""),
@@ -543,7 +496,7 @@ export default function Studio() {
   const [agentOpen, setAgentOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(true);
   const [editorOpen, setEditorOpen] = useState(true);
-  const [rightWidth, setRightWidth] = useState(248);
+  const rightWidth = 248;
   const pinnedPreview = useRef(false);
   const agentPreviewApi = useRef<{
     accept: () => void;
@@ -613,7 +566,7 @@ export default function Studio() {
   const pictureBottom = Math.max(
     0,
     ...doc.pictures
-      .filter((p) => p.page === 0 && p.y < 150)
+      .filter((p) => !p.anchor && p.page === 0 && p.y < 150)
       .map((p) => p.y + p.h + 8),
   );
   const nameType = doc.settings.types.name;
@@ -643,6 +596,76 @@ export default function Studio() {
     ref.current = next;
     setDoc(next);
   };
+  useEffect(() => {
+    const replaceSelection = (event: InputEvent | ClipboardEvent) => {
+      const selection = window.getSelection();
+      if (!selection?.rangeCount || selection.isCollapsed) return;
+      const range = selection.getRangeAt(0),
+        start = range.startContainer.parentElement?.closest<HTMLElement>(
+          "[data-simple],[data-edit]",
+        ),
+        end = range.endContainer.parentElement?.closest<HTMLElement>(
+          "[data-simple],[data-edit]",
+        );
+      if (!start || !end || start === end) return;
+      const side = start.hasAttribute("data-simple") ? "simple" : "edit";
+      if (!end.hasAttribute("data-" + side)) return;
+      const current = ref.current,
+        a = current.lines.findIndex((l) => l.id === start.dataset[side]),
+        b = current.lines.findIndex((l) => l.id === end.dataset[side]);
+      if (a < 0 || b < a) return;
+      if (
+        event instanceof InputEvent &&
+        !/^(delete|insert)/.test(event.inputType)
+      )
+        return;
+      event.preventDefault();
+      event.stopPropagation();
+      const prefix = range.cloneRange();
+      prefix.selectNodeContents(start);
+      prefix.setEnd(range.startContainer, range.startOffset);
+      const suffix = range.cloneRange();
+      suffix.selectNodeContents(end);
+      suffix.setStart(range.endContainer, range.endOffset);
+      const serialize = (fragment: DocumentFragment) => {
+        const el = document.createElement("div");
+        el.append(fragment);
+        return editableText(el);
+      };
+      const before = serialize(prefix.cloneContents()),
+        after = serialize(suffix.cloneContents()),
+        insert =
+          event instanceof ClipboardEvent
+            ? event.clipboardData?.getData("text/plain") || ""
+            : event.inputType.startsWith("insert")
+              ? event.data || ""
+              : "";
+      const line = { ...current.lines[a], text: before + insert + after };
+      historyUpdate({
+        ...current,
+        lines: [
+          ...current.lines.slice(0, a),
+          line,
+          ...current.lines.slice(b + 1),
+        ],
+      });
+      requestAnimationFrame(() => {
+        const el = document.querySelector<HTMLElement>(
+          `[data-${side}="${line.id}"]`,
+        );
+        if (el) {
+          el.focus();
+          placeCursor(el, before.length + insert.length);
+        }
+      });
+    };
+    document.addEventListener("beforeinput", replaceSelection, true);
+    document.addEventListener("paste", replaceSelection, true);
+    return () => {
+      document.removeEventListener("beforeinput", replaceSelection, true);
+      document.removeEventListener("paste", replaceSelection, true);
+    };
+  }, []);
   const updateLine = (id: string, text: string) => {
     const current = ref.current;
     if (current.lines.find((l) => l.id === id)?.text === text) return;
@@ -955,18 +978,18 @@ export default function Studio() {
   }, [pages]);
   useLayoutEffect(() => {
     const el = workspace.current;
-    if (!el) return;
+    if (!el || mode === "free") return;
     const fit = () => {
-      if (autoZoom)
+      if (autoZoom && el.clientWidth > 0)
         setZoom(
-          Math.max(0.25, Math.min(1, (el.clientWidth - 64) / paperWidth)),
+          Math.max(0.25, Math.min(1.4, (el.clientWidth - 64) / paperWidth)),
         );
     };
     fit();
     const observer = new ResizeObserver(fit);
     observer.observe(el);
     return () => observer.disconnect();
-  }, [autoZoom, leftWidth, mobile, paperWidth]);
+  }, [autoZoom, leftWidth, mobile, paperWidth, mode]);
   // Markdown 里把「跳到的那一行」画一条高亮带（不抢焦点，右边还能继续编辑）
   const showMdLineMark = (
     el: HTMLTextAreaElement,
@@ -1292,26 +1315,6 @@ export default function Studio() {
     target.addEventListener("pointermove", move as EventListener);
     target.addEventListener("pointerup", end, { once: true });
   };
-  const resizeRight = (e: ReactPointerEvent) => {
-    e.preventDefault();
-    const start = e.clientX,
-      width = rightWidth,
-      target = e.currentTarget as HTMLElement;
-    target.setPointerCapture(e.pointerId);
-    const move = (event: PointerEvent) =>
-      setRightWidth(
-        Math.max(
-          220,
-          Math.min(window.innerWidth * 0.5, width + (start - event.clientX)),
-        ),
-      );
-    const end = () => {
-      target.removeEventListener("pointermove", move as EventListener);
-      target.removeEventListener("pointerup", end);
-    };
-    target.addEventListener("pointermove", move as EventListener);
-    target.addEventListener("pointerup", end, { once: true });
-  };
   const dragPicture = (e: ReactPointerEvent, pic: Picture, resize = false) => {
     e.preventDefault();
     e.stopPropagation();
@@ -1342,7 +1345,7 @@ export default function Studio() {
       const next = {
         ...ref.current,
         pictures: ref.current.pictures.map((p) =>
-          p.id === pic.id ? { ...p, ...patch } : p,
+          p.id === pic.id ? { ...p, ...patch, anchor: undefined } : p,
         ),
       };
       ref.current = next;
@@ -1484,10 +1487,46 @@ export default function Studio() {
     const next = { ...ref.current, freeform: data };
     historyUpdate(next);
   };
+  const restoreFreeLayout = () => {
+    const current = ref.current,
+      baseline = current.freeformBaseline;
+    if (!baseline) return;
+    const freeform = baseline.freeform
+      ? structuredClone(baseline.freeform)
+      : {
+          ...current.freeform!,
+          sourceDesign: {},
+          pages: Array.from({ length: Math.max(1, pages.length) }, () => ({
+            id: uid(),
+            width: PAGE.width,
+            height: PAGE.height,
+            background: "#ffffff",
+            canvas: { objects: [] },
+          })),
+        };
+    historyUpdate({ ...current, ...structuredClone(baseline), freeform });
+  };
   const enterFree = async (rebuild = false) => {
     if (freeEntering) return;
+    setAutoZoom(false);
     (document.activeElement as HTMLElement)?.blur();
     cancelPreview();
+    if (!ref.current.freeformBaseline) {
+      const current = ref.current;
+      const next = {
+        ...current,
+        freeformBaseline: {
+          settings: structuredClone(current.settings),
+          template: current.template,
+          pictures: structuredClone(current.pictures),
+          ...(current.freeform
+            ? { freeform: structuredClone(current.freeform) }
+            : {}),
+        },
+      };
+      ref.current = next;
+      setDoc(next);
+    }
     if (ref.current.freeform?.base === "flow" && !rebuild) {
       setMode("free");
       return;
@@ -1534,12 +1573,6 @@ export default function Studio() {
       setFreeEntering(false);
     }
   };
-  useEffect(() => {
-    if (mode !== "free" && freeRebuild.current) {
-      freeRebuild.current = false;
-      void enterFree(true);
-    }
-  }, [mode]);
   const cancelPreview = () => {
     if (agentPreviewApi.current) {
       agentPreviewApi.current.reject();
@@ -1685,6 +1718,31 @@ export default function Studio() {
     options: { hideDecorations?: boolean; layers?: LayerSvg } = {},
   ) => {
     const pieces = pages[page] || [];
+    const visiblePictures = doc.pictures.flatMap((p) => {
+      if (p.anchor) {
+        let top = view.settings.top;
+        for (let pi = 0; pi < pages.length; pi++) {
+          top = view.settings.top;
+          for (const piece of pages[pi]) {
+            if (piece.line.id === p.anchor && piece.start === 0) {
+              const design = view.freeform?.sourceDesign?.[p.anchor];
+              return pi === page
+                ? [
+                    {
+                      ...p,
+                      x: p.x + (design?.dx || 0),
+                      y: top + p.y + (design?.dy || 0),
+                    },
+                  ]
+                : [];
+            }
+            top += Math.max(0, piece.height - 0.25);
+          }
+        }
+        return [];
+      }
+      return Math.min(p.page, pages.length - 1) === page ? [p] : [];
+    });
     return (
       <article
         className={`resume-paper template-${view.template}`}
@@ -1750,131 +1808,129 @@ export default function Studio() {
             onBlur={() => setArmed("")}
           />
         ))}
-        {doc.pictures
-          .filter((p) => Math.min(p.page, pages.length - 1) === page)
-          .map((p) => (
-            <div
-              key={p.id}
-              className={`floating-picture ${picSelection === p.id ? "chosen" : ""}`}
-              style={{
-                left: p.x,
-                top: p.y,
-                width: p.w,
-                height: p.h,
-              }}
-              onPointerDown={(e) => dragPicture(e, p)}
-              tabIndex={0}
-              role="img"
-              aria-label={p.label + "，拖动调整位置"}
-              onKeyDown={(e) => {
-                if (e.key === "Delete") {
-                  historyUpdate({
+        {visiblePictures.map((p) => (
+          <div
+            key={p.id}
+            className={`floating-picture ${picSelection === p.id ? "chosen" : ""}`}
+            style={{
+              left: p.x,
+              top: p.y,
+              width: p.w,
+              height: p.h,
+            }}
+            onPointerDown={(e) => dragPicture(e, p)}
+            tabIndex={0}
+            role="img"
+            aria-label={p.label + "，拖动调整位置"}
+            onKeyDown={(e) => {
+              if (e.key === "Delete") {
+                historyUpdate({
+                  ...doc,
+                  pictures: doc.pictures.filter((x) => x.id !== p.id),
+                });
+              }
+              if (
+                ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(
+                  e.key,
+                )
+              ) {
+                e.preventDefault();
+                historyUpdate(
+                  {
                     ...doc,
-                    pictures: doc.pictures.filter((x) => x.id !== p.id),
-                  });
-                }
-                if (
-                  ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(
-                    e.key,
-                  )
-                ) {
-                  e.preventDefault();
-                  historyUpdate(
-                    {
-                      ...doc,
-                      pictures: doc.pictures.map((x) =>
-                        x.id === p.id
-                          ? {
-                              ...x,
-                              x: Math.max(
-                                0,
-                                Math.min(
-                                  paperWidth - x.w,
-                                  x.x +
-                                    (e.key === "ArrowLeft"
-                                      ? -2
-                                      : e.key === "ArrowRight"
-                                        ? 2
-                                        : 0),
-                                ),
+                    pictures: doc.pictures.map((x) =>
+                      x.id === p.id
+                        ? {
+                            ...x,
+                            x: Math.max(
+                              0,
+                              Math.min(
+                                paperWidth - x.w,
+                                x.x +
+                                  (e.key === "ArrowLeft"
+                                    ? -2
+                                    : e.key === "ArrowRight"
+                                      ? 2
+                                      : 0),
                               ),
-                              y: Math.max(
-                                0,
-                                Math.min(
-                                  paperHeight - x.h,
-                                  x.y +
-                                    (e.key === "ArrowUp"
-                                      ? -2
-                                      : e.key === "ArrowDown"
-                                        ? 2
-                                        : 0),
-                                ),
-                              ),
-                            }
-                          : x,
-                      ),
-                    },
-                    "picture",
-                  );
-                }
-              }}
-            >
-              <img src={p.src} alt={p.label} draggable={false} />
-              {picSelection === p.id && (
-                <>
-                  <button
-                    className="picture-delete"
-                    aria-label={"删除" + p.label}
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onClick={() =>
-                      historyUpdate({
-                        ...doc,
-                        pictures: doc.pictures.filter((x) => x.id !== p.id),
-                      })
-                    }
-                  >
-                    <X size={16} />
-                  </button>
-                  <button
-                    className="picture-resize"
-                    aria-label={"调整" + p.label + "大小"}
-                    onPointerDown={(e) => dragPicture(e, p, true)}
-                  />
-                  <div
-                    className="picture-page"
-                    onPointerDown={(e) => e.stopPropagation()}
-                  >
-                    <label>
-                      页{" "}
-                      <select
-                        aria-label="图片所在页"
-                        value={page}
-                        onChange={(e) =>
-                          historyUpdate({
-                            ...doc,
-                            pictures: doc.pictures.map((x) =>
-                              x.id === p.id
-                                ? {
-                                    ...x,
-                                    page: Number(e.target.value),
-                                  }
-                                : x,
                             ),
-                          })
-                        }
-                      >
-                        {pages.map((_, i) => (
-                          <option value={i} key={i}>
-                            {i + 1}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                </>
-              )}
-            </div>
-          ))}
+                            y: Math.max(
+                              0,
+                              Math.min(
+                                paperHeight - x.h,
+                                x.y +
+                                  (e.key === "ArrowUp"
+                                    ? -2
+                                    : e.key === "ArrowDown"
+                                      ? 2
+                                      : 0),
+                              ),
+                            ),
+                          }
+                        : x,
+                    ),
+                  },
+                  "picture",
+                );
+              }
+            }}
+          >
+            <img src={p.src} alt={p.label} draggable={false} />
+            {picSelection === p.id && (
+              <>
+                <button
+                  className="picture-delete"
+                  aria-label={"删除" + p.label}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={() =>
+                    historyUpdate({
+                      ...doc,
+                      pictures: doc.pictures.filter((x) => x.id !== p.id),
+                    })
+                  }
+                >
+                  <X size={16} />
+                </button>
+                <button
+                  className="picture-resize"
+                  aria-label={"调整" + p.label + "大小"}
+                  onPointerDown={(e) => dragPicture(e, p, true)}
+                />
+                <div
+                  className="picture-page"
+                  onPointerDown={(e) => e.stopPropagation()}
+                >
+                  <label>
+                    页{" "}
+                    <select
+                      aria-label="图片所在页"
+                      value={page}
+                      onChange={(e) =>
+                        historyUpdate({
+                          ...doc,
+                          pictures: doc.pictures.map((x) =>
+                            x.id === p.id
+                              ? {
+                                  ...x,
+                                  page: Number(e.target.value),
+                                }
+                              : x,
+                          ),
+                        })
+                      }
+                    >
+                      {pages.map((_, i) => (
+                        <option value={i} key={i}>
+                          {i + 1}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              </>
+            )}
+          </div>
+        ))}
         {view.freeform?.base === "flow" && !options.hideDecorations && (
           <FreeLayers
             page={view.freeform.pages[page]}
@@ -1905,7 +1961,7 @@ export default function Studio() {
         <a className="brand" href="./">
           <FileText size={23} />
           <span>
-            简历工坊<small>炒肉多，写简历。</small>
+            DiyJobResume<small>让简历回归本源</small>
           </span>
         </a>
         <div className="doc-switch">
@@ -2077,7 +2133,6 @@ export default function Studio() {
               } else {
                 setAgentOpen(true);
                 setLibraryOpen(false);
-                setRightWidth((w) => Math.max(w, 320));
               }
             }}
           >
@@ -2228,10 +2283,18 @@ export default function Studio() {
               setMode(next);
               setEditorOpen(true);
             }}
-            onRebuild={() => {
-              freeRebuild.current = true;
-              setMode("simple");
+            onResizeLeft={resizeSidebar}
+            onNudgeLeft={(delta) =>
+              setLeftWidth((width) =>
+                Math.max(260, Math.min(window.innerWidth * 0.6, width + delta)),
+              )
+            }
+            previewZoom={zoom}
+            onZoomChange={(value) => {
+              setAutoZoom(false);
+              setZoom(value);
             }}
+            onRestore={restoreFreeLayout}
           />
         </Suspense>
       ) : (
@@ -2282,51 +2345,6 @@ export default function Studio() {
                     </button>
                   </div>
                 </div>
-                {doc.freeform && (
-                  <div className="free-source-banner">
-                    <span>
-                      {doc.freeform.base === "flow"
-                        ? "排版与图层在三种模式中保持一致"
-                        : "旧版自由稿已保留，进入时可启用无损编辑"}
-                    </span>
-                    {doc.freeformArchive && (
-                      <button
-                        onClick={() =>
-                          saveFile(
-                            doc.name + "-旧版自由稿.json",
-                            JSON.stringify({
-                              ...doc,
-                              freeform: doc.freeformArchive,
-                              freeformArchive: undefined,
-                            }),
-                            "application/json",
-                          )
-                        }
-                      >
-                        下载旧版自由稿
-                      </button>
-                    )}
-                    <button
-                      onClick={() => {
-                        void enterFree();
-                      }}
-                    >
-                      继续自由编辑
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            "重新生成会替换当前自由稿。建议先从文件菜单下载可编辑备份。板块稿不受影响。",
-                          )
-                        )
-                          void enterFree(true);
-                      }}
-                    >
-                      重新生成自由稿
-                    </button>
-                  </div>
-                )}
                 {freeEntering && (
                   <div className="free-entering" role="status">
                     正在将简历转换为可编辑元素…
@@ -2496,8 +2514,8 @@ export default function Studio() {
                 <input
                   type="range"
                   aria-label="预览缩放"
-                  min="25"
-                  max="140"
+                  min="20"
+                  max="200"
                   value={Math.round(zoom * 100)}
                   onChange={(e) => {
                     setAutoZoom(false);
@@ -2685,27 +2703,6 @@ export default function Studio() {
               <div className="paper-end">内容写到哪里，纸张就延伸到哪里。</div>
             </div>
           </main>
-          {(agentOpen || libraryOpen) && (
-            <div
-              role="separator"
-              aria-label="调整右侧面板宽度"
-              aria-orientation="vertical"
-              aria-valuenow={Math.round(rightWidth)}
-              tabIndex={0}
-              className="panel-resizer panel-resizer-right"
-              onPointerDown={resizeRight}
-              onKeyDown={(e) => {
-                if (e.key === "ArrowLeft")
-                  setRightWidth((w) =>
-                    Math.min(window.innerWidth * 0.5, w + 20),
-                  );
-                if (e.key === "ArrowRight")
-                  setRightWidth((w) => Math.max(220, w - 20));
-              }}
-            >
-              <GripVertical size={12} />
-            </div>
-          )}
           {agentOpen ? (
             <aside
               className={`library-panel agent-side ${mobile === "library" ? "mobile-active" : ""}`}

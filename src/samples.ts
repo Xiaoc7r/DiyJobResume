@@ -1,14 +1,14 @@
 import type { Template } from "./flow";
 import source from "./sample.md?raw";
 export const skillLines = [
-  "熟练掌握 JavaSE 核心知识，理解常用集合及数据结构、面向对象、异常、反射、泛型等；",
-  "熟悉 MySQL，理解事务、隔离级别、索引、MVCC、三大日志、锁机制、慢SQL优化等；",
-  "熟悉 Redis，理解其5种核心数据结构、持久化策略、分布式锁、缓存穿透、击穿、雪崩及解决方案等；",
-  "熟悉 RocketMQ 消息中间件，理解可靠传输、幂等去重、顺序消费、消息堆积和延迟解决方案等；",
-  "熟悉 JUC 并发编程，了解线程池、ThreadLocal、Synchronized、CAS、JMM等；",
-  "熟悉 JVM 内存结构，了解垃圾回收机制、双亲委派机制、类生命周期、常见问题的定位与分析等；",
-  "熟悉 SpringBoot、MyBatis-Plus 等常用框架的使用，了解 IOC、AOP、Spring事务等；",
-  "熟悉 IDEA、Maven、Git 等配置协作工具，熟悉 Claude Code、Codex 等新兴AI编程工具。",
+  "熟练掌握 Java、Python、C++，理解常用集合及数据结构、面向对象、异常、反射、泛型等；",
+  "熟悉 MySQL 与 Redis，理解事务、索引、MVCC、锁、持久化、分布式锁及缓存常见问题；",
+  "熟悉 JUC 与 JVM，理解线程池、锁、CAS、ThreadLocal、JMM、双亲委派及垃圾回收机制等；",
+  "熟悉 RocketMQ 消息中间件，理解可靠传输、幂等去重、顺序消费、消息堆积问题及解决方案等；",
+  "熟悉 SpringBoot、SpringCloud、MyBatis-Plus 等框架，理解 IOC、AOP、生命周期、循环依赖等；",
+  "熟悉常见设计模式，如单例模式、工厂方法模式、代理模式、责任链模式、策略模式等。",
+  "熟悉 AI Agent 基础知识，理解 ReAct、RAG、MCP、Memory、Harness、状态管理、可观测性等；",
+  "熟练使用 Claude Code、Codex、Cursor 等工具，具备较强的 Prompt 编写与 AI Coding 能力。",
 ];
 export function demoFor(_template: Template) {
   return source.trim();

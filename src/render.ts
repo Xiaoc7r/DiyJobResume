@@ -86,7 +86,8 @@ export function lineHtml(
   return `<span class="ink"${line.kind === "section" ? ` data-title="${escapeHtml(text)}"` : ""}>${inline(text) || "<br>"}</span>`;
 }
 export function domMarkdown(node: Node): string {
-  if (node.nodeType === Node.TEXT_NODE) return node.textContent || "";
+  if (node.nodeType === Node.TEXT_NODE)
+    return (node.textContent || "").replaceAll("\u00a0", " ");
   if (!(node instanceof HTMLElement)) return "";
   const content = Array.from(node.childNodes).map(domMarkdown).join("");
   switch (node.tagName) {

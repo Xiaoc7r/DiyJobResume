@@ -1,6 +1,12 @@
-import { useEffect, useRef, useState, useMemo } from "react";
+import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import type { CSSProperties, RefObject, ReactNode } from "react";
+import type {
+  CSSProperties,
+  RefObject,
+  ReactNode,
+  SetStateAction,
+  PointerEvent as ReactPointerEvent,
+} from "react";
 import {
   Canvas,
   StaticCanvas,
@@ -78,7 +84,7 @@ import { SourceInspector } from "./SourceInspector";
 import type { SourceSelection } from "./SourceInspector";
 import type { SourceDesign } from "./freeform";
 import type { LayerSvg } from "./FreeLayers";
-import { blankFreePage, sourceFingerprint, freeText } from "./freeform";
+import { blankFreePage, freeText } from "./freeform";
 import type { FreeDocument, FreePage } from "./freeform";
 import type { Resume } from "./flow";
 import "./free-studio.css";
@@ -100,12 +106,17 @@ interface Props {
   apiRef: RefObject<FreeStudioApi | null>;
   onChange: (data: FreeDocument) => void;
   onMode: (mode: "simple" | "md") => void;
-  onRebuild: () => void;
+  onRebuild?: () => void;
+  onResizeLeft?: (event: ReactPointerEvent) => void;
+  onNudgeLeft?: (delta: number) => void;
   renderPaper?: (
     page: number,
     scale?: number,
     options?: { hideDecorations?: boolean; layers?: LayerSvg },
   ) => ReactNode;
+  previewZoom?: number;
+  onZoomChange?: (value: number) => void;
+  onRestore?: () => void;
   sourcePageCount?: number;
   onUndo?: () => void;
   onRedo?: () => void;
@@ -183,8 +194,12 @@ export default function FreeStudio({
   apiRef,
   onChange,
   onMode,
-  onRebuild,
   renderPaper,
+  previewZoom,
+  onZoomChange,
+  onRestore,
+  onResizeLeft,
+  onNudgeLeft,
   sourcePageCount = 0,
   onUndo,
   onRedo,
@@ -233,8 +248,15 @@ export default function FreeStudio({
     [revision, setRevision] = useState(0),
     [busy, setBusy] = useState(true),
     [error, setError] = useState("");
-  const [zoom, setZoom] = useState(0.75),
-    [autoFit, setAutoFit] = useState(true),
+  const [localZoom, setLocalZoom] = useState(0.75);
+  const zoom = previewZoom ?? localZoom;
+  const setZoom = (value: SetStateAction<number>) => {
+    const next = typeof value === "function" ? value(zoomRef.current) : value;
+    zoomRef.current = next;
+    setLocalZoom(next);
+    onZoomChange?.(next);
+  };
+  const [autoFit, setAutoFit] = useState(previewZoom === undefined),
     [tool, setTool] = useState<"select" | "hand" | "draw">("select");
   const [leftTab, setLeftTab] = useState<"insert" | "objects">("insert"),
     [mobilePanel, setMobilePanel] = useState<
@@ -246,7 +268,7 @@ export default function FreeStudio({
     snapRef = useRef(snap);
   snapRef.current = snap;
   const [help, setHelp] = useState(false),
-    [confirm, setConfirm] = useState<"reset" | "delete-page" | null>(null);
+    [confirm, setConfirm] = useState<"delete-page" | null>(null);
   const [printPages, setPrintPages] = useState<
       { svg: string; page: FreePage; layers?: LayerSvg; sourceIndex?: number }[]
     >([]),
@@ -267,11 +289,7 @@ export default function FreeStudio({
     (selectedTextStyle.fontStyle ?? text?.fontStyle) === "italic";
   const textUnderline = selectedTextStyle.underline ?? text?.underline;
   const textStrike = selectedTextStyle.linethrough ?? text?.linethrough;
-  const signature = useMemo(
-    () => sourceFingerprint(doc),
-    [doc.lines, doc.settings, doc.template, doc.pictures],
-  );
-  const changedSource = !flowBase && model.current.source !== signature;
+
   zoomRef.current = zoom;
   toolRef.current = tool;
 
@@ -1142,7 +1160,7 @@ export default function FreeStudio({
       );
   }, [sourcePageCount]);
   useEffect(() => {
-    if (!autoFit || !scroll.current) return;
+    if (!autoFit || !scroll.current || previewZoom !== undefined) return;
     const fit = () => {
       const area = scroll.current!;
       setZoom(
@@ -1509,25 +1527,6 @@ export default function FreeStudio({
                 </div>
                 <p>组合可整体移动，解组后可分别编辑文字和单元格。</p>
               </section>
-              <section>
-                <h3>自由排版稿</h3>
-                <p>
-                  文字、图形和图片都可独立调整。原稿与装饰在三种模式间保持一致，一起存入可编辑备份。
-                </p>
-                {changedSource && (
-                  <p className="free-warning">
-                    板块稿已有更新，自由稿保持原样。
-                  </p>
-                )}
-                <button
-                  className="free-reset"
-                  onClick={() => setConfirm("reset")}
-                  disabled={busy}
-                >
-                  <RotateCcw size={14} />
-                  从当前板块稿重新生成
-                </button>
-              </section>
             </>
           ) : (
             <section>
@@ -1592,6 +1591,20 @@ export default function FreeStudio({
             </section>
           )}
         </div>
+        {onResizeLeft && (
+          <div
+            className="free-left-resizer"
+            role="separator"
+            aria-label="调整编辑区宽度"
+            aria-orientation="vertical"
+            tabIndex={0}
+            onPointerDown={onResizeLeft}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowLeft") onNudgeLeft?.(-20);
+              if (e.key === "ArrowRight") onNudgeLeft?.(20);
+            }}
+          />
+        )}
       </aside>
       <main
         className={`free-main ${mobilePanel === "canvas" ? "free-mobile-show" : ""}`}
@@ -1694,6 +1707,19 @@ export default function FreeStudio({
           <Tool name="自由模式使用帮助" onClick={() => setHelp((v) => !v)}>
             <HelpCircle size={17} />
           </Tool>
+          {onRestore && (
+            <button
+              className="free-restore"
+              title="恢复首次进入自由模式前的排版，保留文字内容；可以撤销"
+              onClick={() => {
+                commit();
+                onRestore();
+              }}
+            >
+              <RotateCcw size={15} />
+              恢复原排版
+            </button>
+          )}
         </div>
         {error && (
           <div className="free-message" role="alert">
@@ -1870,7 +1896,22 @@ export default function FreeStudio({
             >
               <ZoomOut size={15} />
             </Tool>
-            <button title="自动适应可用宽度" onClick={() => setAutoFit(true)}>
+            <button
+              title="适应可用宽度"
+              onClick={() => {
+                if (scroll.current && scroll.current.clientWidth > 0)
+                  setZoom(
+                    Math.min(
+                      2,
+                      Math.max(
+                        0.2,
+                        (scroll.current.clientWidth - 72) / page.width,
+                      ),
+                    ),
+                  );
+                setAutoFit(previewZoom === undefined);
+              }}
+            >
               {Math.round(zoom * 100)}%
             </button>
             <Tool
@@ -2660,18 +2701,14 @@ export default function FreeStudio({
             aria-labelledby="free-confirm-title"
           >
             <h2 id="free-confirm-title">
-              {confirm === "reset"
-                ? "重新生成自由排版稿？"
-                : flowBase && pageIndex < sourcePageCount
-                  ? "清空本页装饰？"
-                  : "删除当前自由页？"}
+              {flowBase && pageIndex < sourcePageCount
+                ? "清空本页装饰？"
+                : "删除当前自由页？"}
             </h2>
             <p>
-              {confirm === "reset"
-                ? "当前自由稿会被板块稿的排版替换。建议先下载备份。板块稿本身不受影响。"
-                : flowBase && pageIndex < sourcePageCount
-                  ? "只清空本页新增的图形、图标和图片，原简历正文保留；可以撤销。"
-                  : "本页的元素会一起删除，操作后可以撤销。其他页面保持不变。"}
+              {flowBase && pageIndex < sourcePageCount
+                ? "只清空本页新增的图形、图标和图片，原简历正文保留；可以撤销。"
+                : "本页的元素会一起删除，操作后可以撤销。其他页面保持不变。"}
             </p>
             <div>
               <button autoFocus onClick={() => setConfirm(null)}>
@@ -2691,12 +2728,10 @@ export default function FreeStudio({
                       Math.min(pageIndex, model.current.pages.length - 1),
                     );
                     commit();
-                  } else {
-                    onRebuild();
                   }
                 }}
               >
-                确认{confirm === "reset" ? "重新生成" : "删除"}
+                确认删除
               </button>
             </div>
           </section>
