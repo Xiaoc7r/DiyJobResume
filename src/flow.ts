@@ -105,7 +105,7 @@ export const templates: {
   {
     id: "ribbon",
     name: "标签 · 技术履历",
-    desc: "左对齐表头 · 黑色标签 · 分区明确",
+    desc: "简洁表头 · 黑色标签 · 分区明确",
     color: "#171717",
   },
   {
@@ -123,7 +123,7 @@ export const templates: {
 ];
 export const defaultSettings = (): Settings => ({
   customCss: "",
-  headerAlign: "template",
+  headerAlign: "center",
   top: 30,
   bottom: 30,
   left: 42,

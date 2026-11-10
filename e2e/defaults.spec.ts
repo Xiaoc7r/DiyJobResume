@@ -25,6 +25,23 @@ test("uncached first visit and all six sample templates use the requested layout
       "padding",
       "30px 42px",
     );
+    const headerClear = await page
+      .locator(".resume-paper")
+      .evaluate((paper) => {
+        const logo = paper
+            .querySelector(".floating-picture:not([data-anchor])")!
+            .getBoundingClientRect(),
+          r = document.createRange();
+        r.selectNodeContents(paper.querySelector(".row-name .ink")!);
+        const title = r.getBoundingClientRect();
+        return (
+          title.left >= logo.right ||
+          title.right <= logo.left ||
+          title.top >= logo.bottom ||
+          title.bottom <= logo.top
+        );
+      });
+    expect(headerClear).toBe(true);
     const before = await page
       .locator(".floating-picture[data-anchor]")
       .evaluateAll((els) =>
