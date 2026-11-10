@@ -611,8 +611,7 @@ export function readResume(raw: unknown): Resume {
         typeof p.id === "string" && /^[a-z\d_-]{1,80}$/i.test(p.id)
           ? p.id
           : uid(),
-      ...(typeof p.anchor === "string" &&
-      doc.lines.some((l) => l.id === p.anchor)
+      ...(typeof p.anchor === "string" && /^[a-z\d_-]{1,80}$/i.test(p.anchor)
         ? { anchor: p.anchor }
         : {}),
       src: p.src,

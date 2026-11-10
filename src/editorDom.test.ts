@@ -19,6 +19,16 @@ describe("editing selection and whitespace regressions", () => {
     el.innerHTML = "<span>\u00a0 A\u00a0</span>";
     expect(editableText(el)).toBe("  A ");
   });
+  it("keeps a deleted row icon anchored across reload instead of moving it to the header", () => {
+    const doc = initialResume(),
+      icon = doc.pictures.find((p) => p.anchor)!;
+    doc.lines = doc.lines.filter((l) => l.id !== icon.anchor);
+    expect(
+      readResume(JSON.parse(JSON.stringify(doc))).pictures.find(
+        (p) => p.id === icon.id,
+      )?.anchor,
+    ).toBe(icon.anchor);
+  });
   it("keeps the restore baseline and small anchored icons in editable backups", () => {
     const doc = initialResume();
     doc.freeformBaseline = {
