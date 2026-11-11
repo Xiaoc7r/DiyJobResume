@@ -13,10 +13,18 @@
 
 ## 🖼️ 效果预览
 
-<img width="2860" height="1515" alt="简历工坊预览" src="https://github.com/user-attachments/assets/4b9eb0d7-c2f4-4907-9b82-bce594668813" />
+<img width="2866" height="1532" alt="image" src="https://github.com/user-attachments/assets/6c694db8-b3e4-4c58-9d32-e130bc719a13" />
+
 
 <img width="2859" height="1524" alt="image" src="https://github.com/user-attachments/assets/d0f3b132-321c-486b-9b22-e4adae1721f9" />
 
+<img width="2864" height="1538" alt="image" src="https://github.com/user-attachments/assets/21f4ee55-a52a-4db7-82a5-a412da90a1ec" />
+
+支持三种模式编辑简历：
+
+小白简单编辑模式，.md编辑模式，以及画板自由编辑模式。
+
+支持接AI api用于简历智能排版优化，可diy程度极高。
 
 
 ## 🛠️ 本地运行
