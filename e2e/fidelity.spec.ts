@@ -127,9 +127,12 @@ test("source text pixels and layout survive switching while entry icons become e
       await expect(
         page.locator(".free-layer-foreground svg image"),
       ).toHaveCount(3);
+    // A real opacity layer forces grayscale text in both capture paths.
+    // Near-1 opacity is optimized away by Linux Chromium, leaving LCD text
+    // in the normal paper but grayscale text beside the free canvas.
     const style = await page.addStyleTag({
       content:
-        ".studio:not(.free-mode) .resume-paper,.free-canvas-host{position:fixed!important;left:0!important;top:0!important;transform:none!important;background:white!important;z-index:9999!important;}.free-source-paper>.resume-paper{transform:none!important;}.resume-paper,.free-front-scene{opacity:.999999;}.paper-row.selected,.paper-row:hover,.paper-row:has([contenteditable=true]:focus){background:transparent!important;outline:none!important;box-shadow:none!important;}.app-header,.caret-word,.caret-bar,.moveable-control-box,.free-source-drag,.free-page-label{display:none!important;}",
+        ".studio:not(.free-mode) .resume-paper,.free-canvas-host{position:fixed!important;left:0!important;top:0!important;transform:none!important;background:white!important;z-index:9999!important;}.free-source-paper>.resume-paper{transform:none!important;}.resume-paper,.free-front-scene{opacity:.99;}.paper-row.selected,.paper-row:hover,.paper-row:has([contenteditable=true]:focus){background:transparent!important;outline:none!important;box-shadow:none!important;}.app-header,.caret-word,.caret-bar,.moveable-control-box,.free-source-drag,.free-page-label{display:none!important;}",
     });
     if (name === "before")
       iconRects = await page
