@@ -127,31 +127,48 @@ test("source text pixels and layout survive switching while entry icons become e
       await expect(
         page.locator(".free-layer-foreground svg image"),
       ).toHaveCount(3);
-    // A real opacity layer forces grayscale text in both capture paths.
-    // Near-1 opacity is optimized away by Linux Chromium, leaving LCD text
-    // in the normal paper but grayscale text beside the free canvas.
-    const style = await page.addStyleTag({
-      content:
-        ".studio:not(.free-mode) .resume-paper,.free-canvas-host{position:fixed!important;left:0!important;top:0!important;transform:none!important;background:white!important;z-index:9999!important;}.free-source-paper>.resume-paper{transform:none!important;}.resume-paper,.free-front-scene{opacity:.99;}.paper-row.selected,.paper-row:hover,.paper-row:has([contenteditable=true]:focus){background:transparent!important;outline:none!important;box-shadow:none!important;}.app-header,.caret-word,.caret-bar,.moveable-control-box,.free-source-drag,.free-page-label{display:none!important;}",
-    });
+    // Render the live document layers in one identical screenshot container.
+    // Canvas-backed and ordinary editor ancestors use different LCD/grayscale
+    // compositing on Linux; that difference is unrelated to document fidelity.
+    const fixture = await page.evaluateHandle((isFree) => {
+      const original = document.querySelector<HTMLElement>(
+        isFree ? ".free-source-paper > .resume-paper" : ".resume-paper",
+      )!;
+      const paper = original.cloneNode(true) as HTMLElement;
+      paper.style.cssText +=
+        ";position:relative;left:0;top:0;transform:none;box-shadow:none;opacity:.99";
+      paper
+        .querySelectorAll<HTMLElement>(".selected, .group-hover")
+        .forEach((el) => el.classList.remove("selected", "group-hover"));
+      if (isFree) {
+        const overlay = document.createElement("div");
+        overlay.className = "free-layer-svg free-layer-foreground";
+        overlay.innerHTML =
+          document.querySelector(".free-front-scene")!.innerHTML;
+        paper.append(overlay);
+      }
+      const root = document.createElement("div");
+      root.dataset.pixelFixture = "true";
+      root.style.cssText = `position:fixed;left:0;top:0;width:${paper.style.width};height:${paper.style.height};background:white;z-index:99999;isolation:isolate;pointer-events:none`;
+      root.append(paper);
+      document.body.append(root);
+      return root;
+    }, free);
     if (name === "before")
-      iconRects = await page
-        .locator(".floating-picture[data-anchor]")
-        .evaluateAll((els) =>
-          els.map((el) => {
+      iconRects = await fixture.evaluate((root) =>
+        [...root.querySelectorAll(".floating-picture[data-anchor]")].map(
+          (el) => {
             const r = el.getBoundingClientRect();
             return { x: r.left, y: r.top, right: r.right, bottom: r.bottom };
-          }),
-        );
-    const result = await page
-      .locator(free ? ".free-canvas-host" : ".resume-paper")
-      .first()
-      .screenshot({
-        path: testInfo.outputPath(name + ".png"),
-        animations: "disabled",
-        caret: "hide",
-      });
-    await style.evaluate((el) => el.remove());
+          },
+        ),
+      );
+    const result = await page.locator("[data-pixel-fixture]").screenshot({
+      path: testInfo.outputPath(name + ".png"),
+      animations: "disabled",
+      caret: "hide",
+    });
+    await fixture.evaluate((el) => el.remove());
     return result;
   };
   const before = await capture("before");
