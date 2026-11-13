@@ -509,11 +509,12 @@ a {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
   gap: 34px;
   scrollbar-gutter: stable;
 }
 .page-frame {
+  margin-inline: auto;
   position: relative;
   flex-shrink: 0;
   background: #fff;

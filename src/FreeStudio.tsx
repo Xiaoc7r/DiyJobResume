@@ -128,12 +128,13 @@ interface Props {
 const base = {
   originX: "left" as const,
   originY: "top" as const,
-  cornerColor: "#b87559",
-  borderColor: "#b87559",
+  cornerColor: "#b8755970",
+  borderColor: "#b8755980",
+  borderOpacityWhenMoving: 0.35,
   cornerStyle: "circle" as const,
-  transparentCorners: false,
-  cornerSize: 9,
-  padding: 3,
+  transparentCorners: true,
+  cornerSize: 7,
+  padding: 2,
 };
 const iconSet = {
   邮箱: Mail,
@@ -239,6 +240,8 @@ export default function FreeStudio({
     onChangeRef.current(next);
   };
   const frontLayer = useRef<HTMLDivElement>(null);
+  const detailPreview = useRef<HTMLDivElement>(null);
+  const updateDetailPreview = useRef<() => void>(() => {});
   const [sourceSelection, setSourceSelection] =
     useState<SourceSelection | null>(null);
   const flowBase = doc.freeform?.base === "flow" && !!renderPaper;
@@ -293,6 +296,65 @@ export default function FreeStudio({
   zoomRef.current = zoom;
   toolRef.current = tool;
 
+  updateDetailPreview.current = () => {
+    const c = scene.current,
+      viewport = detailPreview.current;
+    const selected = c?.getActiveObject();
+    if (
+      !c ||
+      !viewport ||
+      !selected ||
+      !viewport.parentElement?.hasAttribute("open")
+    )
+      return;
+    const p = model.current.pages[activePage.current];
+    const r = selected.getBoundingRect(),
+      factor = 2;
+    const source = host.current
+      ?.querySelector<HTMLElement>(".free-source-paper > .resume-paper")
+      ?.cloneNode(true) as HTMLElement | undefined;
+    if (source) {
+      source.style.transform = "none";
+      source.style.pointerEvents = "none";
+      source
+        .querySelectorAll("[contenteditable], [data-edit], [data-line], [id]")
+        .forEach((el) => {
+          for (const attr of [
+            "contenteditable",
+            "data-edit",
+            "data-line",
+            "id",
+          ])
+            el.removeAttribute(attr);
+        });
+      source
+        .querySelectorAll(".free-layer, .row-tools, .picture-handle")
+        .forEach((el) => el.remove());
+    }
+    const layer = (background: boolean) =>
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${p.width}" height="${p.height}" style="position:absolute;inset:0" viewBox="0 0 ${p.width} ${p.height}">${c
+        .getObjects()
+        .filter(
+          (o) =>
+            o.visible && ((o as Item).plane === "background") === background,
+        )
+        .map((o) => {
+          const markup = o.toSVG();
+          return o.group instanceof ActiveSelection
+            ? `<g transform="matrix(${o.group.calcTransformMatrix().join(" ")})">${markup}</g>`
+            : markup;
+        })
+        .join("")}</svg>`;
+    const sheet = document.createElement("div");
+    sheet.style.cssText = `position:absolute;width:${p.width}px;height:${p.height}px;background:${p.background};transform-origin:0 0;transform:translate(${viewport.clientWidth / 2 - (r.left + r.width / 2) * factor}px,${viewport.clientHeight / 2 - (r.top + r.height / 2) * factor}px) scale(${factor})`;
+    sheet.innerHTML = layer(true);
+    if (source) sheet.append(source);
+    sheet.insertAdjacentHTML("beforeend", layer(false));
+    viewport.replaceChildren(sheet);
+  };
+  useEffect(() => {
+    updateDetailPreview.current();
+  }, [selection, zoom, doc]);
   const reflect = () => {
     const selected = (scene.current?.getActiveObjects() || []) as Item[];
     setSelection(selected);
@@ -945,7 +1007,7 @@ export default function FreeStudio({
       backgroundColor: "#ffffff",
       preserveObjectStacking: true,
       selectionColor: "#b8755915",
-      selectionBorderColor: "#b87559",
+      selectionBorderColor: "#b8755980",
       enableRetinaScaling: true,
     });
     scene.current = c;
@@ -981,6 +1043,7 @@ export default function FreeStudio({
           .join("");
         frontLayer.current.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 ${model.current.pages[activePage.current].width} ${model.current.pages[activePage.current].height}">${svg}</svg>`;
       }
+      updateDetailPreview.current();
       if (flowBase) {
         if (toolRef.current !== "select") {
           c.upperCanvasEl.style.clipPath = "";
@@ -1609,6 +1672,43 @@ export default function FreeStudio({
       <main
         className={`free-main ${mobilePanel === "canvas" ? "free-mobile-show" : ""}`}
       >
+        <div className="preview-toolbar free-preview-toolbar">
+          <div className="zoom-control">
+            <span>预览大小</span>
+            <input
+              type="range"
+              aria-label="预览缩放"
+              min="20"
+              max="200"
+              value={Math.round(zoom * 100)}
+              onChange={(e) => {
+                setAutoFit(false);
+                setZoom(Number(e.target.value) / 100);
+              }}
+            />
+            <button
+              title="适应可用宽度"
+              onClick={() => {
+                if (scroll.current)
+                  setZoom(
+                    Math.min(
+                      2,
+                      Math.max(
+                        0.2,
+                        (scroll.current.clientWidth - 72) / page.width,
+                      ),
+                    ),
+                  );
+                setAutoFit(previewZoom === undefined);
+              }}
+            >
+              {Math.round(zoom * 100)}%
+            </button>
+            <span className="page-count">
+              A4 · {model.current.pages.length} 页
+            </span>
+          </div>
+        </div>
         <div className="free-toolbar" role="toolbar" aria-label="自由画布工具">
           <Tool
             name="选择与编辑"
@@ -1943,6 +2043,23 @@ export default function FreeStudio({
           </h2>
         </div>
         <div className="free-side-scroll">
+          {selection.length > 0 && (
+            <details
+              className="free-detail-preview"
+              open
+              onToggle={() => updateDetailPreview.current()}
+            >
+              <summary>
+                局部预览 <span>2× · 无选框</span>
+              </summary>
+              <div
+                ref={detailPreview}
+                className="free-detail-viewport"
+                aria-hidden="true"
+                inert
+              />
+            </details>
+          )}
           {sourceSelection && flowBase ? (
             <SourceInspector
               selection={sourceSelection}

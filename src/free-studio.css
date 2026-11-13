@@ -675,3 +675,51 @@
     display: none;
   }
 }
+
+/* Keep zoom beside the preview in every editing mode. */
+.free-preview-toolbar {
+  flex: none;
+}
+.free-preview-toolbar .zoom-control {
+  width: 100%;
+  margin-bottom: 0;
+}
+.free-canvas-host .moveable-control-box {
+  --moveable-color: #b8755980;
+}
+.free-canvas-host .moveable-control {
+  opacity: 0.55;
+}
+.free-source-drag {
+  background: #a2664980;
+}
+.free-detail-preview {
+  margin-bottom: 16px;
+}
+.free-detail-preview summary {
+  cursor: pointer;
+  font-size: 13px;
+  padding-block: 4px 10px;
+}
+.free-detail-preview summary span {
+  float: right;
+  font-size: 11px;
+  color: #786c62;
+}
+.free-detail-viewport {
+  position: relative;
+  height: 160px;
+  overflow: hidden;
+  background: white;
+  border: 1px solid #ded8d1;
+  pointer-events: none;
+}
+.free-detail-viewport .resume-paper {
+  position: absolute;
+  inset: 0;
+}
+.free-detail-viewport .ink,
+.free-detail-viewport .paper-row {
+  outline: none !important;
+  box-shadow: none !important;
+}
