@@ -1844,10 +1844,6 @@ a {
   width: 180px;
   max-width: none;
 }
-.preview-spacer {
-  height: 12px;
-  flex: none;
-}
 .paper-row.selected {
   background: #edf0f280;
   outline: none;
@@ -2014,9 +2010,6 @@ a {
   }
 }
 @media print {
-  .preview-spacer {
-    display: none !important;
-  }
   .paper-row.selected,
   .paper-row:hover {
     background: none !important;
