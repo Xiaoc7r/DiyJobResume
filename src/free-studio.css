@@ -284,27 +284,6 @@
   right: 0;
   height: 1px;
 }
-.free-footer {
-  background: #f8f7f4;
-  border-top: 1px solid #ddd8d1;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 8px 12px;
-}
-.free-footer button,
-.free-footer select {
-  padding: 5px 7px;
-  font-size: 11px;
-}
-.free-pages,
-.free-zoom {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
 .free-properties-heading {
   padding: 18px;
   border-bottom: 1px solid #e4ded7;
@@ -383,17 +362,6 @@
 .free-page-actions button {
   font-size: 11px;
   padding: 8px;
-}
-.free-empty-selection {
-  color: #716256;
-  padding-block: 25px !important;
-}
-.free-empty-selection > svg {
-  margin-bottom: 13px;
-  color: #9b7059;
-}
-.free-empty-selection button {
-  font-size: 11px;
 }
 .free-object-list > div {
   display: flex;
@@ -709,4 +677,63 @@
 .free-detail-viewport .paper-row {
   outline: none !important;
   box-shadow: none !important;
+}
+
+.free-actions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.free-actions-list > button {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 10px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+  font-size: 12px;
+}
+.free-actions-list > button:hover:not(:disabled) {
+  background: #efe9e2;
+}
+.free-actions-list > button > svg {
+  flex: none;
+  color: #946449;
+}
+.free-actions-list > button.danger {
+  color: #a1443a;
+}
+.free-actions-list > button.danger > svg {
+  color: inherit;
+}
+.free-actions-list > button:disabled {
+  opacity: 0.4;
+}
+.free-actions-list > button > span {
+  min-width: 0;
+}
+.free-actions-list strong {
+  display: block;
+  font-weight: 500;
+}
+.free-actions-list small {
+  display: block;
+  margin-top: 5px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #75675b;
+}
+.free-page-selector {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+.free-page-selector select {
+  min-width: 100px;
+  padding: 6px;
 }

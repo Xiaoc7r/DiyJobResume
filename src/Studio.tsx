@@ -779,17 +779,19 @@ export default function Studio() {
     const target = docsRef.current.find((item) => item.id === id);
     if (target) activate(target, docsRef.current);
   };
-  const createDoc = (mode: "blank" | "copy") => {
+  const createDoc = (mode: "blank" | "copy", template = doc.template) => {
     flushSave();
     const items = docsRef.current,
       name = uniqueName(
         items.map((item) => item.name),
-        mode === "blank" ? "未命名简历" : `${doc.name || "简历"} 副本`,
+        mode === "blank"
+          ? template === "blank"
+            ? "空白简历"
+            : "未命名简历"
+          : `${doc.name || "简历"} 副本`,
       ),
       next =
-        mode === "blank"
-          ? blankResume(doc.template, name)
-          : cloneResume(doc, name),
+        mode === "blank" ? blankResume(template, name) : cloneResume(doc, name),
       entry: DocEntry = { id: uid(), name, updatedAt: Date.now(), doc: next };
     if (!activate(entry, [entry, ...items])) return;
     setNotice(`已新建「${name}」`);
@@ -2061,30 +2063,6 @@ export default function Studio() {
             )}
           </div>
 
-          <div className="header-history">
-            <button
-              className="icon-button"
-              title="撤销 Ctrl+Z"
-              aria-label="撤销"
-              disabled={mode !== "free" && !past.length}
-              onClick={() =>
-                mode === "free" ? freeApi.current?.undo() : undo()
-              }
-            >
-              <Undo2 size={18} />
-            </button>
-            <button
-              className="icon-button"
-              title="重做 Ctrl+Shift+Z"
-              aria-label="重做"
-              disabled={mode !== "free" && !future.length}
-              onClick={() =>
-                mode === "free" ? freeApi.current?.redo() : redo()
-              }
-            >
-              <Redo2 size={18} />
-            </button>
-          </div>
           <button
             className="header-mode"
             title={editorOpen ? "收起左侧编辑区，让纸张更宽" : "展开左侧编辑区"}
@@ -2336,11 +2314,6 @@ export default function Studio() {
                     </button>
                   </div>
                 </div>
-                <div className="editor-hint">
-                  {mode === "simple"
-                    ? "直接输入 · 选中文字设置格式 · 长按一行可以拖动排序"
-                    : "选中文字设置格式 · 支持一级至六级标题与列表"}
-                </div>
                 {mode === "md" ? (
                   <textarea
                     ref={mdRef}
@@ -2506,26 +2479,21 @@ export default function Studio() {
               />
               <div className="format-toolbar">
                 <button
-                  title="间距与字号"
-                  aria-label="间距与字号"
-                  onClick={() => setModal("type")}
+                  title="撤销 Ctrl+Z"
+                  aria-label="撤销"
+                  disabled={!past.length}
+                  onClick={undo}
                 >
-                  <SlidersHorizontal size={17} />
+                  <Undo2 size={17} />
                 </button>
-                <ColorControl
-                  label="正文"
-                  value={doc.settings.color}
-                  defaultValue="#171717"
-                  onChange={(color) => settings({ color })}
-                />
-                <ColorControl
-                  label="主题"
-                  value={doc.settings.accent}
-                  defaultValue={currentTemplate.color}
-                  presets
-                  onChange={(accent) => settings({ accent })}
-                />
-                <i />
+                <button
+                  title="重做 Ctrl+Shift+Z"
+                  aria-label="重做"
+                  disabled={!future.length}
+                  onClick={redo}
+                >
+                  <Redo2 size={17} />
+                </button>
                 <button
                   title="上传证件照"
                   aria-label="上传证件照"
@@ -2548,6 +2516,28 @@ export default function Studio() {
                   <Code2 size={19} />
                 </button>
                 <i />
+                <button
+                  title="间距与字号"
+                  aria-label="间距与字号"
+                  onClick={() => setModal("type")}
+                >
+                  <SlidersHorizontal size={17} />
+                </button>
+                <ColorControl
+                  label="正文"
+                  value={doc.settings.color}
+                  defaultValue="#171717"
+                  onChange={(color) => settings({ color })}
+                />
+                <ColorControl
+                  label="主题"
+                  value={doc.settings.accent}
+                  defaultValue={currentTemplate.color}
+                  presets
+                  onChange={(accent) => settings({ accent })}
+                />
+                <i />
+                <i />
                 <NumberField
                   label="上下"
                   value={doc.settings.top}
@@ -2560,17 +2550,6 @@ export default function Studio() {
                   min={12}
                   onChange={(n) => settings({ left: n, right: n })}
                 />
-                <select
-                  aria-label="简历字体"
-                  value={doc.settings.font}
-                  onChange={(e) =>
-                    settings({ font: e.target.value as Settings["font"] })
-                  }
-                >
-                  <option value="sans">Noto 黑体</option>
-                  <option value="serif">Noto 宋体</option>
-                  <option value="nunito">Nunito</option>
-                </select>
               </div>
             </div>
             <div className="preview-spacer" />
@@ -2737,7 +2716,9 @@ export default function Studio() {
                           key={t.id}
                           aria-label={"使用" + t.name + "模板"}
                           onClick={() =>
-                            historyUpdate(applyTemplate(doc, t.id))
+                            t.id === "blank"
+                              ? createDoc("blank", "blank")
+                              : historyUpdate(applyTemplate(doc, t.id))
                           }
                         >
                           <div
@@ -2746,21 +2727,25 @@ export default function Studio() {
                               { "--mini-accent": t.color } as CSSProperties
                             }
                           >
-                            <strong>炒肉多</strong>
-                            <small>138 0000 2468 | xxiaocr@gmail.com</small>
-                            {[
-                              "教育背景",
-                              "实习经历",
-                              "项目经历",
-                              "专业技能",
-                            ].map((s, i) => (
-                              <div key={s}>
-                                <b>{s}</b>
-                                <span />
-                                <span />
-                                <span className={i === 1 ? "long" : ""} />
-                              </div>
-                            ))}
+                            {t.id !== "blank" && (
+                              <>
+                                <strong>炒肉多</strong>
+                                <small>138 0000 2468 | xxiaocr@gmail.com</small>
+                                {[
+                                  "教育背景",
+                                  "实习经历",
+                                  "项目经历",
+                                  "专业技能",
+                                ].map((s, i) => (
+                                  <div key={s}>
+                                    <b>{s}</b>
+                                    <span />
+                                    <span />
+                                    <span className={i === 1 ? "long" : ""} />
+                                  </div>
+                                ))}
+                              </>
+                            )}
                           </div>
                           <div className="template-name">
                             {t.name}
@@ -2776,7 +2761,9 @@ export default function Studio() {
                           setNotice("已载入当前模板示例，可撤销回到原稿。");
                         }}
                       >
-                        载入当前模板示例
+                        {doc.template === "blank"
+                          ? "清空当前白板"
+                          : "载入当前模板示例"}
                       </button>
                       <p className="library-note">
                         已改写的内容会保留。载入示例可重新开始，也可撤销。
@@ -3240,6 +3227,20 @@ export default function Studio() {
                       />
                     ),
                   )}
+                  <label className="number-label">
+                    <span>字体</span>{" "}
+                    <select
+                      aria-label="简历字体"
+                      value={doc.settings.font}
+                      onChange={(e) =>
+                        settings({ font: e.target.value as Settings["font"] })
+                      }
+                    >
+                      <option value="sans">Noto 黑体</option>
+                      <option value="serif">Noto 宋体</option>
+                      <option value="nunito">Nunito</option>
+                    </select>
+                  </label>
                 </div>
                 <button className="primary" onClick={() => setModal(null)}>
                   完成调整

@@ -11,5 +11,5 @@ export const skillLines = [
   "熟练使用 Claude Code、Codex、Cursor 等工具，具备较强的 Prompt 编写与 AI Coding 能力。",
 ];
 export function demoFor(_template: Template) {
-  return source.trim();
+  return _template === "blank" ? "" : source.trim();
 }
