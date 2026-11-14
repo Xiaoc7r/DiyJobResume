@@ -413,28 +413,71 @@ a {
 .zoom-control {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
-  color: #86867e;
-  font-size: 11px;
+  justify-content: center;
+  gap: 10px;
+  width: min(100%, 520px);
+  margin: 0 auto 10px;
+  color: #655f58;
 }
-.zoom-control input {
-  padding: 0;
+.zoom-control input[type="range"] {
+  appearance: none;
+  -webkit-appearance: none;
   flex: 1;
   min-width: 40px;
-  height: 4px;
-  accent-color: #b87559;
+  height: 5px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: linear-gradient(
+    to right,
+    #817166 0 var(--zoom-fill),
+    #dedbd7 var(--zoom-fill) 100%
+  );
+  cursor: pointer;
+}
+.zoom-control input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 5px #34271d38;
+}
+.zoom-control input[type="range"]::-moz-range-thumb {
+  width: 17px;
+  height: 17px;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 5px #34271d38;
 }
 .zoom-control button {
-  font-size: 11px;
-  padding: 3px 6px;
-  min-width: 45px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 3px;
+  flex: none;
   border: 0;
+  border-radius: 6px;
   background: transparent;
-  color: #67675f;
+  color: #655f58;
 }
-.page-count {
-  white-space: nowrap;
+.zoom-control button:hover {
+  background: #ebe8e3;
+}
+.zoom-control button:disabled {
+  opacity: 0.35;
+}
+.zoom-control .zoom-value {
+  width: 52px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.zoom-control :focus-visible {
+  outline: 2px solid #ad7358;
+  outline-offset: 4px;
 }
 .format-toolbar {
   display: flex;
@@ -2070,39 +2113,6 @@ a {
   border-radius: 6px;
 }
 
-.density-control {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 12px;
-  color: #77736e;
-}
-.density-presets {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 7px;
-}
-.density-presets button {
-  padding: 10px 6px;
-  border: 1px solid #dedbd7;
-  border-radius: 7px;
-  text-align: left;
-}
-.density-presets button[aria-pressed="true"] {
-  background: #f4e9e2;
-  border-color: #b77b60;
-}
-.density-presets small {
-  display: block;
-  margin-top: 4px;
-  color: #756c65;
-  font-size: 11px;
-}
-.density-note {
-  font-size: 12px;
-  color: #756c65;
-  margin: 10px 0 18px;
-}
 .module-group .block-destination {
   font-size: 10px;
   margin-top: 6px;
@@ -2990,5 +3000,210 @@ a {
   }
   .header-actions {
     gap: 4px;
+  }
+}
+
+.theme-palette {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.theme-swatches {
+  display: grid;
+  grid-template-columns: repeat(6, 20px);
+  gap: 4px;
+}
+.theme-swatches button {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: white;
+}
+.theme-swatches button:hover {
+  transform: scale(1.12);
+}
+.theme-swatches button[aria-pressed="true"] {
+  outline: 1px solid #756456;
+  outline-offset: 2px;
+}
+.theme-swatches button:focus-visible {
+  outline: 2px solid #8f5e46;
+  outline-offset: 3px;
+}
+.crest-dialog {
+  width: min(540px, calc(100vw - 32px));
+  max-height: calc(100dvh - 40px);
+  padding: 28px;
+  border: 0;
+  border-radius: 16px;
+  background: #fbfaf8;
+  color: #302c28;
+  box-shadow: 0 18px 60px #28201835;
+  overflow-y: auto;
+}
+.crest-dialog::backdrop {
+  background: #211c1855;
+}
+.crest-dialog header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.crest-dialog header > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.crest-dialog header svg {
+  color: #a46b50;
+}
+.crest-dialog h2 {
+  margin: 0;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+}
+.crest-dialog header button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 4px;
+  border: 0;
+  background: transparent;
+}
+.crest-dialog .crest-intro {
+  color: #71665b;
+  font-size: 13px;
+  line-height: 1.7;
+  margin: 12px 0 22px;
+}
+.crest-dialog .crest-drop {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 190px;
+  padding: 20px;
+  border: 1px dashed #c9bbb0;
+  border-radius: 12px;
+  background: #f3f0eb;
+  color: #625548;
+}
+.crest-dialog .crest-drop:hover,
+.crest-dialog .crest-drop.dragging {
+  background: #eee5dc;
+  border-color: #a46b50;
+}
+.crest-drop img {
+  width: 84px;
+  height: 84px;
+  object-fit: contain;
+  margin-bottom: 6px;
+}
+.crest-drop strong {
+  font-size: 14px;
+  font-weight: 550;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.crest-drop span {
+  color: #76685a;
+  font-size: 12px;
+}
+.crest-dialog .crest-error {
+  color: #a03931;
+  font-size: 13px;
+}
+.crest-search {
+  margin-top: 24px;
+}
+.crest-search h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+.crest-search p {
+  color: #71665b;
+  font-size: 12px;
+  line-height: 1.7;
+  margin: 0 0 12px;
+}
+.crest-search > div {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+.crest-query {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 10px;
+  border: 1px solid #d4cdc5;
+  border-radius: 6px;
+  background: white;
+  color: #71665b;
+}
+.crest-query input {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 9px 8px 9px 0;
+  font-size: 13px;
+}
+.crest-search a {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #eee6df;
+  color: #835338;
+  text-decoration: none;
+  font-size: 13px;
+}
+.crest-search a:hover {
+  background: #e6d9cf;
+}
+.crest-search small {
+  display: block;
+  margin-top: 10px;
+  color: #796d60;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.crest-dialog footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 26px;
+}
+.crest-dialog button:focus-visible,
+.crest-dialog a:focus-visible {
+  outline: 2px solid #a46b50;
+  outline-offset: 3px;
+}
+@media (max-width: 600px) {
+  .crest-dialog {
+    padding: 20px;
+  }
+  .crest-dialog h2 {
+    font-size: 20px;
+  }
+  .theme-swatches {
+    grid-template-columns: repeat(6, 18px);
+  }
+  .theme-swatches button {
+    width: 18px;
+    height: 18px;
   }
 }

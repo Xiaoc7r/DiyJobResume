@@ -65,6 +65,9 @@ import { lineHtml, editableText, fonts, rowStyle } from "./render";
 import { SelectionTools, paragraphOptions } from "./SelectionTools";
 import { withColumns } from "./formatting";
 import { NumericInput, holdDrag } from "./interaction";
+import { PreviewZoom } from "./PreviewZoom";
+import { ThemePalette } from "./ThemePalette";
+import { CrestDialog } from "./CrestDialog";
 
 import {
   blankResume,
@@ -75,14 +78,8 @@ import {
 } from "./docs";
 import type { DocEntry } from "./docs";
 import { CustomCss, compileCustomCss } from "./CustomCss";
-import {
-  densities,
-  applyDensity,
-  activeDensity,
-  checkContent,
-  checkRendered,
-} from "./productTools";
-import type { Density, ExportIssue } from "./productTools";
+import { checkContent, checkRendered } from "./productTools";
+import type { ExportIssue } from "./productTools";
 import { ExportReview } from "./ExportReview";
 import { AgentPanel } from "./AgentPanel";
 import type { FreeStudioApi } from "./FreeStudio";
@@ -489,6 +486,7 @@ export default function Studio() {
     [flash, setFlash] = useState("");
   const [panelPosition, setPanelPosition] = useState({ x: 16, y: 82 });
   const [cssOpen, setCssOpen] = useState(false);
+  const [crestOpen, setCrestOpen] = useState(false);
   const [contactOpen, setContactOpen] = useState(false);
   const [exportIssues, setExportIssues] = useState<ExportIssue[] | null>(null);
   const [exportBusy, setExportBusy] = useState(false);
@@ -833,7 +831,7 @@ export default function Studio() {
   }, []);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
-      if (mode === "free") return;
+      if (mode === "free" || crestOpen) return;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
         e.preventDefault();
         if (e.shiftKey) redo();
@@ -2526,51 +2524,15 @@ export default function Studio() {
             className={`preview-panel ${mobile === "preview" ? "mobile-active" : ""}`}
           >
             <div className="preview-toolbar">
-              <div className="zoom-control">
-                <span>预览大小</span>
-                <input
-                  type="range"
-                  aria-label="预览缩放"
-                  min="20"
-                  max="200"
-                  value={Math.round(zoom * 100)}
-                  onChange={(e) => {
-                    setAutoZoom(false);
-                    setZoom(Number(e.target.value) / 100);
-                  }}
-                />
-                <button title="自动适应窗口" onClick={() => setAutoZoom(true)}>
-                  {Math.round(zoom * 100)}%
-                </button>
-                <span className="page-count">A4 · {pages.length} 页</span>
-              </div>
+              <PreviewZoom
+                value={zoom}
+                onChange={(value) => {
+                  setAutoZoom(false);
+                  setZoom(value);
+                }}
+                onFit={() => setAutoZoom(true)}
+              />
               <div className="format-toolbar">
-                <label className="density-control">
-                  <span>密度</span>
-                  <select
-                    aria-label="排版密度"
-                    value={activeDensity(doc.settings)}
-                    title="只调整行距、段距和上下留白，保留文字与字号"
-                    onChange={(e) =>
-                      historyUpdate({
-                        ...ref.current,
-                        settings: applyDensity(
-                          ref.current.settings,
-                          e.target.value as Density,
-                        ),
-                      })
-                    }
-                  >
-                    <option value="custom" disabled>
-                      自定义
-                    </option>
-                    {densities.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
                 <button
                   title="间距与字号"
                   aria-label="间距与字号"
@@ -2587,15 +2549,10 @@ export default function Studio() {
                     onChange={(e) => settings({ color: e.target.value })}
                   />
                 </label>
-                <label title="主题颜色" className="color-control">
-                  <span>主题</span>
-                  <input
-                    type="color"
-                    aria-label="主题颜色"
-                    value={doc.settings.accent}
-                    onChange={(e) => settings({ accent: e.target.value })}
-                  />
-                </label>
+                <ThemePalette
+                  value={doc.settings.accent}
+                  onChange={(accent) => settings({ accent })}
+                />
                 <i />
                 <button
                   title="上传证件照"
@@ -2610,10 +2567,7 @@ export default function Studio() {
                 <button
                   title="上传校徽"
                   aria-label="上传校徽"
-                  onClick={() => {
-                    setImageKind("校徽");
-                    imageRef.current?.click();
-                  }}
+                  onClick={() => setCrestOpen(true)}
                 >
                   <GraduationCap size={19} />
                 </button>
@@ -3177,6 +3131,40 @@ export default function Studio() {
           }}
         />
       )}
+      {crestOpen && (
+        <CrestDialog
+          current={doc.pictures.find((p) => p.label.includes("校徽"))?.src}
+          onClose={() => setCrestOpen(false)}
+          onConfirm={(src) => {
+            const current = ref.current,
+              crest = current.pictures.find((p) => p.label.includes("校徽"));
+            if (!crest && current.pictures.length >= 10)
+              throw new Error(
+                "一份简历最多放置 10 张图片，请先移除不需要的图片。",
+              );
+            historyUpdate({
+              ...current,
+              pictures: crest
+                ? current.pictures.map((p) =>
+                    p.id === crest.id ? { ...p, src } : p,
+                  )
+                : [
+                    ...current.pictures,
+                    {
+                      id: uid(),
+                      label: "校徽",
+                      src,
+                      page: 0,
+                      x: 42,
+                      y: 20,
+                      w: 60,
+                      h: 60,
+                    },
+                  ],
+            });
+          }}
+        />
+      )}
       {modal && (
         <div
           className={`modal-backdrop ${modal === "type" ? "type-backdrop" : ""}`}
@@ -3232,26 +3220,6 @@ export default function Studio() {
             </div>
             {modal === "type" ? (
               <>
-                <div className="density-presets" aria-label="密度预设">
-                  {densities.map((p) => (
-                    <button
-                      key={p.id}
-                      aria-pressed={activeDensity(doc.settings) === p.id}
-                      onClick={() =>
-                        historyUpdate({
-                          ...ref.current,
-                          settings: applyDensity(ref.current.settings, p.id),
-                        })
-                      }
-                    >
-                      <strong>{p.name}</strong>
-                      <small>{p.hint}</small>
-                    </button>
-                  ))}
-                </div>
-                <p className="density-note">
-                  保留文字与字号，只调整留白和行距。可继续微调，也可撤销。
-                </p>
                 <div className="type-grid">
                   <span>内容类型</span>
                   <span>上间距</span>

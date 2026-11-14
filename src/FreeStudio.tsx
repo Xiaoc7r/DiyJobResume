@@ -79,6 +79,7 @@ import {
   Pencil,
 } from "lucide-react";
 import { NumericInput } from "./interaction";
+import { PreviewZoom } from "./PreviewZoom";
 import "./freeScene";
 import { SourceInspector } from "./SourceInspector";
 import type { SourceSelection } from "./SourceInspector";
@@ -1673,41 +1674,26 @@ export default function FreeStudio({
         className={`free-main ${mobilePanel === "canvas" ? "free-mobile-show" : ""}`}
       >
         <div className="preview-toolbar free-preview-toolbar">
-          <div className="zoom-control">
-            <span>预览大小</span>
-            <input
-              type="range"
-              aria-label="预览缩放"
-              min="20"
-              max="200"
-              value={Math.round(zoom * 100)}
-              onChange={(e) => {
-                setAutoFit(false);
-                setZoom(Number(e.target.value) / 100);
-              }}
-            />
-            <button
-              title="适应可用宽度"
-              onClick={() => {
-                if (scroll.current)
-                  setZoom(
-                    Math.min(
-                      2,
-                      Math.max(
-                        0.2,
-                        (scroll.current.clientWidth - 72) / page.width,
-                      ),
+          <PreviewZoom
+            value={zoom}
+            onChange={(value) => {
+              setAutoFit(false);
+              setZoom(value);
+            }}
+            onFit={() => {
+              if (scroll.current)
+                setZoom(
+                  Math.min(
+                    2,
+                    Math.max(
+                      0.2,
+                      (scroll.current.clientWidth - 72) / page.width,
                     ),
-                  );
-                setAutoFit(previewZoom === undefined);
-              }}
-            >
-              {Math.round(zoom * 100)}%
-            </button>
-            <span className="page-count">
-              A4 · {model.current.pages.length} 页
-            </span>
-          </div>
+                  ),
+                );
+              setAutoFit(previewZoom === undefined);
+            }}
+          />
         </div>
         <div className="free-toolbar" role="toolbar" aria-label="自由画布工具">
           <Tool
