@@ -55,7 +55,7 @@ test("all original chips and geometry survive a round trip without being convert
   await expect(page.locator(".free-source-paper .resume-paper")).toBeVisible();
   const free = await tagGeometry(page);
   expect(free).toEqual(before);
-  await page.getByRole("tab", { name: "Markdown .md", exact: true }).click();
+  await page.getByRole("tab", { name: "Markdown", exact: true }).click();
   expect(await tagGeometry(page)).toEqual(before);
   await page.getByRole("tab", { name: "简单编辑", exact: true }).click();
   expect(await tagGeometry(page)).toEqual(before);
@@ -177,7 +177,7 @@ test("source text pixels and layout survive switching while entry icons become e
   await expect(page.locator(".free-source-paper")).toBeVisible();
   const free = await capture("free");
   await sameSourcePixels(before, free);
-  await page.getByRole("tab", { name: "Markdown .md", exact: true }).click();
+  await page.getByRole("tab", { name: "Markdown", exact: true }).click();
   await sameSourcePixels(before, await capture("markdown"));
 });
 
@@ -236,7 +236,7 @@ test("editing source text and chip styling in free mode remains editable in Mark
   await page.getByLabel("原稿边框宽度", { exact: true }).fill("2");
   await page.getByLabel("标签圆角", { exact: true }).fill("8");
   await page.getByLabel("标签内边距", { exact: true }).fill("4");
-  await page.getByRole("tab", { name: "Markdown .md", exact: true }).click();
+  await page.getByRole("tab", { name: "Markdown", exact: true }).click();
   const chip = page.locator(".resume-paper code").filter({ hasText: "985" });
   await expect(chip).toHaveCSS("border-radius", "8px");
   await expect(chip).toHaveCSS("border-width", "2px");
@@ -274,7 +274,7 @@ test("new icons and background rectangles remain visible through mode changes an
   await expect(
     page.locator(".resume-paper .free-layer-background svg"),
   ).toHaveCount(1);
-  await page.getByRole("tab", { name: "Markdown .md", exact: true }).click();
+  await page.getByRole("tab", { name: "Markdown", exact: true }).click();
   await expect(page.locator(".free-layer-background rect")).toHaveCount(1);
   await expect(page.getByRole("status").first()).toContainText("已保存");
   await page.reload();
@@ -426,9 +426,15 @@ test("mobile users can enter free mode, add an icon and return with source intac
     docs: el.querySelector(".doc-switch")!.getBoundingClientRect().left,
     docsRight: el.querySelector(".doc-switch")!.getBoundingClientRect().right,
     actions: el.querySelector(".header-actions")!.getBoundingClientRect().left,
+    actionsTop: el.querySelector(".header-actions")!.getBoundingClientRect()
+      .top,
+    docsBottom: el.querySelector(".doc-switch")!.getBoundingClientRect().bottom,
   }));
   expect(header.brand).toBeLessThanOrEqual(header.docs);
-  expect(header.docsRight).toBeLessThanOrEqual(header.actions);
+  expect(
+    header.docsRight <= header.actions ||
+      header.docsBottom <= header.actionsTop,
+  ).toBe(true);
   await page.screenshot({ path: testInfo.outputPath("mobile-free.png") });
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth),
@@ -530,7 +536,7 @@ test("typing directly in the original paper edits the same source in every mode"
 }) => {
   await page.getByRole("tab", { name: "自由模式", exact: true }).click();
   await page.locator(".free-source-paper .row-name").fill("原稿直接编辑");
-  await page.getByRole("tab", { name: "Markdown .md", exact: true }).click();
+  await page.getByRole("tab", { name: "Markdown", exact: true }).click();
   expect(
     await page.getByLabel("Markdown 简历内容", { exact: true }).inputValue(),
   ).toContain("# 原稿直接编辑");

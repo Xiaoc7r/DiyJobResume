@@ -325,7 +325,7 @@ describe("free editor actions in a Node DOM", () => {
       e.saved().pages[0].canvas.objects.filter((o) => o.type === "Textbox")
         .length,
     ).toBeGreaterThan(1);
-    await click(e.container, "Markdown .md");
+    await click(e.container, "Markdown");
     expect(e.onMode).toHaveBeenCalledWith("md");
     readFreeDocument(e.saved());
   });

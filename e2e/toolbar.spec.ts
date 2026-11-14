@@ -94,7 +94,7 @@ test("compact shared zoom, direct theme colors, and staged crest replacement", a
   await expect(page.getByText("预览大小", { exact: true })).toHaveCount(0);
   await expect(page.locator(".page-count")).toHaveCount(0);
   await page.getByRole("button", { name: "缩小预览", exact: true }).click();
-  await page.getByRole("tab", { name: "Markdown .md", exact: true }).click();
+  await page.getByRole("tab", { name: "Markdown", exact: true }).click();
   await expect(page.getByLabel("预览缩放", { exact: true })).toHaveValue("130");
   await page.getByRole("button", { name: "上传校徽", exact: true }).click();
   await page.keyboard.press("Escape");
