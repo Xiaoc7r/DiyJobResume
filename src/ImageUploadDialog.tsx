@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { X, Upload, GraduationCap, ArrowUpRight, Search } from "lucide-react";
+import { X, GraduationCap, ArrowUpRight, UserRound } from "lucide-react";
 
-export function CrestDialog({
+export function ImageUploadDialog({
+  kind,
   current,
   onClose,
   onConfirm,
 }: {
+  kind: "证件照" | "校徽";
   current?: string;
   onClose: () => void;
   onConfirm: (src: string) => void;
@@ -17,8 +19,7 @@ export function CrestDialog({
     [name, setName] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
-    [dragging, setDragging] = useState(false),
-    [school, setSchool] = useState("");
+    [dragging, setDragging] = useState(false);
   useEffect(() => {
     dialog.current?.showModal();
     return () => {
@@ -64,11 +65,20 @@ export function CrestDialog({
   return (
     <dialog
       ref={dialog}
-      className="crest-dialog"
-      aria-labelledby="crest-title"
+      className={`image-upload-dialog ${kind === "证件照" ? "is-photo" : "is-crest"}`}
+      aria-label={`上传${kind}`}
       onCancel={(e) => {
         e.preventDefault();
         onClose();
+      }}
+      onPaste={(e) => {
+        const item = [...e.clipboardData.items].find((item) =>
+          item.type.startsWith("image/"),
+        );
+        if (item) {
+          e.preventDefault();
+          void load(item.getAsFile() || undefined);
+        }
       }}
       onClose={onClose}
       onClick={(e) => {
@@ -86,21 +96,17 @@ export function CrestDialog({
     >
       <header>
         <div>
-          <GraduationCap size={23} />
-          <h2 id="crest-title">为简历添上校徽</h2>
+          <h2>上传{kind}</h2>
         </div>
         <button
           type="button"
           autoFocus
-          aria-label="关闭校徽窗口"
+          aria-label={`关闭${kind}窗口`}
           onClick={onClose}
         >
           <X size={20} />
         </button>
       </header>
-      <p className="crest-intro">
-        选择清晰的校徽，原图比例会保留。确认后可在纸上移动、缩放。
-      </p>
       <button
         type="button"
         className={`crest-drop ${dragging ? "dragging" : ""}`}
@@ -118,20 +124,22 @@ export function CrestDialog({
         }}
       >
         {src || current ? (
-          <img src={src || current} alt="校徽预览" />
+          <img src={src || current} alt={`${kind}预览`} />
+        ) : kind === "证件照" ? (
+          <UserRound size={36} />
         ) : (
-          <Upload size={30} />
+          <GraduationCap size={36} />
         )}
         <strong>
-          {busy ? "正在读取图片…" : src ? name : "选择校徽文件，或拖到这里"}
+          {busy ? "正在读取图片…" : src ? name : `选择${kind}或拖入`}
         </strong>
-        <span>{src ? "点击可重新选择" : "PNG / JPG / WebP · 最大 1.5 MB"}</span>
+        <span>{src ? "重新选择" : "PNG · JPG · WebP · 1.5 MB"}</span>
       </button>
       <input
         ref={input}
         hidden
         type="file"
-        aria-label="校徽文件"
+        aria-label={`${kind}文件`}
         accept="image/png,image/jpeg,image/webp"
         onChange={(e) => {
           void load(e.target.files?.[0]);
@@ -143,52 +151,40 @@ export function CrestDialog({
           {error}
         </p>
       )}
-      <section className="crest-search">
-        <h3>还没有校徽？</h3>
-        <p>到维基共享资源查找，保存合适的图片后回到这里上传。</p>
-        <div>
-          <label className="crest-query">
-            <Search size={16} />
-            <input
-              aria-label="搜索学校名称"
-              placeholder="输入学校名称"
-              value={school}
-              maxLength={100}
-              onChange={(e) => setSchool(e.target.value)}
-            />
-          </label>
+      <footer>
+        {kind === "校徽" && (
           <a
-            href={`https://commons.wikimedia.org/wiki/Special:MediaSearch?type=image&search=${encodeURIComponent((school.trim() || "university") + " logo")}`}
+            className="crest-library-link"
+            href="https://www.urongda.com/logos"
             target="_blank"
             rel="noopener noreferrer"
           >
             查找校徽
-            <ArrowUpRight size={15} />
+            <ArrowUpRight size={14} />
           </a>
+        )}
+        <div>
+          <button type="button" onClick={onClose}>
+            取消
+          </button>
+          <button
+            type="button"
+            className="primary"
+            disabled={!src || busy}
+            onClick={() => {
+              try {
+                onConfirm(src);
+                onClose();
+              } catch (e) {
+                setError(
+                  e instanceof Error ? e.message : `${kind}添加失败，请重试。`,
+                );
+              }
+            }}
+          >
+            确认添加
+          </button>
         </div>
-        <small>公益媒体图库 · 在新页面打开 · 图片授权请以图源页面为准</small>
-      </section>
-      <footer>
-        <button type="button" onClick={onClose}>
-          取消
-        </button>
-        <button
-          type="button"
-          className="primary"
-          disabled={!src || busy}
-          onClick={() => {
-            try {
-              onConfirm(src);
-              onClose();
-            } catch (e) {
-              setError(
-                e instanceof Error ? e.message : "校徽添加失败，请重试。",
-              );
-            }
-          }}
-        >
-          使用这张校徽
-        </button>
       </footer>
     </dialog>
   );
