@@ -1770,125 +1770,137 @@ export default function FreeStudio({
                     2,
                     Math.max(
                       0.2,
-                      (scroll.current.clientWidth - 72) / page.width,
+                      (scroll.current.clientWidth -
+                        parseFloat(
+                          getComputedStyle(scroll.current).paddingLeft,
+                        ) -
+                        parseFloat(
+                          getComputedStyle(scroll.current).paddingRight,
+                        ) -
+                        2) /
+                        page.width,
                     ),
                   ),
                 );
               setAutoFit(previewZoom === undefined);
             }}
           />
-        </div>
-        <div className="free-toolbar" role="toolbar" aria-label="自由画布工具">
-          <Tool
-            name="选择与编辑"
-            pressed={tool === "select"}
-            onClick={() => setTool("select")}
+          <div
+            className="format-toolbar free-toolbar"
+            role="toolbar"
+            aria-label="自由画布工具"
           >
-            <MousePointer2 size={17} />
-          </Tool>
-          <Tool
-            name="手绘线条"
-            pressed={tool === "draw"}
-            onClick={() => setTool("draw")}
-          >
-            <Pencil size={17} />
-          </Tool>
-          <Tool
-            name="拖动画布"
-            pressed={tool === "hand"}
-            onClick={() => setTool("hand")}
-          >
-            <Hand size={17} />
-          </Tool>
-          <i />
-          <Tool
-            name="自由模式撤销"
-            disabled={
-              (flowBase && onUndo ? !canUndo : cursor.current < 1) || busy
-            }
-            onClick={() => {
-              void travel(-1);
-            }}
-          >
-            <Undo2 size={17} />
-          </Tool>
-          <Tool
-            name="自由模式重做"
-            disabled={
-              (flowBase && onRedo
-                ? !canRedo
-                : cursor.current >= history.current.length - 1) || busy
-            }
-            onClick={() => {
-              void travel(1);
-            }}
-          >
-            <Redo2 size={17} />
-          </Tool>
-          <i />
-          <Tool
-            name="复制选中元素"
-            disabled={!selection.length || busy}
-            onClick={() => {
-              void copy(true);
-            }}
-          >
-            <Copy size={17} />
-          </Tool>
-          <Tool
-            name="删除选中元素"
-            disabled={!selection.length || busy}
-            onClick={remove}
-          >
-            <Trash2 size={17} />
-          </Tool>
-          <Tool
-            name="组合 Ctrl+G"
-            disabled={selection.length < 2 || busy}
-            onClick={groupSelection}
-          >
-            <GroupIcon size={17} />
-          </Tool>
-          <Tool
-            name="解组 Ctrl+Shift+G"
-            disabled={!(one instanceof Group) || busy}
-            onClick={ungroup}
-          >
-            <Ungroup size={17} />
-          </Tool>
-          <i />
-          <label className="free-check">
-            <input
-              type="checkbox"
-              checked={snap}
-              onChange={(e) => setSnap(e.target.checked)}
-            />
-            吸附
-          </label>
-          <label className="free-check">
-            <input
-              type="checkbox"
-              checked={grid}
-              onChange={(e) => setGrid(e.target.checked)}
-            />
-            网格
-          </label>
-          <Tool name="自由模式使用帮助" onClick={() => setHelp((v) => !v)}>
-            <HelpCircle size={17} />
-          </Tool>
-          {onRestore && (
-            <button
-              className="free-restore"
-              title="恢复首次进入自由模式前的排版，保留文字内容；可以撤销"
+            <Tool
+              name="选择与编辑"
+              pressed={tool === "select"}
+              onClick={() => setTool("select")}
+            >
+              <MousePointer2 size={17} />
+            </Tool>
+            <Tool
+              name="手绘线条"
+              pressed={tool === "draw"}
+              onClick={() => setTool("draw")}
+            >
+              <Pencil size={17} />
+            </Tool>
+            <Tool
+              name="拖动画布"
+              pressed={tool === "hand"}
+              onClick={() => setTool("hand")}
+            >
+              <Hand size={17} />
+            </Tool>
+            <i />
+            <Tool
+              name="自由模式撤销"
+              disabled={
+                (flowBase && onUndo ? !canUndo : cursor.current < 1) || busy
+              }
               onClick={() => {
-                commit();
-                onRestore();
+                void travel(-1);
               }}
             >
-              <RotateCcw size={15} />
-              恢复原排版
-            </button>
-          )}
+              <Undo2 size={17} />
+            </Tool>
+            <Tool
+              name="自由模式重做"
+              disabled={
+                (flowBase && onRedo
+                  ? !canRedo
+                  : cursor.current >= history.current.length - 1) || busy
+              }
+              onClick={() => {
+                void travel(1);
+              }}
+            >
+              <Redo2 size={17} />
+            </Tool>
+            <i />
+            <Tool
+              name="复制选中元素"
+              disabled={!selection.length || busy}
+              onClick={() => {
+                void copy(true);
+              }}
+            >
+              <Copy size={17} />
+            </Tool>
+            <Tool
+              name="删除选中元素"
+              disabled={!selection.length || busy}
+              onClick={remove}
+            >
+              <Trash2 size={17} />
+            </Tool>
+            <Tool
+              name="组合 Ctrl+G"
+              disabled={selection.length < 2 || busy}
+              onClick={groupSelection}
+            >
+              <GroupIcon size={17} />
+            </Tool>
+            <Tool
+              name="解组 Ctrl+Shift+G"
+              disabled={!(one instanceof Group) || busy}
+              onClick={ungroup}
+            >
+              <Ungroup size={17} />
+            </Tool>
+            <i />
+            <label className="free-check">
+              <input
+                type="checkbox"
+                checked={snap}
+                onChange={(e) => setSnap(e.target.checked)}
+              />
+              吸附
+            </label>
+            <label className="free-check">
+              <input
+                type="checkbox"
+                checked={grid}
+                onChange={(e) => setGrid(e.target.checked)}
+              />
+              网格
+            </label>
+            <Tool name="自由模式使用帮助" onClick={() => setHelp((v) => !v)}>
+              <HelpCircle size={17} />
+            </Tool>
+            {onRestore && (
+              <button
+                className="free-restore"
+                title="恢复首次进入自由模式前的排版，保留文字内容；可以撤销"
+                onClick={() => {
+                  commit();
+                  onRestore();
+                }}
+              >
+                <RotateCcw size={15} />
+                恢复原排版
+              </button>
+            )}
+          </div>
         </div>
         {error && (
           <div className="free-message" role="alert">

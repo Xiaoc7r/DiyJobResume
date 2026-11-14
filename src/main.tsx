@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./Studio";
 import "./studio.css";
+import "./editor-chrome.css";
 import "@fontsource/noto-sans-sc/400.css";
 import "@fontsource/noto-sans-sc/700.css";
 import "@fontsource/noto-serif-sc/400.css";

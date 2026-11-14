@@ -2811,7 +2811,6 @@ export default function Studio() {
                 />
               </div>
             </div>
-            <div className="preview-spacer" />
             {preview && (
               <div className="preview-banner" role="status">
                 <span>
@@ -2990,7 +2989,7 @@ export default function Studio() {
                         </div>
                         <section className="module-group">
                           <button
-                            className="custom-module"
+                            className="custom-section"
                             onMouseEnter={() =>
                               previewModule(
                                 "自定义板块",
@@ -3026,7 +3025,7 @@ export default function Studio() {
                             }
                             title="单击固定预览 · 双击加入"
                           >
-                            <Plus size={15} />
+                            <Plus size={18} />
                             添加自定义板块
                           </button>
                           <h3>个人信息 · 表头形式</h3>

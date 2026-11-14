@@ -451,9 +451,6 @@
 .free-mode .header-mode {
   display: none;
 }
-.free-mode .app-header {
-  gap: 16px;
-}
 .free-source-banner {
   display: flex;
   flex-wrap: wrap;
@@ -755,10 +752,8 @@
   gap: 8px;
 }
 .free-upload-primary {
-  grid-column: 1 / -1;
-  background: #f1e6dc !important;
-  border-color: #c79775 !important;
-  padding-block: 14px !important;
+  background: #f5efe9;
+  border-color: #d7bba5;
 }
 @media (min-width: 901px) {
   .free-studio {

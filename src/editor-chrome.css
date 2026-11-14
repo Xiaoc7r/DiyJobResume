@@ -1,0 +1,161 @@
+/* Shared editor chrome: mode changes keep the same toolbar and paper origin. */
+.studio {
+  --scroll-thumb: #c7c0b8;
+  --scroll-hover: #a49a8f;
+}
+.studio.is-dark {
+  --scroll-thumb: #625f58;
+  --scroll-hover: #817a6e;
+}
+.studio,
+.studio *,
+.studio .free-side-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) transparent;
+}
+.studio ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.studio ::-webkit-scrollbar-track,
+.studio ::-webkit-scrollbar-corner {
+  background: transparent;
+}
+.studio ::-webkit-scrollbar-thumb {
+  border-radius: 8px;
+  background: var(--scroll-thumb);
+}
+.studio ::-webkit-scrollbar-thumb:hover {
+  background: var(--scroll-hover);
+}
+.studio ::-webkit-scrollbar-button {
+  display: none;
+}
+
+.studio .markdown-numbers {
+  width: calc(3ch + 9px);
+  font-size: 11px;
+  border: 0;
+  background: transparent;
+  font-variant-numeric: tabular-nums;
+}
+.studio .markdown-numbers > div {
+  padding-right: 5px;
+}
+.studio .markdown-pane .markdown-editor {
+  padding-left: 8px;
+}
+
+/* The draggable hit area remains available without occupying a visible rail. */
+.studio .panel-resizer {
+  position: relative;
+  width: 0;
+  border: 0;
+  background: transparent;
+}
+.studio .panel-resizer > svg {
+  display: none;
+}
+.studio .panel-resizer::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 -3px;
+  width: 6px;
+}
+.studio .panel-resizer:hover::after,
+.studio .panel-resizer:focus-visible::after {
+  background: #b87559;
+}
+
+.studio .preview-toolbar {
+  padding: 12px 20px;
+  container-type: inline-size;
+}
+.studio .preview-toolbar .zoom-control {
+  min-height: 28px;
+  margin-bottom: 10px;
+}
+.studio .format-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  align-content: center;
+  gap: 6px;
+  min-height: 30px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.studio .format-toolbar > button {
+  min-height: 28px;
+  padding: 5px;
+  flex: none;
+}
+.studio .format-toolbar > i {
+  flex: none;
+  height: 18px;
+  margin: 0 2px;
+}
+.studio .format-toolbar :is(.number-label input, select) {
+  height: 28px;
+}
+.studio .free-check {
+  margin-inline: 2px;
+}
+@container (max-width: 640px) {
+  .studio .format-toolbar {
+    min-height: 64px;
+  }
+}
+@container (max-width: 360px) {
+  .studio .format-toolbar {
+    min-height: 98px;
+  }
+}
+.studio :is(.paper-workspace, .free-canvas-scroll) {
+  padding: 28px 32px 60px;
+  scrollbar-gutter: stable;
+}
+.studio .free-page-label {
+  top: -19px;
+  font-size: 9px;
+}
+
+.studio .module-group .custom-section {
+  justify-content: flex-start;
+  gap: 9px;
+  min-height: 42px;
+  margin: 0;
+  padding: 11px 12px;
+  border: 1px solid #e4e0d9;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 500;
+}
+.studio .module-group .custom-section:hover {
+  border-color: #ba9b83;
+  background: #f5efe9;
+}
+.studio.is-dark .module-group .custom-section {
+  background: #302f2b;
+  border-color: #4c4942;
+}
+.studio.is-dark .module-group .custom-section:hover {
+  background: #41392f;
+  border-color: #9b7960;
+}
+@media (max-width: 700px) {
+  .studio .preview-toolbar {
+    padding-inline: 12px;
+  }
+  .studio :is(.paper-workspace, .free-canvas-scroll) {
+    padding-inline: 22px;
+  }
+}
+
+.studio .current-style {
+  background: transparent;
+  padding: 0 0 12px;
+}
