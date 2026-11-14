@@ -65,3 +65,27 @@ export function textRangeOf(root: HTMLElement, start: number, end: number) {
   range.setEnd(endNode, endOffset);
   return range;
 }
+
+// Resolve selections whose boundaries can be the editing host itself (Ctrl+A).
+export function selectedRows(range: Range, root: ParentNode, selector: string) {
+  return [...root.querySelectorAll<HTMLElement>(selector)].filter((row) =>
+    range.intersectsNode(row),
+  );
+}
+export function outsideSelection(
+  range: Range,
+  first: HTMLElement,
+  last: HTMLElement,
+) {
+  const prefix = document.createRange(),
+    suffix = document.createRange();
+  prefix.selectNodeContents(first);
+  suffix.selectNodeContents(last);
+  if (first.contains(range.startContainer))
+    prefix.setEnd(range.startContainer, range.startOffset);
+  else prefix.collapse(true);
+  if (last.contains(range.endContainer))
+    suffix.setStart(range.endContainer, range.endOffset);
+  else suffix.collapse(false);
+  return { prefix: prefix.cloneContents(), suffix: suffix.cloneContents() };
+}

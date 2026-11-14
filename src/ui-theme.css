@@ -1,0 +1,305 @@
+/* Interface theme only. Resume sheets and exported pages keep their own colors. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+:root[data-theme="dark"] body {
+  background: #1b1b19;
+}
+.studio.is-dark {
+  color: #e1dcd4;
+  background: #1b1b19;
+}
+.studio.is-dark
+  :is(
+    .app-header,
+    .editor-panel,
+    .library-panel,
+    .editor-heading,
+    .library-heading,
+    .preview-toolbar,
+    .free-left,
+    .free-right,
+    .free-toolbar,
+    .free-properties-heading,
+    .agent-panel,
+    .agent-head,
+    .agent-setup,
+    .agent-tabs,
+    .agent-paste,
+    .agent-side,
+    .mobile-nav,
+    .free-mobile-nav,
+    .free-help
+  ) {
+  background: #252522;
+  color: #e1dcd4;
+  border-color: #45443e;
+}
+.studio.is-dark
+  :is(.preview-panel, .paper-workspace, .free-main, .free-canvas-scroll) {
+  background: #1c1d1a;
+}
+.studio.is-dark
+  :is(
+    .brand > span,
+    .library-heading h2,
+    .free-side-scroll h3,
+    .free-properties-heading h2,
+    .doc-menu-head,
+    .modal h2
+  ) {
+  color: #eee8df;
+}
+.studio.is-dark
+  :is(
+    .brand small,
+    .save-state,
+    .color-control,
+    .number-label,
+    .page-caption,
+    .free-page-label,
+    .free-side-scroll p,
+    .free-actions-list small,
+    .agent-paste-hint,
+    .icon-button
+  ) {
+  color: #b3aca1;
+}
+.studio.is-dark
+  :is(
+    .doc-menu,
+    .file-menu,
+    .contact-popover,
+    .modal,
+    .block-menu,
+    .selection-tools,
+    .free-confirm-backdrop section
+  ) {
+  background: #2c2b27;
+  color: #e3ddd4;
+  border-color: #4c4940;
+}
+.studio.is-dark
+  :is(
+    .app-header,
+    .editor-panel,
+    .library-panel,
+    .preview-toolbar,
+    .free-left,
+    .free-right,
+    .free-toolbar,
+    .agent-panel,
+    .agent-tabs,
+    .agent-paste,
+    .modal,
+    .selection-tools,
+    .file-menu,
+    .doc-menu
+  )
+  :is(input, textarea, select) {
+  background-color: #302f2b;
+  color: #e5e0d7;
+  border-color: #4e4a42;
+}
+.studio.is-dark
+  :is(
+    .app-header,
+    .editor-panel,
+    .library-panel,
+    .preview-toolbar,
+    .free-left,
+    .free-right,
+    .free-toolbar,
+    .agent-panel,
+    .agent-tabs,
+    .agent-paste,
+    .modal,
+    .selection-tools,
+    .mobile-nav,
+    .free-mobile-nav
+  )
+  button:not(.primary):not(.color-trigger):not(.icon-button) {
+  background-color: #302f2b;
+  color: #ded8cd;
+  border-color: #4c4942;
+}
+.studio.is-dark :is(.mode-tabs, .free-library-tabs, .library-tabs) {
+  background: #34322c;
+  border-color: #45433b;
+}
+.studio.is-dark
+  :is(
+    .mode-tabs button[aria-selected="true"],
+    .library-tabs button[aria-selected="true"],
+    .free-library-tabs button[aria-pressed="true"],
+    .free-toolbar button[aria-pressed="true"],
+    .agent-tabs button.active
+  ) {
+  background: #4a3a30;
+  color: #f1c7aa;
+}
+.studio.is-dark
+  :is(
+    .template-card,
+    .module-group button,
+    .custom-module,
+    .free-inserts button,
+    .free-object-list > div,
+    .agent-config,
+    .agent-plan,
+    .agent-message
+  ) {
+  background: #2d2c27;
+  border-color: #4c4941;
+  color: #ddd6cb;
+}
+.studio.is-dark
+  :is(
+    .template-card.active,
+    .edit-field.active,
+    .edit-field:hover,
+    .free-object-list > div.selected
+  ) {
+  background: #3a332c;
+}
+.studio.is-dark
+  :is(
+    .free-actions-list > button:hover:not(:disabled),
+    .format-toolbar > button:hover,
+    .zoom-control button:hover
+  ) {
+  background: #3c3830;
+}
+.studio.is-dark
+  :is(.template-card p, .doc-list small, .agent-plan p, .module-group small) {
+  color: #bcb2a5;
+}
+.studio.is-dark .simple-input {
+  color: #e5dfd5;
+}
+.studio.is-dark .simple-input a {
+  color: #d6a483;
+}
+.studio.is-dark .simple-input code {
+  background: #454139;
+  color: #e3d9cc;
+}
+.studio.is-dark .field-section {
+  border-color: #514b41;
+}
+.studio.is-dark .markdown-editor {
+  background: #252522;
+  color: #ddd5c7;
+  caret-color: #e1ae88;
+}
+.studio.is-dark .markdown-numbers {
+  background: #22231f;
+  color: #a39b8d;
+  border-color: #3b3b34;
+}
+.studio.is-dark .zoom-control {
+  color: #c0b5a5;
+}
+.studio.is-dark .zoom-control input[type="range"] {
+  background: linear-gradient(
+    to right,
+    #ad886f 0 var(--zoom-fill),
+    #4c4940 var(--zoom-fill) 100%
+  );
+}
+.studio.is-dark .free-side-scroll section {
+  border-color: #48433b;
+}
+.studio.is-dark .free-upload-primary {
+  background: #46372d !important;
+  border-color: #9f7456 !important;
+}
+.studio.is-dark .mini-paper {
+  background: white;
+  color: #171717;
+  color-scheme: light;
+}
+.studio.is-dark .mini-paper :is(strong, small) {
+  color: #171717;
+}
+.studio.is-dark .free-loading-state {
+  background: #24231f;
+  color: #dfb394;
+}
+.studio.is-dark .free-loading-state.is-overlay {
+  background: #24231fee;
+}
+.studio.is-dark .loading-caption {
+  color: #c0ad9b;
+}
+.studio.is-dark .header-actions .agent-mode[aria-pressed="true"],
+.studio.is-dark .theme-toggle[aria-pressed="true"] {
+  color: #e8b58d;
+}
+html[data-theme="dark"] :is(.color-popover, .image-upload-dialog) {
+  background: #2b2a26;
+  color: #ece5da;
+}
+html[data-theme="dark"] :is(.color-popover, .image-upload-dialog) input {
+  background: #3b3932;
+  color: #eee7dc;
+  border-color: #62594c;
+}
+html[data-theme="dark"] .color-popover footer button {
+  color: #e0b38f;
+}
+html[data-theme="dark"] .image-upload-dialog header button {
+  background: #454038;
+  color: #ded3c3;
+}
+html[data-theme="dark"] .image-upload-dialog .crest-drop {
+  background: #36342d;
+  border-color: #786a59;
+  color: #e0c5ae;
+}
+html[data-theme="dark"] .image-upload-dialog .crest-drop span {
+  color: #c5b6a5;
+}
+html[data-theme="dark"] .crest-library-link {
+  color: #e2b089;
+}
+:is(.resume-paper, .free-print-page) {
+  color-scheme: light;
+}
+@media print {
+  :root[data-theme="dark"] {
+    color-scheme: light;
+  }
+}
+
+.studio.is-dark .free-icons span,
+.studio.is-dark .free-side-scroll label {
+  color: #bcb2a5;
+}
+
+.studio.is-dark .icon-button:hover {
+  background: #41392f;
+  color: #f0c29f;
+}
+.studio.is-dark
+  :is(
+    .agent-sub,
+    .agent-skip,
+    .agent-empty,
+    .agent-setup label,
+    .agent-plan ul
+  ) {
+  color: #bcb2a5;
+}
+.studio.is-dark :is(.agent-msg.assistant, .agent-done) {
+  background: #32382f;
+  color: #ddd9ce;
+}
+.studio.is-dark .agent-msg.user {
+  background: #44392d;
+  color: #ece0d1;
+}
+.studio.is-dark :is(.mobile-nav button.active, .free-mobile-nav button.active) {
+  background: #4a3a30;
+  color: #f1c7aa;
+}

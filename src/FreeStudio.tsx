@@ -76,6 +76,14 @@ import {
   Search,
   ArrowRight,
   Pencil,
+  PanelLeft,
+  PanelRight,
+  MessagesSquare,
+  MessageCircle,
+  Send,
+  Linkedin,
+  CalendarDays,
+  FolderOpen,
 } from "lucide-react";
 import { NumericInput } from "./interaction";
 import { FreeLoading } from "./FreeLoading";
@@ -108,6 +116,13 @@ interface Props {
   onChange: (data: FreeDocument) => void;
   onMode: (mode: "simple" | "md") => void;
   onRebuild?: () => void;
+  leftOpen?: boolean;
+  rightOpen?: boolean;
+  onCloseLeft?: () => void;
+  onCloseRight?: () => void;
+  onOpenLeft?: () => void;
+  onOpenRight?: () => void;
+  rightPanel?: ReactNode;
   onResizeLeft?: (event: ReactPointerEvent) => void;
   onNudgeLeft?: (delta: number) => void;
   renderPaper?: (
@@ -155,6 +170,12 @@ const iconSet = {
   星标: Star,
   搜索: Search,
   箭头: ArrowRight,
+  微信: MessagesSquare,
+  QQ: MessageCircle,
+  Telegram: Send,
+  LinkedIn: Linkedin,
+  日历: CalendarDays,
+  作品集: FolderOpen,
 };
 const cloneData = <T,>(data: T): T => structuredClone(data);
 const isText = (o?: FabricObject | null): o is Textbox => o instanceof IText;
@@ -199,6 +220,13 @@ export default function FreeStudio({
   apiRef,
   onChange,
   onMode,
+  leftOpen = true,
+  rightOpen = true,
+  onCloseLeft,
+  onCloseRight,
+  onOpenLeft,
+  onOpenRight,
+  rightPanel,
   renderPaper,
   previewZoom,
   fitPreview,
@@ -272,6 +300,16 @@ export default function FreeStudio({
     [mobilePanel, setMobilePanel] = useState<
       "canvas" | "insert" | "properties"
     >("canvas");
+  const hasAssistant = !!rightPanel;
+  useEffect(() => {
+    if (hasAssistant) setMobilePanel("properties");
+  }, [hasAssistant]);
+  const openState = useRef({ left: leftOpen, right: rightOpen });
+  useEffect(() => {
+    if (leftOpen && !openState.current.left) setMobilePanel("insert");
+    if (rightOpen && !openState.current.right) setMobilePanel("properties");
+    openState.current = { left: leftOpen, right: rightOpen };
+  }, [leftOpen, rightOpen]);
   const [keepRatio, setKeepRatio] = useState(true);
   const [grid, setGrid] = useState(true),
     [snap, setSnap] = useState(true),
@@ -1367,327 +1405,350 @@ export default function FreeStudio({
   });
   void revision;
   return (
-    <div className={`free-studio ${printing ? "is-printing" : ""}`}>
-      <aside
-        className={`free-left ${mobilePanel === "insert" ? "free-mobile-show" : ""}`}
-      >
-        <div className="editor-heading">
-          <div className="mode-tabs" role="tablist" aria-label="编辑方式">
+    <div
+      className={`free-studio ${printing ? "is-printing" : ""}`}
+      data-panel={mobilePanel}
+      style={
+        {
+          "--free-left-width": leftOpen ? "var(--editor-width, 300px)" : "0px",
+          "--free-right-width": rightOpen ? "248px" : "0px",
+        } as CSSProperties
+      }
+    >
+      {leftOpen && (
+        <aside
+          className={`free-left ${mobilePanel === "insert" ? "free-mobile-show" : ""}`}
+        >
+          <div className="editor-heading">
+            <div className="mode-tabs" role="tablist" aria-label="编辑方式">
+              <button
+                role="tab"
+                aria-selected={false}
+                onClick={() => {
+                  commit();
+                  onMode("simple");
+                }}
+              >
+                简单编辑
+              </button>
+              <button
+                role="tab"
+                aria-selected={false}
+                onClick={() => {
+                  commit();
+                  onMode("md");
+                }}
+              >
+                Markdown
+              </button>
+              <button role="tab" aria-selected={true}>
+                自由模式
+              </button>
+            </div>
+            {onCloseLeft && (
+              <button
+                className="icon-button"
+                aria-label="收起编辑区"
+                title="收起编辑区"
+                onClick={onCloseLeft}
+              >
+                <PanelLeft size={16} />
+              </button>
+            )}
+          </div>
+          <div className="free-library-tabs">
             <button
-              role="tab"
-              aria-selected={false}
-              onClick={() => {
-                commit();
-                onMode("simple");
-              }}
+              aria-pressed={leftTab === "insert"}
+              onClick={() => setLeftTab("insert")}
             >
-              简单编辑
+              添加元素
             </button>
             <button
-              role="tab"
-              aria-selected={false}
-              onClick={() => {
-                commit();
-                onMode("md");
-              }}
+              aria-pressed={leftTab === "objects"}
+              onClick={() => setLeftTab("objects")}
             >
-              Markdown <span>.md</span>
-            </button>
-            <button role="tab" aria-selected={true}>
-              自由模式
+              画布元素 <span>{objects.length}</span>
             </button>
           </div>
-        </div>
-        <div className="free-library-tabs">
-          <button
-            aria-pressed={leftTab === "insert"}
-            onClick={() => setLeftTab("insert")}
-          >
-            添加元素
-          </button>
-          <button
-            aria-pressed={leftTab === "objects"}
-            onClick={() => setLeftTab("objects")}
-          >
-            画布元素 <span>{objects.length}</span>
-          </button>
-        </div>
-        <div className="free-side-scroll">
-          {leftTab === "insert" ? (
-            <>
-              <section>
-                <h3>文字与板块</h3>
-                <div className="free-inserts">
-                  <button disabled={busy} onClick={() => insertText()}>
-                    <Type size={19} />
-                    <span>文字</span>
-                  </button>
-                  <button
-                    disabled={busy}
-                    onClick={() => insertText("板块标题", 22)}
-                  >
-                    <Type size={23} />
-                    <span>标题</span>
-                  </button>
-                  <button disabled={busy} onClick={() => insertBlock(false)}>
-                    <BriefcaseBusiness size={19} />
-                    <span>经历板块</span>
-                  </button>
-                  <button disabled={busy} onClick={() => insertBlock(true)}>
-                    <Grid2X2 size={19} />
-                    <span>双栏板块</span>
-                  </button>
-                </div>
-              </section>
-              <section>
-                <h3>图片与图形</h3>
-                <div className="free-inserts">
-                  <button
-                    disabled={busy}
-                    onClick={() => imageInput.current?.click()}
-                  >
-                    <ImagePlus size={19} />
-                    <span>上传图片</span>
-                  </button>
-                  <button
-                    disabled={busy}
-                    onClick={() =>
-                      add(
-                        [
-                          new Rect({
-                            ...base,
-                            left: 60,
-                            top: 80,
-                            width: 180,
-                            height: 80,
-                            fill: "#edf2f7",
-                            stroke: doc.settings.accent,
-                            strokeWidth: 1,
-                          }),
-                        ],
-                        "矩形",
-                      )
-                    }
-                  >
-                    <Square size={19} />
-                    <span>矩形</span>
-                  </button>
-                  <button
-                    disabled={busy}
-                    onClick={() =>
-                      add(
-                        [
-                          new Circle({
-                            ...base,
-                            left: 60,
-                            top: 80,
-                            radius: 42,
-                            fill: "#edf2f7",
-                            stroke: doc.settings.accent,
-                            strokeWidth: 1,
-                          }),
-                        ],
-                        "圆形",
-                      )
-                    }
-                  >
-                    <CircleIcon size={19} />
-                    <span>圆形</span>
-                  </button>
-                  <button
-                    disabled={busy}
-                    onClick={() =>
-                      add(
-                        [
-                          new Triangle({
-                            ...base,
-                            left: 60,
-                            top: 80,
-                            width: 80,
-                            height: 70,
-                            fill: doc.settings.accent,
-                          }),
-                        ],
-                        "三角形",
-                      )
-                    }
-                  >
-                    <Shapes size={19} />
-                    <span>三角形</span>
-                  </button>
-                  <button
-                    disabled={busy}
-                    onClick={() =>
-                      add(
-                        [
-                          new FabricLine(
-                            [0, 0, Math.min(450, page.width - 100), 0],
-                            {
+          <div className="free-side-scroll">
+            {leftTab === "insert" ? (
+              <>
+                <section>
+                  <h3>文字与板块</h3>
+                  <div className="free-inserts">
+                    <button disabled={busy} onClick={() => insertText()}>
+                      <Type size={19} />
+                      <span>文字</span>
+                    </button>
+                    <button
+                      disabled={busy}
+                      onClick={() => insertText("板块标题", 22)}
+                    >
+                      <Type size={23} />
+                      <span>标题</span>
+                    </button>
+                    <button disabled={busy} onClick={() => insertBlock(false)}>
+                      <BriefcaseBusiness size={19} />
+                      <span>经历板块</span>
+                    </button>
+                    <button disabled={busy} onClick={() => insertBlock(true)}>
+                      <Grid2X2 size={19} />
+                      <span>双栏板块</span>
+                    </button>
+                  </div>
+                </section>
+                <section>
+                  <h3>图片与图形</h3>
+                  <div className="free-inserts">
+                    <button
+                      className="free-upload-primary"
+                      disabled={busy}
+                      onClick={() => imageInput.current?.click()}
+                    >
+                      <ImagePlus size={19} />
+                      <span>上传图片</span>
+                    </button>
+                    <button
+                      disabled={busy}
+                      onClick={() =>
+                        add(
+                          [
+                            new Rect({
+                              ...base,
+                              left: 60,
+                              top: 80,
+                              width: 180,
+                              height: 80,
+                              fill: "#edf2f7",
+                              stroke: doc.settings.accent,
+                              strokeWidth: 1,
+                            }),
+                          ],
+                          "矩形",
+                        )
+                      }
+                    >
+                      <Square size={19} />
+                      <span>矩形</span>
+                    </button>
+                    <button
+                      disabled={busy}
+                      onClick={() =>
+                        add(
+                          [
+                            new Circle({
+                              ...base,
+                              left: 60,
+                              top: 80,
+                              radius: 42,
+                              fill: "#edf2f7",
+                              stroke: doc.settings.accent,
+                              strokeWidth: 1,
+                            }),
+                          ],
+                          "圆形",
+                        )
+                      }
+                    >
+                      <CircleIcon size={19} />
+                      <span>圆形</span>
+                    </button>
+                    <button
+                      disabled={busy}
+                      onClick={() =>
+                        add(
+                          [
+                            new Triangle({
+                              ...base,
+                              left: 60,
+                              top: 80,
+                              width: 80,
+                              height: 70,
+                              fill: doc.settings.accent,
+                            }),
+                          ],
+                          "三角形",
+                        )
+                      }
+                    >
+                      <Shapes size={19} />
+                      <span>三角形</span>
+                    </button>
+                    <button
+                      disabled={busy}
+                      onClick={() =>
+                        add(
+                          [
+                            new FabricLine(
+                              [0, 0, Math.min(450, page.width - 100), 0],
+                              {
+                                ...base,
+                                left: 50,
+                                top: 100,
+                                stroke: doc.settings.accent,
+                                strokeWidth: 1,
+                              },
+                            ),
+                          ],
+                          "分隔线",
+                        )
+                      }
+                    >
+                      <Minus size={19} />
+                      <span>分隔线</span>
+                    </button>
+                    <button
+                      disabled={busy}
+                      onClick={() =>
+                        add(
+                          [
+                            new Rect({
                               ...base,
                               left: 50,
                               top: 100,
-                              stroke: doc.settings.accent,
-                              strokeWidth: 1,
-                            },
-                          ),
-                        ],
-                        "分隔线",
-                      )
-                    }
-                  >
-                    <Minus size={19} />
-                    <span>分隔线</span>
-                  </button>
-                  <button
-                    disabled={busy}
-                    onClick={() =>
-                      add(
-                        [
-                          new Rect({
-                            ...base,
-                            left: 50,
-                            top: 100,
-                            width: Math.min(450, page.width - 100),
-                            height: 35,
-                            fill: doc.settings.accent,
-                            rx: 4,
-                            ry: 4,
-                          }),
-                        ],
-                        "标题色带",
-                      )
-                    }
-                  >
-                    <Square size={19} fill="currentColor" />
-                    <span>标题色带</span>
-                  </button>
-                </div>
-              </section>
-              <section>
-                <h3>常用图标</h3>
-                <div className="free-icons">
-                  {Object.entries(iconSet).map(([name, Icon]) => (
-                    <button
-                      key={name}
-                      title={name}
-                      aria-label={`插入${name}图标`}
-                      disabled={busy}
-                      onClick={() => {
-                        void insertIcon(name as keyof typeof iconSet).catch(
-                          () => setError("图标未能添加，请重试。"),
-                        );
-                      }}
+                              width: Math.min(450, page.width - 100),
+                              height: 35,
+                              fill: doc.settings.accent,
+                              rx: 4,
+                              ry: 4,
+                            }),
+                          ],
+                          "标题色带",
+                        )
+                      }
                     >
-                      <Icon size={20} />
-                      <span>{name}</span>
+                      <Square size={19} fill="currentColor" />
+                      <span>标题色带</span>
                     </button>
+                  </div>
+                </section>
+                <section>
+                  <h3>常用图标</h3>
+                  <div className="free-icons">
+                    {Object.entries(iconSet).map(([name, Icon]) => (
+                      <button
+                        key={name}
+                        title={name}
+                        aria-label={`插入${name}图标`}
+                        disabled={busy}
+                        onClick={() => {
+                          void insertIcon(name as keyof typeof iconSet).catch(
+                            () => setError("图标未能添加，请重试。"),
+                          );
+                        }}
+                      >
+                        <Icon size={20} />
+                        <span>{name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+                <section>
+                  <h3>表格</h3>
+                  <div className="free-table-size">
+                    <NumericInput
+                      label="表格行数"
+                      value={tableRows}
+                      min={1}
+                      max={12}
+                      onChange={setTableRows}
+                    />
+                    <span>行 ×</span>
+                    <NumericInput
+                      label="表格列数"
+                      value={tableCols}
+                      min={1}
+                      max={6}
+                      onChange={setTableCols}
+                    />
+                    <span>列</span>
+                    <button disabled={busy} onClick={insertTable}>
+                      插入
+                    </button>
+                  </div>
+                  <p>组合可整体移动，解组后可分别编辑文字和单元格。</p>
+                </section>
+              </>
+            ) : (
+              <section>
+                <h3>当前页元素</h3>
+                <p>点击定位；锁定可防止误拖，隐藏的元素不参与导出。</p>
+                <div className="free-object-list">
+                  {[...objects].reverse().map((o, i) => (
+                    <div
+                      key={o.id || i}
+                      className={selection.includes(o) ? "selected" : ""}
+                    >
+                      <button
+                        className="free-object-name"
+                        onClick={() => {
+                          scene.current?.discardActiveObject();
+                          scene.current?.setActiveObject(o);
+                          scene.current?.requestRenderAll();
+                          reflect();
+                          setMobilePanel("properties");
+                        }}
+                      >
+                        {isText(o) ? <Type size={14} /> : <Shapes size={14} />}
+                        <span>
+                          {o.label ||
+                            (isText(o) ? o.text.slice(0, 20) : "元素")}
+                        </span>
+                      </button>
+                      <Tool
+                        name={o.visible ? "隐藏元素" : "显示元素"}
+                        onClick={() =>
+                          withScene(() => {
+                            o.visible = !o.visible;
+                          })
+                        }
+                      >
+                        {o.visible ? <Eye size={13} /> : <EyeOff size={13} />}
+                      </Tool>
+                      <Tool
+                        name={o.lockMovementX ? "解锁元素" : "锁定元素"}
+                        onClick={() =>
+                          withScene(() => {
+                            const lock = !o.lockMovementX;
+                            o.set({
+                              lockMovementX: lock,
+                              lockMovementY: lock,
+                              lockScalingX: lock,
+                              lockScalingY: lock,
+                              lockRotation: lock,
+                              hasControls: !lock,
+                            });
+                          })
+                        }
+                      >
+                        {o.lockMovementX ? (
+                          <Lock size={13} />
+                        ) : (
+                          <Unlock size={13} />
+                        )}
+                      </Tool>
+                    </div>
                   ))}
                 </div>
               </section>
-              <section>
-                <h3>表格</h3>
-                <div className="free-table-size">
-                  <NumericInput
-                    label="表格行数"
-                    value={tableRows}
-                    min={1}
-                    max={12}
-                    onChange={setTableRows}
-                  />
-                  <span>行 ×</span>
-                  <NumericInput
-                    label="表格列数"
-                    value={tableCols}
-                    min={1}
-                    max={6}
-                    onChange={setTableCols}
-                  />
-                  <span>列</span>
-                  <button disabled={busy} onClick={insertTable}>
-                    插入
-                  </button>
-                </div>
-                <p>组合可整体移动，解组后可分别编辑文字和单元格。</p>
-              </section>
-            </>
-          ) : (
-            <section>
-              <h3>当前页元素</h3>
-              <p>点击定位；锁定可防止误拖，隐藏的元素不参与导出。</p>
-              <div className="free-object-list">
-                {[...objects].reverse().map((o, i) => (
-                  <div
-                    key={o.id || i}
-                    className={selection.includes(o) ? "selected" : ""}
-                  >
-                    <button
-                      className="free-object-name"
-                      onClick={() => {
-                        scene.current?.discardActiveObject();
-                        scene.current?.setActiveObject(o);
-                        scene.current?.requestRenderAll();
-                        reflect();
-                        setMobilePanel("properties");
-                      }}
-                    >
-                      {isText(o) ? <Type size={14} /> : <Shapes size={14} />}
-                      <span>
-                        {o.label || (isText(o) ? o.text.slice(0, 20) : "元素")}
-                      </span>
-                    </button>
-                    <Tool
-                      name={o.visible ? "隐藏元素" : "显示元素"}
-                      onClick={() =>
-                        withScene(() => {
-                          o.visible = !o.visible;
-                        })
-                      }
-                    >
-                      {o.visible ? <Eye size={13} /> : <EyeOff size={13} />}
-                    </Tool>
-                    <Tool
-                      name={o.lockMovementX ? "解锁元素" : "锁定元素"}
-                      onClick={() =>
-                        withScene(() => {
-                          const lock = !o.lockMovementX;
-                          o.set({
-                            lockMovementX: lock,
-                            lockMovementY: lock,
-                            lockScalingX: lock,
-                            lockScalingY: lock,
-                            lockRotation: lock,
-                            hasControls: !lock,
-                          });
-                        })
-                      }
-                    >
-                      {o.lockMovementX ? (
-                        <Lock size={13} />
-                      ) : (
-                        <Unlock size={13} />
-                      )}
-                    </Tool>
-                  </div>
-                ))}
-              </div>
-            </section>
+            )}
+          </div>
+          {onResizeLeft && (
+            <div
+              className="free-left-resizer"
+              role="separator"
+              aria-label="调整编辑区宽度"
+              aria-orientation="vertical"
+              tabIndex={0}
+              onPointerDown={onResizeLeft}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowLeft") onNudgeLeft?.(-20);
+                if (e.key === "ArrowRight") onNudgeLeft?.(20);
+              }}
+            />
           )}
-        </div>
-        {onResizeLeft && (
-          <div
-            className="free-left-resizer"
-            role="separator"
-            aria-label="调整编辑区宽度"
-            aria-orientation="vertical"
-            tabIndex={0}
-            onPointerDown={onResizeLeft}
-            onKeyDown={(e) => {
-              if (e.key === "ArrowLeft") onNudgeLeft?.(-20);
-              if (e.key === "ArrowRight") onNudgeLeft?.(20);
-            }}
-          />
-        )}
-      </aside>
+        </aside>
+      )}
       <main
         className={`free-main ${mobilePanel === "canvas" ? "free-mobile-show" : ""}`}
       >
@@ -1935,789 +1996,827 @@ export default function FreeStudio({
           {busy && <FreeLoading overlay />}
         </div>
       </main>
-      <aside
-        className={`free-right ${mobilePanel === "properties" ? "free-mobile-show" : ""}`}
-      >
-        <div className="free-properties-heading">
-          <h2>
-            {selection.length
-              ? selection.length > 1
-                ? `已选择 ${selection.length} 个元素`
-                : text
-                  ? "文字设置"
-                  : one instanceof FabricImage
-                    ? "图片设置"
-                    : "元素设置"
-              : "画布设置"}
-          </h2>
-        </div>
-        <div className="free-side-scroll">
-          {selection.length > 0 && (
-            <details
-              className="free-detail-preview"
-              open
-              onToggle={() => updateDetailPreview.current()}
-            >
-              <summary>
-                局部预览 <span>2× · 无选框</span>
-              </summary>
-              <div
-                ref={detailPreview}
-                className="free-detail-viewport"
-                aria-hidden="true"
-                inert
-              />
-            </details>
-          )}
-          {sourceSelection && flowBase ? (
-            <SourceInspector
-              selection={sourceSelection}
-              container={host.current}
-              line={doc.lines.find((l) => l.id === sourceSelection.id)}
-              design={
-                sourceSelection.tag !== undefined
-                  ? model.current.sourceDesign?.[sourceSelection.id]?.tags?.[
-                      sourceSelection.tag
-                    ] || {}
-                  : model.current.sourceDesign?.[sourceSelection.id] || {}
-              }
-              onChange={setSourceDesign}
-              onFrame={(patch) => setSourceDesign(patch, true)}
-              onText={(value) => onSourceText?.(sourceSelection.id, value)}
-            />
-          ) : selection.length ? (
-            <>
-              <section>
-                <h3>位置与尺寸</h3>
-                {one ? (
-                  <div className="free-property-grid">
-                    {(["left", "top", "width", "height", "angle"] as const).map(
-                      (key, i) => (
-                        <label key={key}>
-                          <span>
-                            {
-                              ["X 位置", "Y 位置", "宽度", "高度", "旋转角度"][
-                                i
-                              ]
-                            }
-                          </span>
-                          <NumericInput
-                            label={
-                              [
-                                "元素 X 位置",
-                                "元素 Y 位置",
-                                "元素宽度",
-                                "元素高度",
-                                "元素旋转角度",
-                              ][i]
-                            }
-                            value={
-                              Math.round(
-                                (key === "width"
-                                  ? one.getScaledWidth()
-                                  : key === "height"
-                                    ? one.getScaledHeight()
-                                    : one[key]) * 10,
-                              ) / 10
-                            }
-                            min={
-                              key === "width" || key === "height" ? 1 : -5000
-                            }
-                            max={5000}
-                            step={1}
-                            onChange={(n) =>
-                              withScene(() => {
-                                if (key === "width") {
-                                  if (isText(one))
-                                    one.set({ width: n / one.scaleX });
-                                  else {
-                                    const next = n / Math.max(1, one.width);
+      {rightOpen &&
+        (rightPanel || (
+          <aside
+            className={`free-right ${mobilePanel === "properties" ? "free-mobile-show" : ""}`}
+          >
+            <div className="free-properties-heading">
+              <h2>
+                {selection.length
+                  ? selection.length > 1
+                    ? `已选择 ${selection.length} 个元素`
+                    : text
+                      ? "文字设置"
+                      : one instanceof FabricImage
+                        ? "图片设置"
+                        : "元素设置"
+                  : "画布设置"}
+              </h2>
+              {onCloseRight && (
+                <button
+                  className="icon-button"
+                  aria-label="收起样式面板"
+                  title="收起样式面板"
+                  onClick={onCloseRight}
+                >
+                  <PanelRight size={16} />
+                </button>
+              )}
+            </div>
+            <div className="free-side-scroll">
+              {selection.length > 0 && (
+                <details
+                  className="free-detail-preview"
+                  open
+                  onToggle={() => updateDetailPreview.current()}
+                >
+                  <summary>
+                    局部预览 <span>2× · 无选框</span>
+                  </summary>
+                  <div
+                    ref={detailPreview}
+                    className="free-detail-viewport"
+                    aria-hidden="true"
+                    inert
+                  />
+                </details>
+              )}
+              {sourceSelection && flowBase ? (
+                <SourceInspector
+                  selection={sourceSelection}
+                  container={host.current}
+                  line={doc.lines.find((l) => l.id === sourceSelection.id)}
+                  design={
+                    sourceSelection.tag !== undefined
+                      ? model.current.sourceDesign?.[sourceSelection.id]
+                          ?.tags?.[sourceSelection.tag] || {}
+                      : model.current.sourceDesign?.[sourceSelection.id] || {}
+                  }
+                  onChange={setSourceDesign}
+                  onFrame={(patch) => setSourceDesign(patch, true)}
+                  onText={(value) => onSourceText?.(sourceSelection.id, value)}
+                />
+              ) : selection.length ? (
+                <>
+                  <section>
+                    <h3>位置与尺寸</h3>
+                    {one ? (
+                      <div className="free-property-grid">
+                        {(
+                          ["left", "top", "width", "height", "angle"] as const
+                        ).map((key, i) => (
+                          <label key={key}>
+                            <span>
+                              {
+                                [
+                                  "X 位置",
+                                  "Y 位置",
+                                  "宽度",
+                                  "高度",
+                                  "旋转角度",
+                                ][i]
+                              }
+                            </span>
+                            <NumericInput
+                              label={
+                                [
+                                  "元素 X 位置",
+                                  "元素 Y 位置",
+                                  "元素宽度",
+                                  "元素高度",
+                                  "元素旋转角度",
+                                ][i]
+                              }
+                              value={
+                                Math.round(
+                                  (key === "width"
+                                    ? one.getScaledWidth()
+                                    : key === "height"
+                                      ? one.getScaledHeight()
+                                      : one[key]) * 10,
+                                ) / 10
+                              }
+                              min={
+                                key === "width" || key === "height" ? 1 : -5000
+                              }
+                              max={5000}
+                              step={1}
+                              onChange={(n) =>
+                                withScene(() => {
+                                  if (key === "width") {
+                                    if (isText(one))
+                                      one.set({ width: n / one.scaleX });
+                                    else {
+                                      const next = n / Math.max(1, one.width);
+                                      one.set({
+                                        scaleX: next,
+                                        ...(keepRatio
+                                          ? {
+                                              scaleY:
+                                                (one.scaleY * next) /
+                                                one.scaleX,
+                                            }
+                                          : {}),
+                                      });
+                                    }
+                                  } else if (key === "height") {
+                                    const next = n / Math.max(1, one.height);
                                     one.set({
-                                      scaleX: next,
+                                      scaleY: next,
                                       ...(keepRatio
                                         ? {
-                                            scaleY:
-                                              (one.scaleY * next) / one.scaleX,
+                                            scaleX:
+                                              (one.scaleX * next) / one.scaleY,
                                           }
                                         : {}),
                                     });
-                                  }
-                                } else if (key === "height") {
-                                  const next = n / Math.max(1, one.height);
-                                  one.set({
-                                    scaleY: next,
-                                    ...(keepRatio
-                                      ? {
-                                          scaleX:
-                                            (one.scaleX * next) / one.scaleY,
-                                        }
-                                      : {}),
+                                  } else one.set({ [key]: n });
+                                })
+                              }
+                            />
+                          </label>
+                        ))}
+                      </div>
+                    ) : (
+                      <p>多选时使用下方对齐、分布和组合操作。</p>
+                    )}
+                    <label className="free-check">
+                      <input
+                        type="checkbox"
+                        checked={keepRatio}
+                        onChange={(e) => setKeepRatio(e.target.checked)}
+                      />
+                      调整尺寸时锁定比例
+                    </label>
+                  </section>
+                  {text && (
+                    <section>
+                      <h3>文字</h3>
+                      <label className="free-full-label">
+                        内容
+                        <textarea
+                          aria-label="自由元素文字内容"
+                          value={text.text}
+                          onChange={(e) =>
+                            patch({
+                              text: e.target.value,
+                              label: e.target.value.slice(0, 24),
+                            })
+                          }
+                        />
+                      </label>
+                      <div className="free-text-tools">
+                        <Tool
+                          name="加粗"
+                          pressed={textWeight === 700 || textWeight === "bold"}
+                          onClick={() =>
+                            patch({
+                              fontWeight:
+                                textWeight === 700 || textWeight === "bold"
+                                  ? 400
+                                  : 700,
+                            })
+                          }
+                        >
+                          <Bold size={16} />
+                        </Tool>
+                        <Tool
+                          name="斜体"
+                          pressed={textItalic}
+                          onClick={() =>
+                            patch({
+                              fontStyle: textItalic ? "normal" : "italic",
+                            })
+                          }
+                        >
+                          <Italic size={16} />
+                        </Tool>
+                        <Tool
+                          name="下划线"
+                          pressed={textUnderline}
+                          onClick={() => patch({ underline: !textUnderline })}
+                        >
+                          <Underline size={16} />
+                        </Tool>
+                        <Tool
+                          name="删除线"
+                          pressed={textStrike}
+                          onClick={() => patch({ linethrough: !textStrike })}
+                        >
+                          <Strikethrough size={16} />
+                        </Tool>
+                      </div>
+                      <label className="free-full-label">
+                        字体
+                        <select
+                          aria-label="自由文字字体"
+                          value={
+                            selectedTextStyle.fontFamily ?? text.fontFamily
+                          }
+                          onChange={(e) =>
+                            patch({ fontFamily: e.target.value })
+                          }
+                        >
+                          <option>Noto Sans SC</option>
+                          <option>Noto Serif SC</option>
+                          <option>Nunito</option>
+                          <option>Times New Roman</option>
+                          <option>Microsoft YaHei</option>
+                        </select>
+                      </label>
+                      <div className="free-property-grid">
+                        <label>
+                          字号
+                          <NumericInput
+                            label="自由文字字号"
+                            value={selectedTextStyle.fontSize ?? text.fontSize}
+                            min={1}
+                            max={300}
+                            step={0.5}
+                            onChange={(n) => patch({ fontSize: n })}
+                          />
+                        </label>
+                        <label>
+                          行距
+                          <NumericInput
+                            label="自由文字行距"
+                            value={text.lineHeight}
+                            min={0.5}
+                            max={4}
+                            step={0.05}
+                            onChange={(n) => patch({ lineHeight: n })}
+                          />
+                        </label>
+                        <label>
+                          字距
+                          <NumericInput
+                            label="自由文字字距"
+                            value={text.charSpacing}
+                            min={-100}
+                            max={1000}
+                            step={10}
+                            onChange={(n) => patch({ charSpacing: n })}
+                          />
+                        </label>
+                      </div>
+                      <div className="free-text-tools">
+                        <Tool
+                          name="文字左对齐"
+                          pressed={text.textAlign === "left"}
+                          onClick={() => patch({ textAlign: "left" })}
+                        >
+                          <AlignLeft size={16} />
+                        </Tool>
+                        <Tool
+                          name="文字居中"
+                          pressed={text.textAlign === "center"}
+                          onClick={() => patch({ textAlign: "center" })}
+                        >
+                          <AlignCenter size={16} />
+                        </Tool>
+                        <Tool
+                          name="文字右对齐"
+                          pressed={text.textAlign === "right"}
+                          onClick={() => patch({ textAlign: "right" })}
+                        >
+                          <AlignRight size={16} />
+                        </Tool>
+                      </div>
+                    </section>
+                  )}
+                  <section>
+                    <h3>外观</h3>
+                    <div className="free-property-grid">
+                      <label>
+                        填充
+                        <input
+                          type="color"
+                          aria-label="元素填充颜色"
+                          value={
+                            typeof one?.fill === "string" &&
+                            /^#[a-f\d]{6}$/i.test(one.fill)
+                              ? one.fill
+                              : "#171717"
+                          }
+                          onChange={(e) => patch({ fill: e.target.value })}
+                        />
+                      </label>
+                      <label>
+                        描边
+                        <input
+                          type="color"
+                          aria-label="元素描边颜色"
+                          value={
+                            typeof one?.stroke === "string" &&
+                            /^#[a-f\d]{6}$/i.test(one.stroke)
+                              ? one.stroke
+                              : "#0756a5"
+                          }
+                          onChange={(e) => patch({ stroke: e.target.value })}
+                        />
+                      </label>
+                      <label>
+                        描边宽度
+                        <NumericInput
+                          label="描边宽度"
+                          value={one?.strokeWidth || 0}
+                          min={0}
+                          max={40}
+                          step={0.5}
+                          onChange={(n) => patch({ strokeWidth: n })}
+                        />
+                      </label>
+                      <label>
+                        不透明度 %
+                        <NumericInput
+                          label="元素不透明度"
+                          value={Math.round((one?.opacity ?? 1) * 100)}
+                          min={0}
+                          max={100}
+                          onChange={(n) => patch({ opacity: n / 100 })}
+                        />
+                      </label>
+                      {one instanceof Rect && (
+                        <label>
+                          圆角
+                          <NumericInput
+                            label="矩形圆角"
+                            value={one.rx}
+                            min={0}
+                            max={200}
+                            onChange={(n) => patch({ rx: n, ry: n })}
+                          />
+                        </label>
+                      )}
+                    </div>
+                    <div className="free-text-tools">
+                      <button onClick={() => patch({ fill: "transparent" })}>
+                        无填充
+                      </button>
+                      <button onClick={() => patch({ strokeWidth: 0 })}>
+                        无描边
+                      </button>
+                      <button
+                        onClick={() =>
+                          patch({
+                            strokeDashArray: one?.strokeDashArray
+                              ? null
+                              : [6, 4],
+                          })
+                        }
+                      >
+                        切换虚线
+                      </button>
+                    </div>
+                  </section>
+                  {one instanceof FabricImage && (
+                    <section>
+                      <h3>图片处理</h3>
+                      <div className="free-text-tools">
+                        <button
+                          onClick={() =>
+                            withScene(() => {
+                              const size = one.getOriginalSize(),
+                                side = Math.min(size.width, size.height),
+                                display = Math.min(
+                                  one.getScaledWidth(),
+                                  one.getScaledHeight(),
+                                );
+                              one.set({
+                                cropX: (size.width - side) / 2,
+                                cropY: (size.height - side) / 2,
+                                width: side,
+                                height: side,
+                                scaleX: display / side,
+                                scaleY: display / side,
+                              });
+                            })
+                          }
+                        >
+                          居中裁为正方形
+                        </button>
+                        <button
+                          onClick={() =>
+                            withScene(() => {
+                              const size = one.getOriginalSize(),
+                                display = one.getScaledWidth();
+                              one.set({
+                                cropX: 0,
+                                cropY: 0,
+                                width: size.width,
+                                height: size.height,
+                                scaleX: display / size.width,
+                                scaleY: display / size.width,
+                              });
+                            })
+                          }
+                        >
+                          还原裁剪
+                        </button>
+                        <button
+                          onClick={() =>
+                            withScene(() => {
+                              one.filters = one.filters.length
+                                ? []
+                                : [new filters.Grayscale()];
+                              one.applyFilters();
+                            })
+                          }
+                        >
+                          切换黑白
+                        </button>
+                      </div>
+                    </section>
+                  )}
+                  <section>
+                    <h3>对齐与分布</h3>
+                    <div className="free-align">
+                      {(
+                        [
+                          "left",
+                          "center",
+                          "right",
+                          "top",
+                          "middle",
+                          "bottom",
+                        ] as const
+                      ).map((axis, i) => (
+                        <button key={axis} onClick={() => align(axis)}>
+                          {
+                            [
+                              "左对齐",
+                              "水平居中",
+                              "右对齐",
+                              "顶端对齐",
+                              "垂直居中",
+                              "底端对齐",
+                            ][i]
+                          }
+                        </button>
+                      ))}
+                      <button
+                        disabled={selection.length < 3}
+                        onClick={() => distribute(true)}
+                      >
+                        水平等距
+                      </button>
+                      <button
+                        disabled={selection.length < 3}
+                        onClick={() => distribute(false)}
+                      >
+                        垂直等距
+                      </button>
+                    </div>
+                  </section>
+                  <section>
+                    <h3>链接与方向</h3>
+                    {one && (
+                      <label className="free-full-label">
+                        点击导出 SVG 中的元素可打开链接
+                        <input
+                          aria-label="元素链接"
+                          type="url"
+                          placeholder="https://… 或 mailto:…"
+                          defaultValue={one.link || ""}
+                          key={one.id}
+                          onBlur={(e) => {
+                            const value = e.target.value.trim();
+                            if (
+                              !value ||
+                              /^(https?:\/\/|mailto:)[^\s<>"']+$/i.test(value)
+                            )
+                              patch({ link: value });
+                            else
+                              setError(
+                                "链接需以 https://、http:// 或 mailto: 开头。",
+                              );
+                          }}
+                        />
+                      </label>
+                    )}
+                    <div className="free-text-tools">
+                      <button onClick={() => patch({ flipX: !one?.flipX })}>
+                        水平翻转
+                      </button>
+                      <button onClick={() => patch({ flipY: !one?.flipY })}>
+                        垂直翻转
+                      </button>
+                    </div>
+                  </section>
+                  <section>
+                    <h3>层级与保护</h3>
+                    {flowBase && (
+                      <label className="free-full-label">
+                        与正文的关系
+                        <select
+                          aria-label="图层位置"
+                          value={one?.plane || "foreground"}
+                          onChange={(e) => patch({ plane: e.target.value })}
+                        >
+                          <option value="foreground">
+                            在正文前面（图标、图片）
+                          </option>
+                          <option value="background">
+                            在正文后面（底色、方框）
+                          </option>
+                        </select>
+                      </label>
+                    )}
+                    <div className="free-text-tools">
+                      <Tool name="置于顶层" onClick={() => order("front")}>
+                        <ChevronsUp size={16} />
+                      </Tool>
+                      <Tool name="上移一层" onClick={() => order("up")}>
+                        <ArrowUp size={16} />
+                      </Tool>
+                      <Tool name="下移一层" onClick={() => order("down")}>
+                        <ArrowDown size={16} />
+                      </Tool>
+                      <Tool name="置于底层" onClick={() => order("back")}>
+                        <ChevronsDown size={16} />
+                      </Tool>
+                      <Tool
+                        name="切换元素锁定"
+                        pressed={!!one?.lockMovementX}
+                        onClick={() => {
+                          const lock = !one?.lockMovementX;
+                          patch({
+                            lockMovementX: lock,
+                            lockMovementY: lock,
+                            lockScalingX: lock,
+                            lockScalingY: lock,
+                            lockRotation: lock,
+                            hasControls: !lock,
+                          });
+                        }}
+                      >
+                        <Lock size={16} />
+                      </Tool>
+                    </div>
+                    <p>锁定元素仍可从“画布元素”中选中并解锁。</p>
+                    {model.current.pages.length > 1 && (
+                      <label className="free-full-label">
+                        移动到其他页
+                        <select
+                          aria-label="移动选中元素到页"
+                          value=""
+                          onChange={(e) => moveToPage(Number(e.target.value))}
+                        >
+                          <option value="" disabled>
+                            选择目标页
+                          </option>
+                          {model.current.pages.map(
+                            (p, i) =>
+                              i !== pageIndex && (
+                                <option key={p.id} value={i}>
+                                  第 {i + 1} 页
+                                </option>
+                              ),
+                          )}
+                        </select>
+                      </label>
+                    )}
+                  </section>
+                </>
+              ) : (
+                <>
+                  <section>
+                    <h3>当前纸张</h3>
+                    <label className="free-full-label">
+                      纸张
+                      <select
+                        aria-label="自由画布纸张"
+                        value={
+                          page.width === 794 && page.height === 1123
+                            ? "a4"
+                            : page.width === 1123 && page.height === 794
+                              ? "landscape"
+                              : "custom"
+                        }
+                        onChange={(e) => {
+                          if (e.target.value === "custom") return;
+                          withScene((c) => {
+                            const p = model.current.pages[pageIndex];
+                            p.width = e.target.value === "a4" ? 794 : 1123;
+                            p.height = e.target.value === "a4" ? 1123 : 794;
+                            if (flowBase)
+                              model.current.pages.forEach((other) => {
+                                other.width = p.width;
+                                other.height = p.height;
+                              });
+                            c.setDimensions({
+                              width: p.width * zoomRef.current,
+                              height: p.height * zoomRef.current,
+                            });
+                          });
+                        }}
+                      >
+                        <option value="a4">A4 竖版</option>
+                        <option value="landscape">A4 横版</option>
+                        <option value="custom">自定义尺寸</option>
+                      </select>
+                    </label>
+                    <div className="free-property-grid">
+                      {(["width", "height"] as const).map((key, i) => (
+                        <label key={key}>
+                          {["宽度 px", "高度 px"][i]}
+                          <NumericInput
+                            label={["自由纸张宽度", "自由纸张高度"][i]}
+                            value={page[key]}
+                            min={100}
+                            max={5000}
+                            onChange={(n) =>
+                              withScene((c) => {
+                                model.current.pages[pageIndex][key] = n;
+                                if (flowBase)
+                                  model.current.pages.forEach((other) => {
+                                    other[key] = n;
                                   });
-                                } else one.set({ [key]: n });
+                                c.setDimensions({
+                                  width:
+                                    model.current.pages[pageIndex].width *
+                                    zoomRef.current,
+                                  height:
+                                    model.current.pages[pageIndex].height *
+                                    zoomRef.current,
+                                });
                               })
                             }
                           />
                         </label>
-                      ),
-                    )}
-                  </div>
-                ) : (
-                  <p>多选时使用下方对齐、分布和组合操作。</p>
-                )}
-                <label className="free-check">
-                  <input
-                    type="checkbox"
-                    checked={keepRatio}
-                    onChange={(e) => setKeepRatio(e.target.checked)}
-                  />
-                  调整尺寸时锁定比例
-                </label>
-              </section>
-              {text && (
-                <section>
-                  <h3>文字</h3>
-                  <label className="free-full-label">
-                    内容
-                    <textarea
-                      aria-label="自由元素文字内容"
-                      value={text.text}
-                      onChange={(e) =>
-                        patch({
-                          text: e.target.value,
-                          label: e.target.value.slice(0, 24),
-                        })
-                      }
-                    />
-                  </label>
-                  <div className="free-text-tools">
-                    <Tool
-                      name="加粗"
-                      pressed={textWeight === 700 || textWeight === "bold"}
-                      onClick={() =>
-                        patch({
-                          fontWeight:
-                            textWeight === 700 || textWeight === "bold"
-                              ? 400
-                              : 700,
-                        })
-                      }
-                    >
-                      <Bold size={16} />
-                    </Tool>
-                    <Tool
-                      name="斜体"
-                      pressed={textItalic}
-                      onClick={() =>
-                        patch({ fontStyle: textItalic ? "normal" : "italic" })
-                      }
-                    >
-                      <Italic size={16} />
-                    </Tool>
-                    <Tool
-                      name="下划线"
-                      pressed={textUnderline}
-                      onClick={() => patch({ underline: !textUnderline })}
-                    >
-                      <Underline size={16} />
-                    </Tool>
-                    <Tool
-                      name="删除线"
-                      pressed={textStrike}
-                      onClick={() => patch({ linethrough: !textStrike })}
-                    >
-                      <Strikethrough size={16} />
-                    </Tool>
-                  </div>
-                  <label className="free-full-label">
-                    字体
-                    <select
-                      aria-label="自由文字字体"
-                      value={selectedTextStyle.fontFamily ?? text.fontFamily}
-                      onChange={(e) => patch({ fontFamily: e.target.value })}
-                    >
-                      <option>Noto Sans SC</option>
-                      <option>Noto Serif SC</option>
-                      <option>Nunito</option>
-                      <option>Times New Roman</option>
-                      <option>Microsoft YaHei</option>
-                    </select>
-                  </label>
-                  <div className="free-property-grid">
-                    <label>
-                      字号
-                      <NumericInput
-                        label="自由文字字号"
-                        value={selectedTextStyle.fontSize ?? text.fontSize}
-                        min={1}
-                        max={300}
-                        step={0.5}
-                        onChange={(n) => patch({ fontSize: n })}
-                      />
-                    </label>
-                    <label>
-                      行距
-                      <NumericInput
-                        label="自由文字行距"
-                        value={text.lineHeight}
-                        min={0.5}
-                        max={4}
-                        step={0.05}
-                        onChange={(n) => patch({ lineHeight: n })}
-                      />
-                    </label>
-                    <label>
-                      字距
-                      <NumericInput
-                        label="自由文字字距"
-                        value={text.charSpacing}
-                        min={-100}
-                        max={1000}
-                        step={10}
-                        onChange={(n) => patch({ charSpacing: n })}
-                      />
-                    </label>
-                  </div>
-                  <div className="free-text-tools">
-                    <Tool
-                      name="文字左对齐"
-                      pressed={text.textAlign === "left"}
-                      onClick={() => patch({ textAlign: "left" })}
-                    >
-                      <AlignLeft size={16} />
-                    </Tool>
-                    <Tool
-                      name="文字居中"
-                      pressed={text.textAlign === "center"}
-                      onClick={() => patch({ textAlign: "center" })}
-                    >
-                      <AlignCenter size={16} />
-                    </Tool>
-                    <Tool
-                      name="文字右对齐"
-                      pressed={text.textAlign === "right"}
-                      onClick={() => patch({ textAlign: "right" })}
-                    >
-                      <AlignRight size={16} />
-                    </Tool>
-                  </div>
-                </section>
+                      ))}
+                    </div>
+                  </section>
+                </>
               )}
               <section>
-                <h3>外观</h3>
-                <div className="free-property-grid">
-                  <label>
-                    填充
-                    <input
-                      type="color"
-                      aria-label="元素填充颜色"
-                      value={
-                        typeof one?.fill === "string" &&
-                        /^#[a-f\d]{6}$/i.test(one.fill)
-                          ? one.fill
-                          : "#171717"
-                      }
-                      onChange={(e) => patch({ fill: e.target.value })}
-                    />
-                  </label>
-                  <label>
-                    描边
-                    <input
-                      type="color"
-                      aria-label="元素描边颜色"
-                      value={
-                        typeof one?.stroke === "string" &&
-                        /^#[a-f\d]{6}$/i.test(one.stroke)
-                          ? one.stroke
-                          : "#0756a5"
-                      }
-                      onChange={(e) => patch({ stroke: e.target.value })}
-                    />
-                  </label>
-                  <label>
-                    描边宽度
-                    <NumericInput
-                      label="描边宽度"
-                      value={one?.strokeWidth || 0}
-                      min={0}
-                      max={40}
-                      step={0.5}
-                      onChange={(n) => patch({ strokeWidth: n })}
-                    />
-                  </label>
-                  <label>
-                    不透明度 %
-                    <NumericInput
-                      label="元素不透明度"
-                      value={Math.round((one?.opacity ?? 1) * 100)}
-                      min={0}
-                      max={100}
-                      onChange={(n) => patch({ opacity: n / 100 })}
-                    />
-                  </label>
-                  {one instanceof Rect && (
-                    <label>
-                      圆角
-                      <NumericInput
-                        label="矩形圆角"
-                        value={one.rx}
-                        min={0}
-                        max={200}
-                        onChange={(n) => patch({ rx: n, ry: n })}
-                      />
-                    </label>
-                  )}
-                </div>
-                <div className="free-text-tools">
-                  <button onClick={() => patch({ fill: "transparent" })}>
-                    无填充
-                  </button>
-                  <button onClick={() => patch({ strokeWidth: 0 })}>
-                    无描边
-                  </button>
-                  <button
-                    onClick={() =>
-                      patch({
-                        strokeDashArray: one?.strokeDashArray ? null : [6, 4],
-                      })
-                    }
-                  >
-                    切换虚线
-                  </button>
-                </div>
-              </section>
-              {one instanceof FabricImage && (
-                <section>
-                  <h3>图片处理</h3>
-                  <div className="free-text-tools">
-                    <button
-                      onClick={() =>
-                        withScene(() => {
-                          const size = one.getOriginalSize(),
-                            side = Math.min(size.width, size.height),
-                            display = Math.min(
-                              one.getScaledWidth(),
-                              one.getScaledHeight(),
-                            );
-                          one.set({
-                            cropX: (size.width - side) / 2,
-                            cropY: (size.height - side) / 2,
-                            width: side,
-                            height: side,
-                            scaleX: display / side,
-                            scaleY: display / side,
-                          });
-                        })
-                      }
-                    >
-                      居中裁为正方形
-                    </button>
-                    <button
-                      onClick={() =>
-                        withScene(() => {
-                          const size = one.getOriginalSize(),
-                            display = one.getScaledWidth();
-                          one.set({
-                            cropX: 0,
-                            cropY: 0,
-                            width: size.width,
-                            height: size.height,
-                            scaleX: display / size.width,
-                            scaleY: display / size.width,
-                          });
-                        })
-                      }
-                    >
-                      还原裁剪
-                    </button>
-                    <button
-                      onClick={() =>
-                        withScene(() => {
-                          one.filters = one.filters.length
-                            ? []
-                            : [new filters.Grayscale()];
-                          one.applyFilters();
-                        })
-                      }
-                    >
-                      切换黑白
-                    </button>
-                  </div>
-                </section>
-              )}
-              <section>
-                <h3>对齐与分布</h3>
-                <div className="free-align">
-                  {(
-                    [
-                      "left",
-                      "center",
-                      "right",
-                      "top",
-                      "middle",
-                      "bottom",
-                    ] as const
-                  ).map((axis, i) => (
-                    <button key={axis} onClick={() => align(axis)}>
-                      {
-                        [
-                          "左对齐",
-                          "水平居中",
-                          "右对齐",
-                          "顶端对齐",
-                          "垂直居中",
-                          "底端对齐",
-                        ][i]
-                      }
-                    </button>
-                  ))}
-                  <button
-                    disabled={selection.length < 3}
-                    onClick={() => distribute(true)}
-                  >
-                    水平等距
-                  </button>
-                  <button
-                    disabled={selection.length < 3}
-                    onClick={() => distribute(false)}
-                  >
-                    垂直等距
-                  </button>
-                </div>
-              </section>
-              <section>
-                <h3>链接与方向</h3>
-                {one && (
-                  <label className="free-full-label">
-                    点击导出 SVG 中的元素可打开链接
-                    <input
-                      aria-label="元素链接"
-                      type="url"
-                      placeholder="https://… 或 mailto:…"
-                      defaultValue={one.link || ""}
-                      key={one.id}
-                      onBlur={(e) => {
-                        const value = e.target.value.trim();
-                        if (
-                          !value ||
-                          /^(https?:\/\/|mailto:)[^\s<>"']+$/i.test(value)
-                        )
-                          patch({ link: value });
-                        else
-                          setError(
-                            "链接需以 https://、http:// 或 mailto: 开头。",
-                          );
-                      }}
-                    />
-                  </label>
-                )}
-                <div className="free-text-tools">
-                  <button onClick={() => patch({ flipX: !one?.flipX })}>
-                    水平翻转
-                  </button>
-                  <button onClick={() => patch({ flipY: !one?.flipY })}>
-                    垂直翻转
-                  </button>
-                </div>
-              </section>
-              <section>
-                <h3>层级与保护</h3>
-                {flowBase && (
-                  <label className="free-full-label">
-                    与正文的关系
-                    <select
-                      aria-label="图层位置"
-                      value={one?.plane || "foreground"}
-                      onChange={(e) => patch({ plane: e.target.value })}
-                    >
-                      <option value="foreground">
-                        在正文前面（图标、图片）
-                      </option>
-                      <option value="background">
-                        在正文后面（底色、方框）
-                      </option>
-                    </select>
-                  </label>
-                )}
-                <div className="free-text-tools">
-                  <Tool name="置于顶层" onClick={() => order("front")}>
-                    <ChevronsUp size={16} />
-                  </Tool>
-                  <Tool name="上移一层" onClick={() => order("up")}>
-                    <ArrowUp size={16} />
-                  </Tool>
-                  <Tool name="下移一层" onClick={() => order("down")}>
-                    <ArrowDown size={16} />
-                  </Tool>
-                  <Tool name="置于底层" onClick={() => order("back")}>
-                    <ChevronsDown size={16} />
-                  </Tool>
-                  <Tool
-                    name="切换元素锁定"
-                    pressed={!!one?.lockMovementX}
-                    onClick={() => {
-                      const lock = !one?.lockMovementX;
-                      patch({
-                        lockMovementX: lock,
-                        lockMovementY: lock,
-                        lockScalingX: lock,
-                        lockScalingY: lock,
-                        lockRotation: lock,
-                        hasControls: !lock,
-                      });
-                    }}
-                  >
-                    <Lock size={16} />
-                  </Tool>
-                </div>
-                <p>锁定元素仍可从“画布元素”中选中并解锁。</p>
+                <h3>页面操作</h3>
                 {model.current.pages.length > 1 && (
-                  <label className="free-full-label">
-                    移动到其他页
+                  <label className="free-page-selector">
+                    <span>当前页</span>
                     <select
-                      aria-label="移动选中元素到页"
-                      value=""
-                      onChange={(e) => moveToPage(Number(e.target.value))}
+                      aria-label="当前自由页"
+                      value={pageIndex}
+                      disabled={busy}
+                      onChange={(e) => {
+                        snapshot();
+                        void loadPage(Number(e.target.value));
+                      }}
                     >
-                      <option value="" disabled>
-                        选择目标页
-                      </option>
-                      {model.current.pages.map(
-                        (p, i) =>
-                          i !== pageIndex && (
-                            <option key={p.id} value={i}>
-                              第 {i + 1} 页
-                            </option>
-                          ),
-                      )}
+                      {model.current.pages.map((p, i) => (
+                        <option key={p.id} value={i}>
+                          第 {i + 1} 页
+                        </option>
+                      ))}
                     </select>
                   </label>
                 )}
-              </section>
-            </>
-          ) : (
-            <>
-              <section>
-                <h3>当前纸张</h3>
-                <label className="free-full-label">
-                  纸张
-                  <select
-                    aria-label="自由画布纸张"
-                    value={
-                      page.width === 794 && page.height === 1123
-                        ? "a4"
-                        : page.width === 1123 && page.height === 794
-                          ? "landscape"
-                          : "custom"
-                    }
-                    onChange={(e) => {
-                      if (e.target.value === "custom") return;
-                      withScene((c) => {
-                        const p = model.current.pages[pageIndex];
-                        p.width = e.target.value === "a4" ? 794 : 1123;
-                        p.height = e.target.value === "a4" ? 1123 : 794;
-                        if (flowBase)
-                          model.current.pages.forEach((other) => {
-                            other.width = p.width;
-                            other.height = p.height;
-                          });
-                        c.setDimensions({
-                          width: p.width * zoomRef.current,
-                          height: p.height * zoomRef.current,
-                        });
-                      });
+                <div className="free-actions-list">
+                  <button
+                    aria-label="新增自由页"
+                    disabled={busy || model.current.pages.length >= 20}
+                    onClick={() => {
+                      void newPage();
                     }}
                   >
-                    <option value="a4">A4 竖版</option>
-                    <option value="landscape">A4 横版</option>
-                    <option value="custom">自定义尺寸</option>
-                  </select>
-                </label>
-                <div className="free-property-grid">
-                  {(["width", "height"] as const).map((key, i) => (
-                    <label key={key}>
-                      {["宽度 px", "高度 px"][i]}
-                      <NumericInput
-                        label={["自由纸张宽度", "自由纸张高度"][i]}
-                        value={page[key]}
-                        min={100}
-                        max={5000}
-                        onChange={(n) =>
-                          withScene((c) => {
-                            model.current.pages[pageIndex][key] = n;
-                            if (flowBase)
-                              model.current.pages.forEach((other) => {
-                                other[key] = n;
-                              });
-                            c.setDimensions({
-                              width:
-                                model.current.pages[pageIndex].width *
-                                zoomRef.current,
-                              height:
-                                model.current.pages[pageIndex].height *
-                                zoomRef.current,
-                            });
-                          })
-                        }
-                      />
-                    </label>
-                  ))}
+                    <Plus size={16} />
+                    <span>新增页面</span>
+                  </button>
+                  <button
+                    disabled={busy || model.current.pages.length >= 20}
+                    onClick={() => {
+                      void newPage(true);
+                    }}
+                  >
+                    <Copy size={16} />
+                    <span>复制本页</span>
+                  </button>
+                  <button
+                    className="danger"
+                    disabled={
+                      busy || (!flowBase && model.current.pages.length < 2)
+                    }
+                    onClick={() => setConfirm("delete-page")}
+                  >
+                    <Trash2 size={16} />
+                    <span>
+                      {flowBase && pageIndex < sourcePageCount
+                        ? "清空本页装饰"
+                        : "删除本页"}
+                    </span>
+                  </button>
                 </div>
               </section>
-            </>
-          )}
-          <section>
-            <h3>页面操作</h3>
-            {model.current.pages.length > 1 && (
-              <label className="free-page-selector">
-                <span>当前页</span>
-                <select
-                  aria-label="当前自由页"
-                  value={pageIndex}
-                  disabled={busy}
-                  onChange={(e) => {
-                    snapshot();
-                    void loadPage(Number(e.target.value));
-                  }}
-                >
-                  {model.current.pages.map((p, i) => (
-                    <option key={p.id} value={i}>
-                      第 {i + 1} 页
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-            <div className="free-actions-list">
-              <button
-                aria-label="新增自由页"
-                disabled={busy || model.current.pages.length >= 20}
-                onClick={() => {
-                  void newPage();
-                }}
-              >
-                <Plus size={16} />
-                <span>新增页面</span>
-              </button>
-              <button
-                disabled={busy || model.current.pages.length >= 20}
-                onClick={() => {
-                  void newPage(true);
-                }}
-              >
-                <Copy size={16} />
-                <span>复制本页</span>
-              </button>
-              <button
-                className="danger"
-                disabled={busy || (!flowBase && model.current.pages.length < 2)}
-                onClick={() => setConfirm("delete-page")}
-              >
-                <Trash2 size={16} />
-                <span>
-                  {flowBase && pageIndex < sourcePageCount
-                    ? "清空本页装饰"
-                    : "删除本页"}
-                </span>
-              </button>
+              <section>
+                <h3>导出与备份</h3>
+                <div className="free-actions-list free-export-list">
+                  <button
+                    aria-label="导出 PDF"
+                    aria-describedby="free-export-hint-0"
+                    disabled={busy}
+                    onClick={() => {
+                      void print();
+                    }}
+                  >
+                    <Download size={14} />
+                    <span>
+                      <strong>导出 PDF</strong>
+                      <small id="free-export-hint-0">
+                        完整简历，适合投递与打印
+                      </small>
+                    </span>
+                  </button>
+                  <button
+                    aria-label="本页 SVG"
+                    aria-describedby="free-export-hint-1"
+                    disabled={busy}
+                    onClick={() => {
+                      void exportImage("svg");
+                    }}
+                  >
+                    <Code2 size={16} />
+                    <span>
+                      <strong>本页 SVG</strong>
+                      <small id="free-export-hint-1">
+                        矢量格式，便于后续设计
+                      </small>
+                    </span>
+                  </button>
+                  <button
+                    aria-label="本页 PNG"
+                    aria-describedby="free-export-hint-2"
+                    disabled={busy}
+                    onClick={() => {
+                      void exportImage("png");
+                    }}
+                  >
+                    <ImagePlus size={16} />
+                    <span>
+                      <strong>本页 PNG</strong>
+                      <small id="free-export-hint-2">
+                        保存为图片，便于分享
+                      </small>
+                    </span>
+                  </button>
+                  <button
+                    aria-label="可编辑备份"
+                    aria-describedby="free-export-hint-3"
+                    onClick={() => {
+                      commit();
+                      download(
+                        doc.name + ".json",
+                        JSON.stringify(
+                          { ...doc, freeform: snapshot() },
+                          null,
+                          2,
+                        ),
+                        "application/json",
+                      );
+                    }}
+                  >
+                    <Download size={16} />
+                    <span>
+                      <strong>可编辑备份</strong>
+                      <small id="free-export-hint-3">
+                        保存全部内容与排版，可重新导入
+                      </small>
+                    </span>
+                  </button>
+                  <button
+                    aria-label="导出文字"
+                    aria-describedby="free-export-hint-4"
+                    onClick={() => {
+                      commit();
+                      download(
+                        doc.name + "-自由稿文字.txt",
+                        (flowBase
+                          ? doc.lines.map((l) => l.text).join("\n") + "\n"
+                          : "") + freeText(snapshot()),
+                        "text/plain",
+                      );
+                    }}
+                  >
+                    <Type size={16} />
+                    <span>
+                      <strong>导出文字</strong>
+                      <small id="free-export-hint-4">
+                        提取正文，便于复制与整理
+                      </small>
+                    </span>
+                  </button>
+                </div>
+              </section>
             </div>
-          </section>
-          <section>
-            <h3>导出与备份</h3>
-            <div className="free-actions-list free-export-list">
-              <button
-                aria-label="导出 PDF"
-                aria-describedby="free-export-hint-0"
-                disabled={busy}
-                onClick={() => {
-                  void print();
-                }}
-              >
-                <Download size={14} />
-                <span>
-                  <strong>导出 PDF</strong>
-                  <small id="free-export-hint-0">
-                    完整简历，适合投递与打印
-                  </small>
-                </span>
-              </button>
-              <button
-                aria-label="本页 SVG"
-                aria-describedby="free-export-hint-1"
-                disabled={busy}
-                onClick={() => {
-                  void exportImage("svg");
-                }}
-              >
-                <Code2 size={16} />
-                <span>
-                  <strong>本页 SVG</strong>
-                  <small id="free-export-hint-1">矢量格式，便于后续设计</small>
-                </span>
-              </button>
-              <button
-                aria-label="本页 PNG"
-                aria-describedby="free-export-hint-2"
-                disabled={busy}
-                onClick={() => {
-                  void exportImage("png");
-                }}
-              >
-                <ImagePlus size={16} />
-                <span>
-                  <strong>本页 PNG</strong>
-                  <small id="free-export-hint-2">保存为图片，便于分享</small>
-                </span>
-              </button>
-              <button
-                aria-label="可编辑备份"
-                aria-describedby="free-export-hint-3"
-                onClick={() => {
-                  commit();
-                  download(
-                    doc.name + ".json",
-                    JSON.stringify({ ...doc, freeform: snapshot() }, null, 2),
-                    "application/json",
-                  );
-                }}
-              >
-                <Download size={16} />
-                <span>
-                  <strong>可编辑备份</strong>
-                  <small id="free-export-hint-3">
-                    保存全部内容与排版，可重新导入
-                  </small>
-                </span>
-              </button>
-              <button
-                aria-label="导出文字"
-                aria-describedby="free-export-hint-4"
-                onClick={() => {
-                  commit();
-                  download(
-                    doc.name + "-自由稿文字.txt",
-                    (flowBase
-                      ? doc.lines.map((l) => l.text).join("\n") + "\n"
-                      : "") + freeText(snapshot()),
-                    "text/plain",
-                  );
-                }}
-              >
-                <Type size={16} />
-                <span>
-                  <strong>导出文字</strong>
-                  <small id="free-export-hint-4">
-                    提取正文，便于复制与整理
-                  </small>
-                </span>
-              </button>
-            </div>
-          </section>
-        </div>
-      </aside>
+          </aside>
+        ))}
       <nav className="free-mobile-nav" aria-label="自由模式面板">
         <button
           aria-pressed={mobilePanel === "insert"}
-          onClick={() => setMobilePanel("insert")}
+          onClick={() => {
+            onOpenLeft?.();
+            setMobilePanel("insert");
+          }}
         >
           添加 / 元素
         </button>
@@ -2729,7 +2828,10 @@ export default function FreeStudio({
         </button>
         <button
           aria-pressed={mobilePanel === "properties"}
-          onClick={() => setMobilePanel("properties")}
+          onClick={() => {
+            onOpenRight?.();
+            setMobilePanel("properties");
+          }}
         >
           属性
         </button>

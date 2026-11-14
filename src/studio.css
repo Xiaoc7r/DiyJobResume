@@ -3381,3 +3381,114 @@ a {
   border: 0;
   color: var(--ink);
 }
+
+.markdown-pane {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.markdown-pane .markdown-editor {
+  width: 0;
+  min-width: 0;
+  flex: 1;
+  padding-left: 14px;
+}
+.markdown-numbers {
+  flex: none;
+  width: 43px;
+  overflow: hidden;
+  color: #989186;
+  background: #f5f3ef;
+  border-right: 1px solid #e6e0d6;
+  text-align: right;
+  user-select: none;
+  pointer-events: none;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+}
+.markdown-numbers > div {
+  padding-right: 9px;
+  will-change: transform;
+}
+.markdown-numbers span {
+  display: block;
+  line-height: 25px;
+}
+.simple-editor {
+  outline: none;
+  padding-inline: 24px;
+}
+.simple-editor .edit-field {
+  padding-left: 0 !important;
+  padding-right: 0;
+  border-left: 0;
+}
+.simple-editor .block-gutter {
+  position: absolute;
+  left: -21px;
+  top: 5px;
+  width: 18px;
+  opacity: 0;
+}
+.simple-editor .edit-field:hover .block-gutter,
+.simple-editor .edit-field:focus-within .block-gutter {
+  opacity: 1;
+}
+.edge-tab {
+  position: fixed;
+  top: 48%;
+  z-index: 60;
+  width: 26px;
+  height: 64px;
+  border: 0;
+  background: #322c26bd;
+  color: white;
+  padding: 4px;
+  transition: background 0.16s ease;
+}
+.edge-tab:hover {
+  background: #322c26e8;
+}
+.edge-left {
+  left: 0;
+  border-radius: 0 10px 10px 0;
+}
+.edge-right {
+  right: 0;
+  border-radius: 10px 0 0 10px;
+}
+.edge-tab:focus-visible {
+  outline: 2px solid #c28b69;
+  outline-offset: 2px;
+}
+@media print {
+  .edge-tab,
+  .markdown-numbers {
+    display: none !important;
+  }
+}
+@media (max-width: 900px) {
+  .header-actions > :is(.theme-toggle, .agent-mode, .github-link) {
+    display: inline-flex;
+  }
+}
+@media (max-width: 600px) {
+  .app-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    height: auto;
+    min-height: 58px;
+    padding-block: 9px;
+    row-gap: 7px;
+  }
+  .doc-switch {
+    justify-self: end;
+  }
+  .header-actions {
+    grid-column: 1 / -1;
+    justify-self: end;
+    margin-left: 0;
+  }
+}

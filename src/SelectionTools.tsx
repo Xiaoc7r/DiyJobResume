@@ -45,7 +45,9 @@ export function SelectionTools({
   onSource,
   onKind,
   onColumns,
+  onRichChange,
 }: {
+  onRichChange?: () => void;
   lines: Line[];
   onSource: (source: string, start: number, end: number) => void;
   onKind: (ids: string[], kind: Kind) => void;
@@ -101,12 +103,20 @@ export function SelectionTools({
               selection.anchorNode instanceof Element
                 ? selection.anchorNode
                 : selection.anchorNode?.parentElement,
-            el = anchor?.closest<HTMLElement>("[data-simple],[data-edit]");
+            el =
+              anchor?.closest<HTMLElement>("[data-simple],[data-edit]") ||
+              anchor?.closest<HTMLElement>(".simple-editor");
           if (el) {
-            const selector = el.hasAttribute("data-simple")
-                ? "[data-simple]"
-                : "[data-edit]",
-              idAttr = el.hasAttribute("data-simple") ? "simple" : "edit";
+            const selector =
+                el.hasAttribute("data-simple") ||
+                el.classList.contains("simple-editor")
+                  ? "[data-simple]"
+                  : "[data-edit]",
+              idAttr =
+                el.hasAttribute("data-simple") ||
+                el.classList.contains("simple-editor")
+                  ? "simple"
+                  : "edit";
             const ids = Array.from(
               document.querySelectorAll<HTMLElement>(selector),
             )
@@ -116,7 +126,7 @@ export function SelectionTools({
             const rect = range.getBoundingClientRect();
             next = {
               type: "rich",
-              element: el,
+              element: el.closest<HTMLElement>(".simple-editor") || el,
               range: range.cloneRange(),
               ids,
               x: rect.x + rect.width / 2,
@@ -176,6 +186,7 @@ export function SelectionTools({
         false,
         mark === "link" ? link : undefined,
       );
+      if (t.element.classList.contains("simple-editor")) onRichChange?.();
     }
     setLinkOpen(false);
   };

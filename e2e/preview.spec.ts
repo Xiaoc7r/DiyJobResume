@@ -53,7 +53,7 @@ test("large previews remain scrollable and free mode shares zoom with an unobstr
     .not.toBe(before);
   await page.screenshot({ path: "../preview-desktop.png" });
   await zoom().fill("135");
-  await page.getByRole("tab", { name: "Markdown .md", exact: true }).click();
+  await page.getByRole("tab", { name: "Markdown", exact: true }).click();
   await expect(zoom()).toHaveValue("135");
   await page.getByRole("tab", { name: "简单编辑", exact: true }).click();
   await expect(zoom()).toHaveValue("135");

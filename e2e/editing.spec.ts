@@ -9,7 +9,7 @@ test("typing and deleting across rich inline nodes never crashes the editors", a
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  await page.getByRole("tab", { name: "Markdown .md", exact: true }).click();
+  await page.getByRole("tab", { name: "Markdown", exact: true }).click();
   const md = page.getByLabel("Markdown 简历内容");
   await md.fill("# 炒肉多\n\n前缀 空格 **重点**字\n\n## 教育背景");
   await md.press("Control+Home");
@@ -47,7 +47,7 @@ test("deleting a selection spanning rows leaves React row containers intact", as
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  await page.getByRole("tab", { name: "Markdown .md", exact: true }).click();
+  await page.getByRole("tab", { name: "Markdown", exact: true }).click();
   await page
     .getByLabel("Markdown 简历内容")
     .fill("# 示例\n第一行\n第二行\n第三行");
@@ -80,7 +80,7 @@ test("spaces stay at the caret in a heading and keep room for a free icon", asyn
   await title.press("ArrowRight");
   await page.keyboard.insertText("  ");
   await expect(title).toHaveText("炒  肉多");
-  await page.getByRole("tab", { name: "Markdown .md", exact: true }).click();
+  await page.getByRole("tab", { name: "Markdown", exact: true }).click();
   const md = page.getByLabel("Markdown 简历内容");
   expect(await md.inputValue()).toMatch(/^# 炒  肉多/);
   await md.fill("#   炒肉多\n   图标留白");
@@ -89,7 +89,7 @@ test("spaces stay at the caret in a heading and keep room for a free icon", asyn
     "  炒肉多",
   );
   await page.getByRole("button", { name: "插入邮箱图标", exact: true }).click();
-  await page.getByRole("tab", { name: "Markdown .md", exact: true }).click();
+  await page.getByRole("tab", { name: "Markdown", exact: true }).click();
   expect(await md.inputValue()).toContain("   图标留白");
 });
 
