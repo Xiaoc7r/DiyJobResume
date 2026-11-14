@@ -577,6 +577,20 @@ export default function Studio() {
     fileRef = useRef<HTMLInputElement>(null),
     editorRef = useRef<HTMLDivElement>(null);
   const pendingCaret = useRef<{ id: string; offset: number } | null>(null);
+  const pendingSimpleCaret = useRef<{ id: string; offset: number } | null>(
+    null,
+  );
+  useLayoutEffect(() => {
+    const caret = pendingSimpleCaret.current;
+    if (!caret || mode !== "simple") return;
+    const el = editorRef.current?.querySelector<HTMLElement>(
+      `[data-simple="${caret.id}"]`,
+    );
+    if (!el) return;
+    pendingSimpleCaret.current = null;
+    el.focus({ preventScroll: true });
+    placeCursor(el, caret.offset);
+  }, [doc.lines, mode]);
   const flashTimer = useRef(0);
   const mdSyncing = useRef(false);
   const markWord = useRef<HTMLDivElement>(null),
@@ -695,6 +709,11 @@ export default function Studio() {
         ? parseMarkdown(line.text)
         : [line];
       replacement[0] = { ...replacement[0], id: line.id };
+      if (side === "simple")
+        pendingSimpleCaret.current = {
+          id: line.id,
+          offset: before.length + insert.length,
+        };
       historyUpdate({
         ...current,
         lines: [
@@ -703,15 +722,16 @@ export default function Studio() {
           ...current.lines.slice(b + 1),
         ],
       });
-      requestAnimationFrame(() => {
-        const el = document.querySelector<HTMLElement>(
-          `[data-${side}="${line.id}"]`,
-        );
-        if (el) {
-          el.focus();
-          placeCursor(el, before.length + insert.length);
-        }
-      });
+      if (side !== "simple")
+        requestAnimationFrame(() => {
+          const el = document.querySelector<HTMLElement>(
+            `[data-${side}="${line.id}"]`,
+          );
+          if (el) {
+            el.focus();
+            placeCursor(el, before.length + insert.length);
+          }
+        });
     };
     document.addEventListener("beforeinput", replaceSelection, true);
     document.addEventListener("paste", replaceSelection, true);
@@ -1494,14 +1514,8 @@ export default function Studio() {
       text: previous.text + lines[i].text,
     };
     lines.splice(previousIndex + 1, i - previousIndex);
+    pendingSimpleCaret.current = { id: previous.id, offset };
     historyUpdate({ ...ref.current, lines });
-    requestAnimationFrame(() => {
-      const el = document.querySelector<HTMLElement>(
-        `[data-simple="${previous.id}"]`,
-      );
-      el?.focus();
-      if (el) placeCursor(el, offset);
-    });
   };
   const simpleComposing = useRef(false);
   const syncSimple = () => {
@@ -1555,6 +1569,7 @@ export default function Studio() {
         text: read(suffix),
         ...(line.kind === "ordered" ? { order: (line.order || 1) + 1 } : {}),
       };
+    pendingSimpleCaret.current = { id: next.id, offset: 0 };
     historyUpdate({
       ...current,
       lines: [
@@ -1563,15 +1578,6 @@ export default function Studio() {
         next,
         ...current.lines.slice(at + 1),
       ],
-    });
-    requestAnimationFrame(() => {
-      const el = editorRef.current?.querySelector<HTMLElement>(
-        `[data-simple="${next.id}"]`,
-      );
-      if (el) {
-        el.focus();
-        placeCursor(el, 0);
-      }
     });
   };
   const simpleKeys = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -1630,8 +1636,8 @@ export default function Studio() {
         const offset = row.textContent?.length || 0;
         lines[at] = { ...lines[at], text: lines[at].text + lines[next].text };
         lines.splice(at + 1, next - at);
+        pendingSimpleCaret.current = { id: line.id, offset };
         historyUpdate({ ...ref.current, lines });
-        requestAnimationFrame(() => placeCursor(row, offset));
       }
     } else if (e.key === "/" && !line.text) {
       e.preventDefault();
