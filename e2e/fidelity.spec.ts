@@ -67,9 +67,7 @@ test("native canvas backing resolution follows zoom instead of scaling a bitmap 
 }) => {
   await page.getByRole("tab", { name: "自由模式", exact: true }).click();
   await expect(page.locator(".free-source-paper")).toBeVisible();
-  await page
-    .getByRole("button", { name: "100% 原始大小", exact: true })
-    .click();
+  await page.getByLabel("预览缩放", { exact: true }).fill("100");
   const dimensions = await page
     .locator(".lower-canvas")
     .evaluate((el: HTMLCanvasElement) => ({

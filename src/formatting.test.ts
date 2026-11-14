@@ -107,9 +107,10 @@ describe("template defaults and CSS backups", () => {
       "ribbon",
       "violet",
       "teal",
+      "blank",
     ]);
     const first = initialResume();
-    for (const t of templates) {
+    for (const t of templates.filter((t) => t.id !== "blank")) {
       const doc = initialResume(t.id);
       expect(toMarkdown(doc.lines)).toBe(toMarkdown(first.lines));
       expect(doc.settings.types).toEqual(first.settings.types);

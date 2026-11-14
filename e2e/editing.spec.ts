@@ -98,8 +98,8 @@ test("zoom persists in both directions and resetting the layout preserves edits"
 }) => {
   await page.getByLabel("预览缩放", { exact: true }).fill("110");
   await page.getByRole("tab", { name: "自由模式", exact: true }).click();
-  await expect(page.locator(".free-zoom")).toContainText("110%");
-  await page.getByRole("button", { name: "放大画布", exact: true }).click();
+  await expect(page.getByLabel("预览缩放", { exact: true })).toHaveValue("110");
+  await page.getByRole("button", { name: "放大预览", exact: true }).click();
   await page.getByRole("tab", { name: "简单编辑", exact: true }).click();
   await expect(page.getByLabel("预览缩放", { exact: true })).toHaveValue("120");
   await expect(page.getByRole("status").first()).toContainText("已保存");

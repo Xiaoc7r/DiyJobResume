@@ -168,3 +168,17 @@ describe("continuous document", () => {
     expect(inline("[x](javascript:alert(1))")).not.toContain("<a");
   });
 });
+
+it("starts the whiteboard empty and preserves typed content across template changes", () => {
+  const board = initialResume("blank");
+  expect(board.name).toBe("空白简历");
+  expect(board.pictures).toEqual([]);
+  expect(toMarkdown(board.lines)).toBe("");
+  const typed = { ...board, lines: parseMarkdown("# 我的名字\n\n我的经历") };
+  expect(toMarkdown(applyTemplate(typed, "blue").lines)).toBe(
+    "# 我的名字\n\n我的经历",
+  );
+  expect(toMarkdown(readResume(JSON.parse(JSON.stringify(typed))).lines)).toBe(
+    "# 我的名字\n\n我的经历",
+  );
+});

@@ -25,7 +25,8 @@ export type Template =
   | "ribbon"
   | "academic"
   | "teal"
-  | "violet";
+  | "violet"
+  | "blank";
 export interface Line {
   id: string;
   kind: Kind;
@@ -119,6 +120,12 @@ export const templates: {
     name: "青岚 · 工程实践",
     desc: "青色细线 · 留白分区 · 清爽技术风",
     color: "#588591",
+  },
+  {
+    id: "blank",
+    name: "白板",
+    desc: "纯白 A4 · 新建空白简历",
+    color: "#171717",
   },
 ];
 export const defaultSettings = (): Settings => ({
@@ -234,17 +241,20 @@ export const toMarkdown = (lines: Line[]) =>
     .join("\n");
 export const demo = demoFor("blue");
 export function initialResume(template: Template = "blue"): Resume {
-  const lines = parseMarkdown(demoFor(template));
+  const lines: Line[] =
+    template === "blank"
+      ? [{ id: uid(), kind: "text", text: "" }]
+      : parseMarkdown(demoFor(template));
   return {
     version: 2,
-    name: "炒肉多示例简历",
+    name: template === "blank" ? "空白简历" : "炒肉多示例简历",
     template,
     lines,
     settings: {
       ...defaultSettings(),
       accent: templates.find((t) => t.id === template)!.color,
     },
-    pictures: defaultPictures(lines),
+    pictures: template === "blank" ? [] : defaultPictures(lines),
   };
 }
 export function applyTemplate(doc: Resume, template: Template): Resume {
@@ -252,6 +262,8 @@ export function applyTemplate(doc: Resume, template: Template): Resume {
     ...doc,
     template,
     lines:
+      template !== "blank" &&
+      doc.template !== "blank" &&
       toMarkdown(doc.lines) === demoFor(doc.template)
         ? parseMarkdown(demoFor(template), doc.lines)
         : doc.lines,

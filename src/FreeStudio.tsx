@@ -46,7 +46,6 @@ import {
   ArrowUp,
   ArrowDown,
   Plus,
-  Minus as ZoomOut,
   Undo2,
   Redo2,
   AlignLeft,
@@ -1935,101 +1934,6 @@ export default function FreeStudio({
           </div>
           {busy && <FreeLoading overlay />}
         </div>
-        <div className="free-footer">
-          <div className="free-pages">
-            <button
-              aria-label="上一页"
-              disabled={!pageIndex || busy}
-              onClick={() => {
-                snapshot();
-                void loadPage(pageIndex - 1);
-              }}
-            >
-              上一页
-            </button>
-            <select
-              aria-label="当前自由页"
-              value={pageIndex}
-              disabled={busy}
-              onChange={(e) => {
-                snapshot();
-                void loadPage(Number(e.target.value));
-              }}
-            >
-              {model.current.pages.map((p, i) => (
-                <option key={p.id} value={i}>
-                  第 {i + 1} 页
-                </option>
-              ))}
-            </select>
-            <button
-              aria-label="下一页"
-              disabled={pageIndex >= model.current.pages.length - 1 || busy}
-              onClick={() => {
-                snapshot();
-                void loadPage(pageIndex + 1);
-              }}
-            >
-              下一页
-            </button>
-            <Tool
-              name="新增自由页"
-              disabled={busy || model.current.pages.length >= 20}
-              onClick={() => {
-                void newPage();
-              }}
-            >
-              <Plus size={16} />
-            </Tool>
-          </div>
-          <div className="free-zoom">
-            <button
-              aria-label="100% 原始大小"
-              onClick={() => {
-                setAutoFit(false);
-                setZoom(1);
-              }}
-            >
-              100%
-            </button>
-            <Tool
-              name="缩小画布"
-              onClick={() => {
-                setAutoFit(false);
-                setZoom((v) => Math.max(0.2, v - 0.1));
-              }}
-            >
-              <ZoomOut size={15} />
-            </Tool>
-            <button
-              title="适应可用宽度"
-              onClick={() => {
-                if (scroll.current && scroll.current.clientWidth > 0)
-                  setZoom(
-                    Math.min(
-                      2,
-                      Math.max(
-                        0.2,
-                        (scroll.current.clientWidth - 72) / page.width,
-                      ),
-                    ),
-                  );
-                setAutoFit(previewZoom === undefined);
-              }}
-            >
-              {Math.round(zoom * 100)}%
-            </button>
-            <Tool
-              name="放大画布"
-              onClick={() => {
-                setAutoFit(false);
-                setZoom((v) => Math.min(2, v + 0.1));
-              }}
-            >
-              <Plus size={15} />
-            </Tool>
-          </div>
-        </div>
       </main>
       <aside
         className={`free-right ${mobilePanel === "properties" ? "free-mobile-show" : ""}`}
@@ -2657,103 +2561,116 @@ export default function FreeStudio({
                       />
                     </label>
                   ))}
-                  <label>
-                    纸张颜色
-                    <input
-                      type="color"
-                      aria-label="自由纸张颜色"
-                      value={page.background}
-                      onChange={(e) =>
-                        withScene((c) => {
-                          model.current.pages[pageIndex].background =
-                            e.target.value;
-                          c.backgroundColor = e.target.value;
-                        })
-                      }
-                    />
-                  </label>
                 </div>
-              </section>
-              <section>
-                <h3>页面操作</h3>
-                <div className="free-page-actions">
-                  <button
-                    disabled={busy || model.current.pages.length >= 20}
-                    onClick={() => {
-                      void newPage();
-                    }}
-                  >
-                    <Plus size={15} />
-                    新增页
-                  </button>
-                  <button
-                    disabled={busy || model.current.pages.length >= 20}
-                    onClick={() => {
-                      void newPage(true);
-                    }}
-                  >
-                    <Copy size={15} />
-                    复制本页
-                  </button>
-                  <button
-                    disabled={
-                      busy || (!flowBase && model.current.pages.length < 2)
-                    }
-                    onClick={() => setConfirm("delete-page")}
-                  >
-                    <Trash2 size={15} />
-                    {flowBase && pageIndex < sourcePageCount
-                      ? "清空本页装饰"
-                      : "删除本页"}
-                  </button>
-                </div>
-              </section>
-              <section className="free-empty-selection">
-                <MousePointer2 size={24} />
-                <h3>选中元素，精细调整</h3>
-                <p>
-                  点击画布上的文字、图片或图形，这里会显示对应设置。双击文字可直接输入。
-                </p>
-                <button
-                  onClick={() => {
-                    setLeftTab("objects");
-                    setMobilePanel("insert");
-                  }}
-                >
-                  从元素列表选择
-                </button>
               </section>
             </>
           )}
           <section>
-            <h3>导出与备份</h3>
-            <div className="free-page-actions">
+            <h3>页面操作</h3>
+            {model.current.pages.length > 1 && (
+              <label className="free-page-selector">
+                <span>当前页</span>
+                <select
+                  aria-label="当前自由页"
+                  value={pageIndex}
+                  disabled={busy}
+                  onChange={(e) => {
+                    snapshot();
+                    void loadPage(Number(e.target.value));
+                  }}
+                >
+                  {model.current.pages.map((p, i) => (
+                    <option key={p.id} value={i}>
+                      第 {i + 1} 页
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <div className="free-actions-list">
               <button
+                aria-label="新增自由页"
+                disabled={busy || model.current.pages.length >= 20}
+                onClick={() => {
+                  void newPage();
+                }}
+              >
+                <Plus size={16} />
+                <span>新增页面</span>
+              </button>
+              <button
+                disabled={busy || model.current.pages.length >= 20}
+                onClick={() => {
+                  void newPage(true);
+                }}
+              >
+                <Copy size={16} />
+                <span>复制本页</span>
+              </button>
+              <button
+                className="danger"
+                disabled={busy || (!flowBase && model.current.pages.length < 2)}
+                onClick={() => setConfirm("delete-page")}
+              >
+                <Trash2 size={16} />
+                <span>
+                  {flowBase && pageIndex < sourcePageCount
+                    ? "清空本页装饰"
+                    : "删除本页"}
+                </span>
+              </button>
+            </div>
+          </section>
+          <section>
+            <h3>导出与备份</h3>
+            <div className="free-actions-list free-export-list">
+              <button
+                aria-label="导出 PDF"
+                aria-describedby="free-export-hint-0"
                 disabled={busy}
                 onClick={() => {
                   void print();
                 }}
               >
                 <Download size={14} />
-                导出 PDF
+                <span>
+                  <strong>导出 PDF</strong>
+                  <small id="free-export-hint-0">
+                    完整简历，适合投递与打印
+                  </small>
+                </span>
               </button>
               <button
+                aria-label="本页 SVG"
+                aria-describedby="free-export-hint-1"
                 disabled={busy}
                 onClick={() => {
                   void exportImage("svg");
                 }}
               >
-                本页 SVG
+                <Code2 size={16} />
+                <span>
+                  <strong>本页 SVG</strong>
+                  <small id="free-export-hint-1">矢量格式，便于后续设计</small>
+                </span>
               </button>
               <button
+                aria-label="本页 PNG"
+                aria-describedby="free-export-hint-2"
                 disabled={busy}
                 onClick={() => {
                   void exportImage("png");
                 }}
               >
-                本页 PNG
+                <ImagePlus size={16} />
+                <span>
+                  <strong>本页 PNG</strong>
+                  <small id="free-export-hint-2">保存为图片，便于分享</small>
+                </span>
               </button>
               <button
+                aria-label="可编辑备份"
+                aria-describedby="free-export-hint-3"
                 onClick={() => {
                   commit();
                   download(
@@ -2763,9 +2680,17 @@ export default function FreeStudio({
                   );
                 }}
               >
-                可编辑备份
+                <Download size={16} />
+                <span>
+                  <strong>可编辑备份</strong>
+                  <small id="free-export-hint-3">
+                    保存全部内容与排版，可重新导入
+                  </small>
+                </span>
               </button>
               <button
+                aria-label="导出文字"
+                aria-describedby="free-export-hint-4"
                 onClick={() => {
                   commit();
                   download(
@@ -2777,10 +2702,15 @@ export default function FreeStudio({
                   );
                 }}
               >
-                导出自由稿文字
+                <Type size={16} />
+                <span>
+                  <strong>导出文字</strong>
+                  <small id="free-export-hint-4">
+                    提取正文，便于复制与整理
+                  </small>
+                </span>
               </button>
             </div>
-            <p>PDF 通过浏览器打印保存；SVG 保留文字与矢量图形，PNG 为图片。</p>
           </section>
         </div>
       </aside>

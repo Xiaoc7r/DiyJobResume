@@ -38,7 +38,10 @@ export function blankResume(template: Template, name: string): Resume {
     name,
     pictures: [],
     // 只留姓名和联系方式，方便直接开始写
-    lines: parseMarkdown("# 姓名\n手机 | 邮箱\n## 教育背景\n## 实习经历"),
+    lines:
+      template === "blank"
+        ? doc.lines
+        : parseMarkdown("# 姓名\n手机 | 邮箱\n## 教育背景\n## 实习经历"),
   };
 }
 
