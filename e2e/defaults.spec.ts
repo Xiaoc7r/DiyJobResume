@@ -5,7 +5,8 @@ test("uncached first visit and all six sample templates use the requested layout
 }) => {
   await page.goto("/");
   await page.evaluate(() => document.fonts.ready);
-  await expect(page.getByLabel("预览缩放", { exact: true })).toHaveValue("100");
+  // Layout assertions below use logical 100%; first-visit fitting is tested separately.
+  await page.getByLabel("预览缩放", { exact: true }).fill("100");
   for (const template of [
     "炒肉多经典",
     "蓝图 · 研发履历",

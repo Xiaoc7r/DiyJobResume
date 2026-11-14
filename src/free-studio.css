@@ -446,14 +446,6 @@
   line-height: 1.75;
   color: #6b6056;
 }
-.free-loading {
-  position: absolute;
-  top: 10px;
-  right: 14px;
-  padding: 8px;
-  background: #fbfaf8;
-  font-size: 12px;
-}
 .free-mobile-nav,
 .free-print {
   display: none;
@@ -508,10 +500,6 @@
 .free-source-banner button {
   padding: 5px 8px;
   font-size: 11px;
-}
-.free-entering {
-  color: #805321;
-  font-size: 12px;
 }
 @media (max-width: 1200px) {
   .free-studio {

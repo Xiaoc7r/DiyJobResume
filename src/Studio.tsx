@@ -66,8 +66,9 @@ import { SelectionTools, paragraphOptions } from "./SelectionTools";
 import { withColumns } from "./formatting";
 import { NumericInput, holdDrag } from "./interaction";
 import { PreviewZoom } from "./PreviewZoom";
-import { ThemePalette } from "./ThemePalette";
-import { CrestDialog } from "./CrestDialog";
+import { ColorControl } from "./ColorControl";
+import { ImageUploadDialog } from "./ImageUploadDialog";
+import { FreeLoading } from "./FreeLoading";
 
 import {
   blankResume,
@@ -467,7 +468,9 @@ export default function Studio() {
       ),
     ),
     [zoom, setZoom] = useState(() => readViewPrefs().zoom ?? 1),
-    [autoZoom, setAutoZoom] = useState(() => readViewPrefs().autoZoom ?? false),
+    [autoZoom, setAutoZoom] = useState(
+      () => readViewPrefs().autoZoom ?? readViewPrefs().zoom === undefined,
+    ),
     [modal, setModal] = useState<"type" | "help" | null>(null),
     [fileMenu, setFileMenu] = useState(false),
     [docMenu, setDocMenu] = useState(false),
@@ -479,14 +482,13 @@ export default function Studio() {
   );
   const [pages, setPages] = useState<Piece[][]>([[]]),
     [fontVersion, setFontVersion] = useState(0),
-    [picSelection, setPicSelection] = useState(""),
-    [imageKind, setImageKind] = useState("证件照");
+    [picSelection, setPicSelection] = useState("");
   const [hovered, setHovered] = useState(""),
     [hoverGroup, setHoverGroup] = useState(""),
     [flash, setFlash] = useState("");
   const [panelPosition, setPanelPosition] = useState({ x: 16, y: 82 });
   const [cssOpen, setCssOpen] = useState(false);
-  const [crestOpen, setCrestOpen] = useState(false);
+  const [uploadKind, setUploadKind] = useState<"证件照" | "校徽" | null>(null);
   const [contactOpen, setContactOpen] = useState(false);
   const [exportIssues, setExportIssues] = useState<ExportIssue[] | null>(null);
   const [exportBusy, setExportBusy] = useState(false);
@@ -538,7 +540,6 @@ export default function Studio() {
     workspace = useRef<HTMLDivElement>(null),
     mdRef = useRef<HTMLTextAreaElement>(null),
     fileRef = useRef<HTMLInputElement>(null),
-    imageRef = useRef<HTMLInputElement>(null),
     editorRef = useRef<HTMLDivElement>(null);
   const pendingCaret = useRef<{ id: string; offset: number } | null>(null);
   const flashTimer = useRef(0);
@@ -831,7 +832,12 @@ export default function Studio() {
   }, []);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
-      if (mode === "free" || crestOpen) return;
+      if (
+        mode === "free" ||
+        uploadKind ||
+        (e.target as Element)?.closest(".color-popover")
+      )
+        return;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
         e.preventDefault();
         if (e.shiftKey) redo();
@@ -980,7 +986,17 @@ export default function Studio() {
     const fit = () => {
       if (autoZoom && el.clientWidth > 0)
         setZoom(
-          Math.max(0.25, Math.min(1.4, (el.clientWidth - 64) / paperWidth)),
+          Math.max(
+            0.2,
+            Math.min(
+              2,
+              (el.clientWidth -
+                parseFloat(getComputedStyle(el).paddingLeft) -
+                parseFloat(getComputedStyle(el).paddingRight) -
+                2) /
+                paperWidth,
+            ),
+          ),
         );
     };
     fit();
@@ -1355,43 +1371,6 @@ export default function Studio() {
     };
     target.addEventListener("pointermove", move as EventListener);
     target.addEventListener("pointerup", end, { once: true });
-  };
-  const uploadImage = async (file: File) => {
-    try {
-      if (
-        !["image/png", "image/jpeg", "image/webp"].includes(file.type) ||
-        file.size > 1500000
-      )
-        throw new Error("请选择 1.5 MB 以内的 PNG、JPG 或 WebP 图片。");
-      if (ref.current.pictures.length >= 10)
-        throw new Error("一份简历最多放置 10 张图片。");
-      const src = await new Promise<string>((resolve, reject) => {
-        const r = new FileReader();
-        r.onload = () => resolve(String(r.result));
-        r.onerror = reject;
-        r.readAsDataURL(file);
-      });
-      const photo = imageKind === "证件照";
-      historyUpdate({
-        ...ref.current,
-        pictures: [
-          ...ref.current.pictures,
-          {
-            id: uid(),
-            src,
-            label: imageKind,
-            page: 0,
-            x: photo ? 670 : 42,
-            y: 36,
-            w: photo ? 72 : 60,
-            h: photo ? 96 : 60,
-          },
-        ],
-      });
-      setNotice("图片已放到首页。拖动放置，右下角调整大小；选中后可删除。");
-    } catch (e) {
-      setNotice(String(e instanceof Error ? e.message : e));
-    }
   };
   const sectionStart = (id: string) => {
     const lines = ref.current.lines;
@@ -2274,13 +2253,7 @@ export default function Studio() {
         </div>
       )}
       {mode === "free" && doc.freeform ? (
-        <Suspense
-          fallback={
-            <div className="free-entering" role="status">
-              正在打开自由画布…
-            </div>
-          }
-        >
+        <Suspense fallback={<FreeLoading />}>
           <FreeStudio
             key={activeId}
             doc={doc}
@@ -2305,6 +2278,9 @@ export default function Studio() {
               )
             }
             previewZoom={zoom}
+            fitPreview={autoZoom}
+            onFitZoom={setZoom}
+            onFitPreview={() => setAutoZoom(true)}
             onZoomChange={(value) => {
               setAutoZoom(false);
               setZoom(value);
@@ -2360,11 +2336,6 @@ export default function Studio() {
                     </button>
                   </div>
                 </div>
-                {freeEntering && (
-                  <div className="free-entering" role="status">
-                    正在将简历转换为可编辑元素…
-                  </div>
-                )}
                 <div className="editor-hint">
                   {mode === "simple"
                     ? "直接输入 · 选中文字设置格式 · 长按一行可以拖动排序"
@@ -2523,6 +2494,7 @@ export default function Studio() {
           <main
             className={`preview-panel ${mobile === "preview" ? "mobile-active" : ""}`}
           >
+            {freeEntering && <FreeLoading overlay />}
             <div className="preview-toolbar">
               <PreviewZoom
                 value={zoom}
@@ -2540,34 +2512,31 @@ export default function Studio() {
                 >
                   <SlidersHorizontal size={17} />
                 </button>
-                <label title="正文颜色" className="color-control">
-                  <span>正文</span>
-                  <input
-                    type="color"
-                    aria-label="正文颜色"
-                    value={doc.settings.color}
-                    onChange={(e) => settings({ color: e.target.value })}
-                  />
-                </label>
-                <ThemePalette
+                <ColorControl
+                  label="正文"
+                  value={doc.settings.color}
+                  defaultValue="#171717"
+                  onChange={(color) => settings({ color })}
+                />
+                <ColorControl
+                  label="主题"
                   value={doc.settings.accent}
+                  defaultValue={currentTemplate.color}
+                  presets
                   onChange={(accent) => settings({ accent })}
                 />
                 <i />
                 <button
                   title="上传证件照"
                   aria-label="上传证件照"
-                  onClick={() => {
-                    setImageKind("证件照");
-                    imageRef.current?.click();
-                  }}
+                  onClick={() => setUploadKind("证件照")}
                 >
                   <ImagePlus size={17} />
                 </button>
                 <button
                   title="上传校徽"
                   aria-label="上传校徽"
-                  onClick={() => setCrestOpen(true)}
+                  onClick={() => setUploadKind("校徽")}
                 >
                   <GraduationCap size={19} />
                 </button>
@@ -3070,17 +3039,6 @@ export default function Studio() {
       />
       <input
         hidden
-        ref={imageRef}
-        type="file"
-        accept="image/png,image/jpeg,image/webp"
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) void uploadImage(f);
-          e.target.value = "";
-        }}
-      />
-      <input
-        hidden
         ref={fileRef}
         type="file"
         accept=".json,.md,.txt"
@@ -3131,34 +3089,41 @@ export default function Studio() {
           }}
         />
       )}
-      {crestOpen && (
-        <CrestDialog
-          current={doc.pictures.find((p) => p.label.includes("校徽"))?.src}
-          onClose={() => setCrestOpen(false)}
+      {uploadKind && (
+        <ImageUploadDialog
+          kind={uploadKind}
+          current={doc.pictures.find((p) => p.label.includes(uploadKind))?.src}
+          onClose={() => setUploadKind(null)}
           onConfirm={(src) => {
             const current = ref.current,
-              crest = current.pictures.find((p) => p.label.includes("校徽"));
-            if (!crest && current.pictures.length >= 10)
-              throw new Error(
-                "一份简历最多放置 10 张图片，请先移除不需要的图片。",
+              picture = current.pictures.find((p) =>
+                p.label.includes(uploadKind),
               );
+            if (!picture && current.pictures.length >= 10)
+              throw new Error("一份简历最多放置 10 张图片。");
             historyUpdate({
               ...current,
-              pictures: crest
+              pictures: picture
                 ? current.pictures.map((p) =>
-                    p.id === crest.id ? { ...p, src } : p,
+                    p.id === picture.id ? { ...p, src } : p,
                   )
                 : [
                     ...current.pictures,
                     {
                       id: uid(),
-                      label: "校徽",
+                      label: uploadKind,
                       src,
                       page: 0,
-                      x: 42,
+                      x:
+                        uploadKind === "证件照"
+                          ? Math.max(
+                              0,
+                              paperWidth - current.settings.right - 72,
+                            )
+                          : current.settings.left,
                       y: 20,
-                      w: 60,
-                      h: 60,
+                      w: uploadKind === "证件照" ? 72 : 60,
+                      h: uploadKind === "证件照" ? 96 : 60,
                     },
                   ],
             });

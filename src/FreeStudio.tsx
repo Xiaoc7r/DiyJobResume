@@ -79,6 +79,7 @@ import {
   Pencil,
 } from "lucide-react";
 import { NumericInput } from "./interaction";
+import { FreeLoading } from "./FreeLoading";
 import { PreviewZoom } from "./PreviewZoom";
 import "./freeScene";
 import { SourceInspector } from "./SourceInspector";
@@ -116,6 +117,9 @@ interface Props {
     options?: { hideDecorations?: boolean; layers?: LayerSvg },
   ) => ReactNode;
   previewZoom?: number;
+  fitPreview?: boolean;
+  onFitZoom?: (value: number) => void;
+  onFitPreview?: () => void;
   onZoomChange?: (value: number) => void;
   onRestore?: () => void;
   sourcePageCount?: number;
@@ -198,6 +202,9 @@ export default function FreeStudio({
   onMode,
   renderPaper,
   previewZoom,
+  fitPreview,
+  onFitZoom,
+  onFitPreview,
   onZoomChange,
   onRestore,
   onResizeLeft,
@@ -267,7 +274,7 @@ export default function FreeStudio({
       "canvas" | "insert" | "properties"
     >("canvas");
   const [keepRatio, setKeepRatio] = useState(true);
-  const [grid, setGrid] = useState(false),
+  const [grid, setGrid] = useState(true),
     [snap, setSnap] = useState(true),
     snapRef = useRef(snap);
   snapRef.current = snap;
@@ -1224,18 +1231,30 @@ export default function FreeStudio({
       );
   }, [sourcePageCount]);
   useEffect(() => {
-    if (!autoFit || !scroll.current || previewZoom !== undefined) return;
+    if (!(previewZoom === undefined ? autoFit : fitPreview) || !scroll.current)
+      return;
     const fit = () => {
       const area = scroll.current!;
-      setZoom(
-        Math.min(1.2, Math.max(0.2, (area.clientWidth - 72) / page.width)),
+      if (area.clientWidth <= 0) return;
+      const value = Math.min(
+        2,
+        Math.max(
+          0.2,
+          (area.clientWidth -
+            parseFloat(getComputedStyle(area).paddingLeft) -
+            parseFloat(getComputedStyle(area).paddingRight) -
+            2) /
+            page.width,
+        ),
       );
+      if (onFitZoom) onFitZoom(value);
+      else setZoom(value);
     };
     const observer = new ResizeObserver(fit);
     observer.observe(scroll.current);
     fit();
     return () => observer.disconnect();
-  }, [autoFit, page.width, mobilePanel]);
+  }, [autoFit, page.width, mobilePanel, fitPreview]);
   useEffect(() => {
     const after = () => {
       setPrinting(false);
@@ -1681,6 +1700,10 @@ export default function FreeStudio({
               setZoom(value);
             }}
             onFit={() => {
+              if (onFitPreview) {
+                onFitPreview();
+                return;
+              }
               if (scroll.current)
                 setZoom(
                   Math.min(
@@ -1910,11 +1933,7 @@ export default function FreeStudio({
               <div className="free-guide free-guide-h" />
             </div>
           </div>
-          {busy && (
-            <div className="free-loading" role="status">
-              正在准备画布…
-            </div>
-          )}
+          {busy && <FreeLoading overlay />}
         </div>
         <div className="free-footer">
           <div className="free-pages">

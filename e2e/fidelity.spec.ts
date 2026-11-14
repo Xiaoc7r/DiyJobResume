@@ -12,6 +12,7 @@ test.beforeEach(async ({ page }) => {
   await page.evaluate(async () => {
     await document.fonts.ready;
   });
+  await page.getByLabel("预览缩放", { exact: true }).fill("100");
 });
 
 const tagGeometry = async (page: import("@playwright/test").Page) =>
@@ -48,7 +49,9 @@ test("all original chips and geometry survive a round trip without being convert
   expect(before.some((t) => t.text === "985")).toBe(true);
   expect(before.some((t) => t.text === "SpringBoot")).toBe(true);
   await page.getByRole("tab", { name: "自由模式", exact: true }).click();
-  await expect(page.locator(".free-loading")).toHaveCount(0);
+  await expect(
+    page.getByRole("status", { name: "加载自由模式", exact: true }),
+  ).toHaveCount(0);
   await expect(page.locator(".free-source-paper .resume-paper")).toBeVisible();
   const free = await tagGeometry(page);
   expect(free).toEqual(before);
