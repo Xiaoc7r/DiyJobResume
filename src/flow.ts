@@ -1,6 +1,8 @@
 import { createStarter } from "./starter";
 import { demoFor } from "./samples";
 import { experienceBlocks } from "./experience";
+import { readTemplateStyle } from "./templateStyle";
+import type { TemplateStyle } from "./templateStyle";
 import type { ExperienceBlock } from "./experience";
 import { readFreeDocument } from "./freeform";
 import type { FreeDocument } from "./freeform";
@@ -63,6 +65,7 @@ export interface Settings {
   types: Record<Exclude<Kind, "blank">, TypeStyle>;
 }
 export interface Resume {
+  templateStyle?: TemplateStyle;
   freeform?: FreeDocument;
   freeformArchive?: FreeDocument;
   freeformBaseline?: {
@@ -259,6 +262,7 @@ export function applyTemplate(doc: Resume, template: Template): Resume {
   return {
     ...doc,
     template,
+    templateStyle: undefined,
     settings: {
       ...doc.settings,
       accent: templates.find((t) => t.id === template)!.color,
@@ -271,51 +275,35 @@ export const modules: { name: string; variants: ExperienceBlock[] }[] = [
     name: "教育背景",
     variants: [
       {
-        name: "学校 · 时间",
-        body: "### 示例大学 · 专业名称 | 2021.09 — 2025.06\n本科 · 学历 / 学位\n- 主修课程与学业亮点。",
+        name: "学校与标签 · 专业另起一行",
+        body: "### 学校名称 `985` `211` `双一流` | 2021.09 — 2025.06\n**计算机科学与技术 · 本科**",
       },
       {
-        name: "时间 · 学校 · 专业",
-        body: "### 2021.09 — 2025.06 | 示例大学 | 专业名称 · 本科\n- 学业成绩、研究方向与相关课程。",
+        name: "学校 · 专业学位 · 时间",
+        body: "### 学校名称 `985` `211` | 计算机科学与技术（本科） | 2021.09 — 2025.06\n**荣誉：**国家奖学金、大学英语六级（CET-6）、雅思 7.0",
+      },
+      {
+        name: "研究生 · 研究与成果",
+        body: "### 学校名称 `双一流` | 软件工程（硕士） | 2025.09 — 2028.06\n**研究方向：**分布式系统、数据处理\n**荣誉：**研究生学业奖学金、优秀研究生",
       },
     ],
   },
-  {
-    name: "实习经历",
-    variants: [
-      {
-        name: "公司 · 时间",
-        body: "### 公司名称 · 岗位名称 | 2024.07 — 2024.12\n**工作概述：**简要说明业务背景与职责。\n- **行动：**你具体完成了什么。\n- **成果：**用真实结果说明你的贡献。",
-      },
-      {
-        name: "公司 · 岗位 · 时间",
-        body: "### 公司名称 | 后端开发实习生 | 2024.07 — 2024.12\n- **背景：**业务面临的问题。\n- **职责：**你负责的工作。\n- **成果：**可验证的结果。",
-      },
-    ],
-  },
-  {
-    name: "项目经历",
-    variants: [
-      {
-        name: "项目 · 角色",
-        body: "### 项目名称 | 角色 · 时间\n技术栈：`工具一` `工具二`\n**项目简介：**项目解决的问题与使用场景。\n- **贡献：**你负责的设计与实现。\n- **成果：**项目的实际效果。",
-      },
-      {
-        name: "项目 · 角色 · 时间",
-        body: "### 项目名称 | 核心开发者 | 2024.01 — 2024.06\n- **背景：**项目目标与业务需求。\n- **技术：**实现方案与选型原因。\n- **难点：**解决了什么问题。\n- **成果：**真实可验证的结果。",
-      },
-    ],
-  },
+  { name: "工作经历", variants: experienceBlocks.工作经历 },
+  { name: "项目经历", variants: experienceBlocks.项目经历 },
   {
     name: "专业技能",
     variants: [
       {
-        name: "分类要点",
-        body: "- **编程语言：**填写熟悉的语言与能力。\n- **框架工具：**填写实际使用过的框架。\n- **工程实践：**填写协作与交付经验。",
+        name: "按能力分类",
+        body: "- **编程语言：**熟悉 Java，具备面向对象开发与问题排查能力。\n- **框架工具：**熟悉 Spring Boot、MySQL、Redis。\n- **团队协作：**熟悉 Git 协作、接口联调与技术文档编写。",
       },
       {
-        name: "简洁段落",
-        body: "熟悉的技能、工具与工作方法。突出与目标岗位相关的能力，并说明熟练程度。",
+        name: "精简要点",
+        body: "- 熟悉业务需求分析、功能设计与项目交付。\n- 具备良好的沟通协作能力，能独立跟进任务。",
+      },
+      {
+        name: "技能标签与说明",
+        body: "`Java` `MySQL` `Redis` `Git`\n熟悉后端开发与数据库应用，具备接口设计、测试及日常运维经验。",
       },
     ],
   },
@@ -323,74 +311,20 @@ export const modules: { name: string; variants: ExperienceBlock[] }[] = [
     name: "专业奖项",
     variants: [
       {
-        name: "逐项列举",
-        body: "- 2024 · 奖项名称 · 颁发单位\n- 2023 · 奖学金 / 荣誉称号",
+        name: "奖项 · 时间",
+        body: "### 国家奖学金 | 2024\n### 大学生创新创业大赛 · 省级一等奖 | 2023",
       },
       {
-        name: "奖项 · 时间",
-        body: "### 奖项名称 | 2024\n颁发单位与简要说明。",
+        name: "奖项 · 机构 · 时间",
+        body: "### 优秀毕业生 | 学校名称 | 2025\n### 学业奖学金 | 学校名称 | 2024",
+      },
+      {
+        name: "证书与成绩",
+        body: "### 大学英语六级（CET-6） | 2024\n成绩：560 分\n### 雅思（IELTS） | 2025\n成绩：总分 7.0",
       },
     ],
   },
 ];
-modules.find((m) => m.name === "实习经历")!.name = "工作经历";
-const extraVariants: Record<string, { name: string; body: string }[]> = {
-  教育背景: [
-    {
-      name: "学位卡片 · 课程标签",
-      body: "### 学校名称 | 专业 · 学位 | 入学 — 毕业\n`核心课程` `研究方向` `学业荣誉`\nGPA / 学术成果与相关经历。",
-    },
-    {
-      name: "学术经历 · 成果列表",
-      body: "### 学校名称 · 研究方向 | 入学 — 毕业\n1. 研究课题与个人贡献。\n2. 论文、竞赛或学术成果。",
-    },
-  ],
-  工作经历: [
-    {
-      name: "职责 · 行动 · 结果",
-      body: "### 公司名称 | 岗位名称 | 开始 — 结束\n**职责范围：**业务规模与负责的边界。\n- **关键行动：**设计方案、技术取舍与推进过程。\n- **业务结果：**可核验的交付成果与改进。",
-    },
-    {
-      name: "技术标签 · 核心贡献",
-      body: "### 公司名称 · 团队 | 开始 — 结束\n`岗位名称` `业务方向` `核心技术`\n- 主导的核心模块与工程实践。\n- 性能、稳定性或协作方面的改进。",
-    },
-  ],
-  项目经历: [
-    {
-      name: "项目卡片 · 链接与技术栈",
-      body: "### 项目名称 | 开始 — 结束\n[项目地址](https://github.com/Xiaoc7r)\n`技术一` `技术二` `技术三`\n**项目目标：**解决的问题与使用场景。\n- **个人贡献：**实现与取舍。",
-    },
-    {
-      name: "方案拆解 · 编号成果",
-      body: "### 项目名称 | 负责角色 | 开始 — 结束\n**项目概述：**目标与关键约束。\n1. 架构设计与技术选型。\n2. 核心难点及解决方案。\n3. 交付结果与验证方式。",
-    },
-  ],
-  专业技能: [
-    {
-      name: "技能标签 · 能力说明",
-      body: "`Java` `MySQL` `Redis` `工程实践`\n结合具体场景说明掌握深度，避免只列工具名称。",
-    },
-    {
-      name: "能力分组 · 左右对照",
-      body: "### 技术领域 | 实践能力\n### 后端开发 | 接口设计、并发与稳定性\n### 数据存储 | 索引设计、缓存与一致性",
-    },
-  ],
-  专业奖项: [
-    {
-      name: "荣誉标签 · 说明",
-      body: "### 奖项名称 | 获奖时间\n`颁发单位` `奖项等级`\n简述评选范围与获奖贡献。",
-    },
-    {
-      name: "奖项 · 机构 · 时间",
-      body: "### 奖项名称 | 颁发机构 | 获奖时间\n### 荣誉名称 | 颁发机构 | 获奖时间",
-    },
-  ],
-};
-for (const module of modules)
-  module.variants.push(...(extraVariants[module.name] || []));
-for (const module of modules)
-  if (experienceBlocks[module.name])
-    module.variants = experienceBlocks[module.name];
 export function insertModule(doc: Resume, name: string, body: string): Resume {
   if (
     name === "工作经历" &&
@@ -630,6 +564,8 @@ export function readResume(raw: unknown): Resume {
       h: numeric(p.h, 72, 1, 300),
       page: Math.floor(numeric(p.page, 0, 0, 500)),
     }));
+  if (r.templateStyle !== undefined)
+    doc.templateStyle = readTemplateStyle(r.templateStyle);
   if (r.freeform !== undefined) doc.freeform = readFreeDocument(r.freeform);
   if (r.freeformArchive !== undefined)
     doc.freeformArchive = readFreeDocument(r.freeformArchive);

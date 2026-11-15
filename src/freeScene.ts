@@ -7,6 +7,7 @@ FabricObject.customProperties = [
   "label",
   "link",
   "plane",
+  "templateRole",
   "lockMovementX",
   "lockMovementY",
   "lockScalingX",

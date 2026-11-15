@@ -69,6 +69,17 @@ import { NumericInput, holdDrag } from "./interaction";
 import "./ui-theme.css";
 import { MarkdownNumbers } from "./MarkdownNumbers";
 import { STARTER_PAGE } from "./starter";
+import { measureRow } from "./paperLayout";
+import { headerLines, lineDesign } from "./templateStyle";
+import { useTemplateArt } from "./templateArt";
+import {
+  applyUserTemplate,
+  loadUserTemplates,
+  removeUserTemplate,
+} from "./templateLibrary";
+import type { UserTemplate } from "./templateLibrary";
+import { UserTemplateCard } from "./UserTemplateCard";
+import "./template-maker.css";
 import { PreviewZoom } from "./PreviewZoom";
 import { ColorControl } from "./ColorControl";
 import { ImageUploadDialog } from "./ImageUploadDialog";
@@ -90,9 +101,9 @@ import { AgentPanel } from "./AgentPanel";
 import type { FreeStudioApi } from "./FreeStudio";
 import type { FreeDocument, SourceDesign } from "./freeform";
 import {
+  applySourceContentStyle,
   sourceContentStyle,
   sourceFrameStyle,
-  applySourceContentStyle,
 } from "./freeform";
 import { FreeLayers } from "./FreeLayers";
 import type { LayerSvg } from "./FreeLayers";
@@ -105,6 +116,11 @@ import {
   outsideSelection,
 } from "./editorDom";
 const FreeStudio = lazy(() => import("./FreeStudio"));
+const TemplateMaker = lazy(() =>
+  import("./TemplateMaker").then((module) => ({
+    default: module.TemplateMaker,
+  })),
+);
 
 function saveFile(name: string, content: string, type: string) {
   const url = URL.createObjectURL(new Blob([content], { type })),
@@ -156,34 +172,6 @@ function mdCaretTop(el: HTMLTextAreaElement, position: number) {
     marker.getBoundingClientRect().top - mirror.getBoundingClientRect().top;
   mirror.remove();
   return top;
-}
-function measureRow(
-  node: HTMLDivElement,
-  settings: Settings,
-  template: Template,
-  contact: boolean,
-  line: Line,
-  text: string,
-  continued: boolean,
-  design?: SourceDesign,
-) {
-  node.style.cssText = "";
-  node.className = `flow-row row-${line.kind} ${contact ? "row-contact" : ""} ${continued ? "continued" : ""}`;
-  node.dataset.order = String(line.order || 1);
-  const st = rowStyle(line, settings, continued);
-  Object.assign(node.style, {
-    fontSize: st.fontSize + "px",
-    paddingTop: st.paddingTop + "px",
-    paddingBottom: st.paddingBottom + "px",
-    lineHeight: String(st.lineHeight),
-  });
-  applySourceContentStyle(node, design);
-  if (design?.width) node.style.width = design.width + "px";
-  node.innerHTML = lineHtml(line, text, template);
-  node
-    .querySelectorAll<HTMLElement>("code")
-    .forEach((code, i) => applySourceContentStyle(code, design?.tags?.[i]));
-  return Math.ceil(node.getBoundingClientRect().height * 100) / 100;
 }
 function SimpleInput({
   line,
@@ -306,10 +294,12 @@ function Editable({
   allowDrop,
   design,
   freeMode = false,
+  header = false,
 }: {
   piece: Piece;
   design?: SourceDesign;
   freeMode?: boolean;
+  header?: boolean;
   template: Template;
   contact: boolean;
   settings: Settings;
@@ -386,7 +376,7 @@ function Editable({
         aria-label={`简历${kindLabels[piece.line.kind]}：${piece.line.text.slice(0, 25)}`}
         contentEditable={!ghost}
         suppressContentEditableWarning
-        className={`flow-row row-${piece.line.kind} ${contact ? "row-contact" : ""} ${piece.continued ? "continued" : ""}`}
+        className={`flow-row row-${piece.line.kind} ${contact ? "row-contact" : ""} ${piece.continued ? "continued" : ""} ${header ? "row-header" : ""}`}
         style={{
           ...rowStyle(piece.line, settings, piece.continued),
           ...sourceContentStyle(design),
@@ -479,7 +469,7 @@ export default function Studio() {
     lastGroup = useRef({ key: "", time: 0 });
   const [notice, setNotice] = useState(boot.notice),
     [saved, setSaved] = useState("已保存到本机"),
-    [mode, setMode] = useState<"simple" | "md" | "free">("simple"),
+    [mode, setMode] = useState<"simple" | "md" | "free" | "maker">("simple"),
     [tab, setTab] = useState<"templates" | "modules">("templates");
   const [selected, setSelected] = useState(""),
     [armed, setArmed] = useState(""),
@@ -516,6 +506,9 @@ export default function Studio() {
   const [exportIssues, setExportIssues] = useState<ExportIssue[] | null>(null);
   const [exportBusy, setExportBusy] = useState(false);
   const exportLock = useRef(false);
+  const [userTemplates, setUserTemplates] = useState(loadUserTemplates);
+  const [editingTemplate, setEditingTemplate] = useState<UserTemplate>();
+  const [makerSession, setMakerSession] = useState(0);
   const [agentOpen, setAgentOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(true);
   const [editorOpen, setEditorOpen] = useState(true);
@@ -557,6 +550,8 @@ export default function Studio() {
     y: number;
   } | null>(null);
   const view = preview?.doc ?? doc;
+  const templateArt = useTemplateArt(view.templateStyle);
+  const headerIds = new Set(headerLines(view.lines).map((line) => line.id));
   const paperWidth =
     view.freeform?.base === "flow" ? view.freeform.pages[0].width : PAGE.width;
   const paperHeight =
@@ -920,6 +915,7 @@ export default function Studio() {
     const key = (e: KeyboardEvent) => {
       if (
         mode === "free" ||
+        mode === "maker" ||
         uploadKind ||
         (e.target as Element)?.closest(".color-popover")
       )
@@ -999,7 +995,7 @@ export default function Studio() {
         line,
         text,
         continued,
-        view.freeform?.sourceDesign?.[line.id],
+        lineDesign(view, line),
       );
     const active = document.activeElement as HTMLElement;
     if (!preview && active?.dataset.edit) {
@@ -1027,6 +1023,7 @@ export default function Studio() {
     view.lines,
     view.settings,
     view.template,
+    view.templateStyle,
     paperWidth,
     paperHeight,
     fontVersion,
@@ -1856,9 +1853,7 @@ export default function Studio() {
       "header-" + align,
       { ...doc, settings: { ...doc.settings, headerAlign: align } },
       "预览表头" + (align === "left" ? "左对齐" : "居中"),
-      doc.lines
-        .filter((l) => l.kind === "name" || l.id === contactId)
-        .map((l) => l.id),
+      doc.lines.filter((l) => headerIds.has(l.id)).map((l) => l.id),
     );
   const confirmHeader = (align: "left" | "center") => {
     pinnedPreview.current = false;
@@ -1949,10 +1944,11 @@ export default function Studio() {
     });
     return (
       <article
-        className={`resume-paper template-${view.template}`}
+        className={`resume-paper template-${view.template} ${view.templateStyle ? "has-template-art" : ""}`}
         data-page={page}
         style={{
           ...resumeStyle,
+          ...templateArt.style,
           backgroundColor:
             view.freeform?.base === "flow"
               ? view.freeform.pages[page]?.background
@@ -1963,6 +1959,13 @@ export default function Studio() {
           transform: scale === 1 ? undefined : `scale(${scale})`,
         }}
       >
+        {view.templateStyle && (
+          <div
+            className="template-page-decoration"
+            aria-hidden="true"
+            style={{ backgroundImage: templateArt.page }}
+          />
+        )}
         {view.freeform?.base === "flow" && !options.hideDecorations && (
           <FreeLayers
             page={view.freeform.pages[page]}
@@ -1975,7 +1978,8 @@ export default function Studio() {
             key={piece.line.id + "-" + piece.start}
             piece={piece}
             freeMode={mode === "free"}
-            design={view.freeform?.sourceDesign?.[piece.line.id]}
+            design={lineDesign(view, piece.line)}
+            header={headerIds.has(piece.line.id)}
             template={view.template}
             contact={piece.line.id === contactId}
             settings={view.settings}
@@ -2116,6 +2120,56 @@ export default function Studio() {
       </article>
     );
   };
+  const openMaker = (template?: UserTemplate) => {
+    freeApi.current?.flush();
+    setEditingTemplate(template);
+    setMakerSession((value) => value + 1);
+    setPreview(null);
+    setAgentOpen(false);
+    setEditorOpen(true);
+    setLibraryOpen(true);
+    setFileMenu(false);
+    setMode("maker");
+  };
+  const changeMode = (next: "simple" | "md" | "free" | "maker") => {
+    if (next === mode) return;
+    freeApi.current?.flush();
+    if (next === "maker") {
+      openMaker();
+      return;
+    }
+    setEditorOpen(true);
+    if (next === "free") {
+      if (mode === "maker" && !ref.current.freeform) {
+        setMode("simple");
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => void enterFree()),
+        );
+      } else void enterFree();
+    } else setMode(next);
+  };
+  const renderModeTabs = () => (
+    <div className="mode-tabs" role="tablist" aria-label="编辑方式">
+      {(
+        [
+          ["simple", "简单编辑"],
+          ["md", "Markdown"],
+          ["free", "自由模式"],
+          ["maker", "模板制造"],
+        ] as const
+      ).map(([value, label]) => (
+        <button
+          key={value}
+          role="tab"
+          aria-selected={mode === value}
+          disabled={freeEntering}
+          onClick={() => changeMode(value)}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
   const renderAgentSide = () => (
     <aside
       className={`library-panel agent-side ${mode === "free" || mobile === "library" ? "mobile-active" : ""}`}
@@ -2164,10 +2218,10 @@ export default function Studio() {
   );
   return (
     <div
-      className={`studio ${mode === "free" ? "free-mode" : ""} ${dark ? "is-dark" : ""}`}
+      className={`studio ${mode === "free" || mode === "maker" ? "free-mode" : ""} ${dark ? "is-dark" : ""}`}
       style={{ "--editor-width": leftWidth + "px" } as CSSProperties}
     >
-      <style>{customCss}</style>
+      <style>{mode === "maker" ? "" : customCss}</style>
       {view.freeform?.base === "flow" && (
         <style>{`@media print{@page{size:${(paperWidth * 25.4) / 96}mm ${(paperHeight * 25.4) / 96}mm;margin:0}html,body,#root,.studio,.workbench,.preview-panel,.paper-workspace,.page-frame{width:${(paperWidth * 25.4) / 96}mm!important}.page-frame{height:${(paperHeight * 25.4) / 96}mm!important}}`}</style>
       )}
@@ -2189,6 +2243,7 @@ export default function Studio() {
           <input
             className="document-name"
             aria-label="简历名称"
+            disabled={mode === "maker"}
             value={doc.name}
             onChange={(e) =>
               historyUpdate({ ...doc, name: e.target.value }, "name")
@@ -2197,6 +2252,7 @@ export default function Studio() {
           <button
             className="doc-toggle"
             aria-label="我的简历"
+            disabled={mode === "maker"}
             title="切换 / 新建 / 删除简历"
             aria-expanded={docMenu}
             onClick={() => {
@@ -2302,6 +2358,7 @@ export default function Studio() {
             title="打开 AI 排版助手：用一句话让它调排版"
             aria-label="排版助手"
             aria-pressed={agentOpen}
+            disabled={mode === "maker"}
             onClick={() => {
               freeApi.current?.flush();
               setMobile("library");
@@ -2325,7 +2382,10 @@ export default function Studio() {
             <HelpCircle size={18} />
           </button>
           <div className="file-wrap">
-            <button onClick={() => setFileMenu(!fileMenu)}>
+            <button
+              disabled={mode === "maker"}
+              onClick={() => setFileMenu(!fileMenu)}
+            >
               文件
               <ChevronDown size={13} />
             </button>
@@ -2368,7 +2428,7 @@ export default function Studio() {
           </div>
           <button
             className="primary"
-            disabled={exportBusy}
+            disabled={exportBusy || mode === "maker"}
             onClick={async () => {
               if (mode === "free") {
                 await freeApi.current?.print();
@@ -2461,12 +2521,51 @@ export default function Studio() {
           <PanelRight size={17} />
         </button>
       )}
-      {mode === "free" && doc.freeform ? (
+      {mode === "maker" ? (
+        <Suspense fallback={<FreeLoading />}>
+          <TemplateMaker
+            key={makerSession}
+            settings={doc.settings}
+            editing={editingTemplate}
+            modeTabs={renderModeTabs()}
+            apiRef={freeApi}
+            onSaved={(items) => {
+              setUserTemplates(items);
+              setMode("simple");
+              setLibraryOpen(true);
+              setTab("templates");
+              setMobile("library");
+            }}
+            onNotice={setNotice}
+            zoom={zoom}
+            fit={autoZoom}
+            onFitZoom={setZoom}
+            onFit={() => setAutoZoom(true)}
+            onZoom={(value) => {
+              setAutoZoom(false);
+              setZoom(value);
+            }}
+            leftOpen={editorOpen}
+            rightOpen={libraryOpen}
+            onCloseLeft={() => setEditorOpen(false)}
+            onCloseRight={() => setLibraryOpen(false)}
+            onOpenLeft={() => setEditorOpen(true)}
+            onOpenRight={() => setLibraryOpen(true)}
+            onResizeLeft={resizeSidebar}
+            onNudgeLeft={(delta) =>
+              setLeftWidth((width) =>
+                Math.max(260, Math.min(window.innerWidth * 0.6, width + delta)),
+              )
+            }
+          />
+        </Suspense>
+      ) : mode === "free" && doc.freeform ? (
         <Suspense fallback={<FreeLoading />}>
           <FreeStudio
             key={activeId}
             doc={doc}
             apiRef={freeApi}
+            modeTabs={renderModeTabs()}
             onChange={updateFreeform}
             renderPaper={renderPaper}
             sourcePageCount={pages.length}
@@ -2515,36 +2614,7 @@ export default function Studio() {
                 className={`editor-panel ${mobile === "editor" ? "mobile-active" : ""}`}
               >
                 <div className="editor-heading">
-                  <div
-                    className="mode-tabs"
-                    role="tablist"
-                    aria-label="编辑方式"
-                  >
-                    <button
-                      role="tab"
-                      aria-selected={mode === "simple"}
-                      onClick={() => setMode("simple")}
-                    >
-                      简单编辑
-                    </button>
-                    <button
-                      role="tab"
-                      aria-selected={mode === "md"}
-                      onClick={() => setMode("md")}
-                    >
-                      Markdown
-                    </button>
-                    <button
-                      role="tab"
-                      aria-selected={false}
-                      disabled={freeEntering}
-                      onClick={() => {
-                        void enterFree();
-                      }}
-                    >
-                      自由模式
-                    </button>
-                  </div>
+                  {renderModeTabs()}
                   <div className="history-buttons">
                     <button
                       title="收起编辑区"
@@ -2921,9 +2991,31 @@ export default function Studio() {
                   <div className="library-scroll">
                     {tab === "templates" ? (
                       <>
+                        {userTemplates.map((template) => (
+                          <UserTemplateCard
+                            key={template.id}
+                            template={template}
+                            selected={doc.templateStyle?.id === template.id}
+                            onUse={() =>
+                              historyUpdate(
+                                applyUserTemplate(ref.current, template),
+                              )
+                            }
+                            onEdit={() => openMaker(template)}
+                            onDelete={() => {
+                              try {
+                                setUserTemplates(
+                                  removeUserTemplate(template.id),
+                                );
+                              } catch (error) {
+                                setNotice((error as Error).message);
+                              }
+                            }}
+                          />
+                        ))}
                         {templates.map((t) => (
                           <button
-                            className={`template-card ${doc.template === t.id ? "active" : ""}`}
+                            className={`template-card ${doc.template === t.id && !doc.templateStyle ? "active" : ""}`}
                             key={t.id}
                             aria-label={"使用" + t.name + "模板"}
                             onClick={() =>
@@ -2968,7 +3060,9 @@ export default function Studio() {
                             </div>
                             <div className="template-name">
                               {t.name}
-                              {doc.template === t.id && <Check size={15} />}
+                              {doc.template === t.id && !doc.templateStyle && (
+                                <Check size={15} />
+                              )}
                             </div>
                             <p>{t.desc}</p>
                           </button>
@@ -2989,7 +3083,7 @@ export default function Studio() {
                       <>
                         <div className="current-style">
                           <span style={{ background: doc.settings.accent }} />
-                          {currentTemplate.name}
+                          {doc.templateStyle?.name || currentTemplate.name}
                           <small>所有新增内容沿用这套风格</small>
                         </div>
                         <section className="module-group">
@@ -3125,7 +3219,7 @@ export default function Studio() {
               )}
         </div>
       )}
-      {mode !== "free" && (
+      {mode !== "free" && mode !== "maker" && (
         <nav className="mobile-nav">
           <button
             className={mobile === "editor" ? "active" : ""}
@@ -3159,43 +3253,48 @@ export default function Studio() {
       <div ref={markWord} className="caret-word" aria-hidden="true" />
       <div ref={markBar} className="caret-bar" aria-hidden="true" />
       <div ref={mdMarkRef} className="md-line-mark" aria-hidden="true" />
-      <SelectionTools
-        lines={doc.lines}
-        onRichChange={syncSimple}
-        onSource={(value, start, end) => {
-          historyUpdate(
-            { ...ref.current, lines: parseMarkdown(value, ref.current.lines) },
-            "format",
-          );
-          requestAnimationFrame(() => {
-            mdRef.current?.focus();
-            mdRef.current?.setSelectionRange(start, end);
-          });
-        }}
-        onKind={(ids, kind) => {
-          let order = 0;
-          historyUpdate({
-            ...ref.current,
-            lines: ref.current.lines.map((l) =>
-              ids.includes(l.id)
-                ? {
-                    ...l,
-                    kind,
-                    ...(kind === "ordered" ? { order: ++order } : {}),
-                  }
-                : l,
-            ),
-          });
-        }}
-        onColumns={(id, count) =>
-          historyUpdate({
-            ...ref.current,
-            lines: ref.current.lines.map((l) =>
-              l.id === id ? withColumns(l, count) : l,
-            ),
-          })
-        }
-      />
+      {mode !== "maker" && (
+        <SelectionTools
+          lines={doc.lines}
+          onRichChange={syncSimple}
+          onSource={(value, start, end) => {
+            historyUpdate(
+              {
+                ...ref.current,
+                lines: parseMarkdown(value, ref.current.lines),
+              },
+              "format",
+            );
+            requestAnimationFrame(() => {
+              mdRef.current?.focus();
+              mdRef.current?.setSelectionRange(start, end);
+            });
+          }}
+          onKind={(ids, kind) => {
+            let order = 0;
+            historyUpdate({
+              ...ref.current,
+              lines: ref.current.lines.map((l) =>
+                ids.includes(l.id)
+                  ? {
+                      ...l,
+                      kind,
+                      ...(kind === "ordered" ? { order: ++order } : {}),
+                    }
+                  : l,
+              ),
+            });
+          }}
+          onColumns={(id, count) =>
+            historyUpdate({
+              ...ref.current,
+              lines: ref.current.lines.map((l) =>
+                l.id === id ? withColumns(l, count) : l,
+              ),
+            })
+          }
+        />
+      )}
       {blockMenu && (
         <>
           <div
@@ -3234,7 +3333,7 @@ export default function Studio() {
       )}
       <div
         ref={measureRef}
-        className={`measure-host template-${view.template}`}
+        className={`measure-host template-${view.template} ${view.templateStyle ? "has-template-art" : ""}`}
         aria-hidden="true"
         style={{
           ...resumeStyle,

@@ -116,6 +116,15 @@ interface Props {
   onChange: (data: FreeDocument) => void;
   onMode: (mode: "simple" | "md") => void;
   onRebuild?: () => void;
+  modeTabs?: ReactNode;
+  propertiesAddon?: ReactNode;
+  insertion?: {
+    role: "section" | "page";
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
   leftOpen?: boolean;
   rightOpen?: boolean;
   onCloseLeft?: () => void;
@@ -220,6 +229,9 @@ export default function FreeStudio({
   apiRef,
   onChange,
   onMode,
+  modeTabs,
+  propertiesAddon,
+  insertion,
   leftOpen = true,
   rightOpen = true,
   onCloseLeft,
@@ -274,6 +286,8 @@ export default function FreeStudio({
     emitted.current = next;
     onChangeRef.current(next);
   };
+  const insertionRef = useRef(insertion);
+  insertionRef.current = insertion;
   const frontLayer = useRef<HTMLDivElement>(null);
   const backLayer = useRef<HTMLDivElement>(null);
   const detailPreview = useRef<HTMLDivElement>(null);
@@ -517,7 +531,26 @@ export default function FreeStudio({
           ]
         : items;
       objects.forEach((o) => {
+        const placement = insertionRef.current;
+        if (placement?.role === "section") {
+          const box = o.getBoundingRect(),
+            factor = Math.min(
+              1,
+              placement.height / Math.max(1, box.height),
+              placement.width / Math.max(1, box.width),
+            );
+          o.set({
+            left: placement.x,
+            top: placement.y + (label === "分隔线" ? placement.height - 2 : 0),
+            scaleX:
+              label === "分隔线"
+                ? (o.scaleX * placement.width) / Math.max(1, box.width)
+                : o.scaleX * factor,
+            scaleY: o.scaleY * factor,
+          });
+        }
         o.set({
+          ...(placement ? { templateRole: placement.role } : {}),
           ...base,
           id: crypto.randomUUID(),
           label: o.label || label,
@@ -1151,6 +1184,8 @@ export default function FreeStudio({
     c.freeDrawingBrush.color = doc.settings.accent;
     c.freeDrawingBrush.width = 2;
     c.on("path:created", ({ path }) => {
+      if (insertionRef.current)
+        path.set({ templateRole: insertionRef.current.role });
       path.set({ ...base, id: crypto.randomUUID(), label: "手绘线条" });
       modified();
     });
@@ -1432,31 +1467,33 @@ export default function FreeStudio({
           className={`free-left ${mobilePanel === "insert" ? "free-mobile-show" : ""}`}
         >
           <div className="editor-heading">
-            <div className="mode-tabs" role="tablist" aria-label="编辑方式">
-              <button
-                role="tab"
-                aria-selected={false}
-                onClick={() => {
-                  commit();
-                  onMode("simple");
-                }}
-              >
-                简单编辑
-              </button>
-              <button
-                role="tab"
-                aria-selected={false}
-                onClick={() => {
-                  commit();
-                  onMode("md");
-                }}
-              >
-                Markdown
-              </button>
-              <button role="tab" aria-selected={true}>
-                自由模式
-              </button>
-            </div>
+            {modeTabs || (
+              <div className="mode-tabs" role="tablist" aria-label="编辑方式">
+                <button
+                  role="tab"
+                  aria-selected={false}
+                  onClick={() => {
+                    commit();
+                    onMode("simple");
+                  }}
+                >
+                  简单编辑
+                </button>
+                <button
+                  role="tab"
+                  aria-selected={false}
+                  onClick={() => {
+                    commit();
+                    onMode("md");
+                  }}
+                >
+                  Markdown
+                </button>
+                <button role="tab" aria-selected={true}>
+                  自由模式
+                </button>
+              </div>
+            )}
             {onCloseLeft && (
               <button
                 className="icon-button"
@@ -2050,6 +2087,23 @@ export default function FreeStudio({
               )}
             </div>
             <div className="free-side-scroll">
+              {propertiesAddon}
+              {insertion && one && (
+                <label className="maker-object-scope">
+                  用于
+                  <select
+                    aria-label="元素使用范围"
+                    value={
+                      (one as Item & { templateRole?: string }).templateRole ||
+                      "page"
+                    }
+                    onChange={(e) => patch({ templateRole: e.target.value })}
+                  >
+                    <option value="section">每个板块标题</option>
+                    <option value="page">整页装饰</option>
+                  </select>
+                </label>
+              )}
               {selection.length > 0 && (
                 <details
                   className="free-detail-preview"
@@ -2675,163 +2729,167 @@ export default function FreeStudio({
                   </section>
                 </>
               )}
-              <section>
-                <h3>页面操作</h3>
-                {model.current.pages.length > 1 && (
-                  <label className="free-page-selector">
-                    <span>当前页</span>
-                    <select
-                      aria-label="当前自由页"
-                      value={pageIndex}
-                      disabled={busy}
-                      onChange={(e) => {
-                        snapshot();
-                        void loadPage(Number(e.target.value));
-                      }}
-                    >
-                      {model.current.pages.map((p, i) => (
-                        <option key={p.id} value={i}>
-                          第 {i + 1} 页
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                )}
-                <div className="free-actions-list">
-                  <button
-                    aria-label="新增自由页"
-                    disabled={busy || model.current.pages.length >= 20}
-                    onClick={() => {
-                      void newPage();
-                    }}
-                  >
-                    <Plus size={16} />
-                    <span>新增页面</span>
-                  </button>
-                  <button
-                    disabled={busy || model.current.pages.length >= 20}
-                    onClick={() => {
-                      void newPage(true);
-                    }}
-                  >
-                    <Copy size={16} />
-                    <span>复制本页</span>
-                  </button>
-                  <button
-                    className="danger"
-                    disabled={
-                      busy || (!flowBase && model.current.pages.length < 2)
-                    }
-                    onClick={() => setConfirm("delete-page")}
-                  >
-                    <Trash2 size={16} />
-                    <span>
-                      {flowBase && pageIndex < sourcePageCount
-                        ? "清空本页装饰"
-                        : "删除本页"}
-                    </span>
-                  </button>
-                </div>
-              </section>
-              <section>
-                <h3>导出与备份</h3>
-                <div className="free-actions-list free-export-list">
-                  <button
-                    aria-label="导出 PDF"
-                    aria-describedby="free-export-hint-0"
-                    disabled={busy}
-                    onClick={() => {
-                      void print();
-                    }}
-                  >
-                    <Download size={14} />
-                    <span>
-                      <strong>导出 PDF</strong>
-                      <small id="free-export-hint-0">
-                        完整简历，适合投递与打印
-                      </small>
-                    </span>
-                  </button>
-                  <button
-                    aria-label="本页 SVG"
-                    aria-describedby="free-export-hint-1"
-                    disabled={busy}
-                    onClick={() => {
-                      void exportImage("svg");
-                    }}
-                  >
-                    <Code2 size={16} />
-                    <span>
-                      <strong>本页 SVG</strong>
-                      <small id="free-export-hint-1">
-                        矢量格式，便于后续设计
-                      </small>
-                    </span>
-                  </button>
-                  <button
-                    aria-label="本页 PNG"
-                    aria-describedby="free-export-hint-2"
-                    disabled={busy}
-                    onClick={() => {
-                      void exportImage("png");
-                    }}
-                  >
-                    <ImagePlus size={16} />
-                    <span>
-                      <strong>本页 PNG</strong>
-                      <small id="free-export-hint-2">
-                        保存为图片，便于分享
-                      </small>
-                    </span>
-                  </button>
-                  <button
-                    aria-label="可编辑备份"
-                    aria-describedby="free-export-hint-3"
-                    onClick={() => {
-                      commit();
-                      download(
-                        doc.name + ".json",
-                        JSON.stringify(
-                          { ...doc, freeform: snapshot() },
-                          null,
-                          2,
-                        ),
-                        "application/json",
-                      );
-                    }}
-                  >
-                    <Download size={16} />
-                    <span>
-                      <strong>可编辑备份</strong>
-                      <small id="free-export-hint-3">
-                        保存全部内容与排版，可重新导入
-                      </small>
-                    </span>
-                  </button>
-                  <button
-                    aria-label="导出文字"
-                    aria-describedby="free-export-hint-4"
-                    onClick={() => {
-                      commit();
-                      download(
-                        doc.name + "-自由稿文字.txt",
-                        (flowBase
-                          ? doc.lines.map((l) => l.text).join("\n") + "\n"
-                          : "") + freeText(snapshot()),
-                        "text/plain",
-                      );
-                    }}
-                  >
-                    <Type size={16} />
-                    <span>
-                      <strong>导出文字</strong>
-                      <small id="free-export-hint-4">
-                        提取正文，便于复制与整理
-                      </small>
-                    </span>
-                  </button>
-                </div>
-              </section>
+              {!insertion && (
+                <>
+                  <section>
+                    <h3>页面操作</h3>
+                    {model.current.pages.length > 1 && (
+                      <label className="free-page-selector">
+                        <span>当前页</span>
+                        <select
+                          aria-label="当前自由页"
+                          value={pageIndex}
+                          disabled={busy}
+                          onChange={(e) => {
+                            snapshot();
+                            void loadPage(Number(e.target.value));
+                          }}
+                        >
+                          {model.current.pages.map((p, i) => (
+                            <option key={p.id} value={i}>
+                              第 {i + 1} 页
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
+                    <div className="free-actions-list">
+                      <button
+                        aria-label="新增自由页"
+                        disabled={busy || model.current.pages.length >= 20}
+                        onClick={() => {
+                          void newPage();
+                        }}
+                      >
+                        <Plus size={16} />
+                        <span>新增页面</span>
+                      </button>
+                      <button
+                        disabled={busy || model.current.pages.length >= 20}
+                        onClick={() => {
+                          void newPage(true);
+                        }}
+                      >
+                        <Copy size={16} />
+                        <span>复制本页</span>
+                      </button>
+                      <button
+                        className="danger"
+                        disabled={
+                          busy || (!flowBase && model.current.pages.length < 2)
+                        }
+                        onClick={() => setConfirm("delete-page")}
+                      >
+                        <Trash2 size={16} />
+                        <span>
+                          {flowBase && pageIndex < sourcePageCount
+                            ? "清空本页装饰"
+                            : "删除本页"}
+                        </span>
+                      </button>
+                    </div>
+                  </section>
+                  <section>
+                    <h3>导出与备份</h3>
+                    <div className="free-actions-list free-export-list">
+                      <button
+                        aria-label="导出 PDF"
+                        aria-describedby="free-export-hint-0"
+                        disabled={busy}
+                        onClick={() => {
+                          void print();
+                        }}
+                      >
+                        <Download size={14} />
+                        <span>
+                          <strong>导出 PDF</strong>
+                          <small id="free-export-hint-0">
+                            完整简历，适合投递与打印
+                          </small>
+                        </span>
+                      </button>
+                      <button
+                        aria-label="本页 SVG"
+                        aria-describedby="free-export-hint-1"
+                        disabled={busy}
+                        onClick={() => {
+                          void exportImage("svg");
+                        }}
+                      >
+                        <Code2 size={16} />
+                        <span>
+                          <strong>本页 SVG</strong>
+                          <small id="free-export-hint-1">
+                            矢量格式，便于后续设计
+                          </small>
+                        </span>
+                      </button>
+                      <button
+                        aria-label="本页 PNG"
+                        aria-describedby="free-export-hint-2"
+                        disabled={busy}
+                        onClick={() => {
+                          void exportImage("png");
+                        }}
+                      >
+                        <ImagePlus size={16} />
+                        <span>
+                          <strong>本页 PNG</strong>
+                          <small id="free-export-hint-2">
+                            保存为图片，便于分享
+                          </small>
+                        </span>
+                      </button>
+                      <button
+                        aria-label="可编辑备份"
+                        aria-describedby="free-export-hint-3"
+                        onClick={() => {
+                          commit();
+                          download(
+                            doc.name + ".json",
+                            JSON.stringify(
+                              { ...doc, freeform: snapshot() },
+                              null,
+                              2,
+                            ),
+                            "application/json",
+                          );
+                        }}
+                      >
+                        <Download size={16} />
+                        <span>
+                          <strong>可编辑备份</strong>
+                          <small id="free-export-hint-3">
+                            保存全部内容与排版，可重新导入
+                          </small>
+                        </span>
+                      </button>
+                      <button
+                        aria-label="导出文字"
+                        aria-describedby="free-export-hint-4"
+                        onClick={() => {
+                          commit();
+                          download(
+                            doc.name + "-自由稿文字.txt",
+                            (flowBase
+                              ? doc.lines.map((l) => l.text).join("\n") + "\n"
+                              : "") + freeText(snapshot()),
+                            "text/plain",
+                          );
+                        }}
+                      >
+                        <Type size={16} />
+                        <span>
+                          <strong>导出文字</strong>
+                          <small id="free-export-hint-4">
+                            提取正文，便于复制与整理
+                          </small>
+                        </span>
+                      </button>
+                    </div>
+                  </section>
+                </>
+              )}
             </div>
           </aside>
         ))}
