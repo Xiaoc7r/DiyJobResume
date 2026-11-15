@@ -53,7 +53,15 @@ describe("experience blocks and export checks", () => {
           expect(added.lines.filter((l) => l.kind === "section").length).toBe(
             doc.lines.filter((l) => l.kind === "section").length,
           );
-          expect(checkContent(added, 2).some((i) => i.lineId)).toBe(true);
+          const newLines = added.lines.filter(
+            (line) => !doc.lines.some((old) => old.id === line.id),
+          );
+          expect(newLines.some((line) => line.kind === "entry")).toBe(true);
+          expect(
+            newLines.some(
+              (line) => line.kind === "bullet" || line.kind === "ordered",
+            ),
+          ).toBe(true);
         }
       }
     }
@@ -61,6 +69,14 @@ describe("experience blocks and export checks", () => {
   it("does not warn on the authorized example, checks empty text and off-page images", () => {
     const doc = initialResume();
     expect(checkContent(doc, 1)).toEqual([]);
+    const incomplete = insertModule(
+      doc,
+      "项目经历",
+      "### [填写项目名称] | 2024",
+    );
+    expect(checkContent(incomplete, 1).some((issue) => issue.lineId)).toBe(
+      true,
+    );
     expect(checkContent({ ...doc, lines: [] }, 1)).toHaveLength(1);
     doc.pictures = [
       {
