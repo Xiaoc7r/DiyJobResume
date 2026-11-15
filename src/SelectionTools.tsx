@@ -199,7 +199,8 @@ export function SelectionTools({
     if (t.type === "md") {
       const result = colorMarkdown(t.element.value, t.start, t.end, hex);
       saved.current = { ...t, start: result.start, end: result.end };
-      onSource(result.source, result.start, result.end, false);
+      if (result.source !== t.element.value)
+        onSource(result.source, result.start, result.end, false);
     } else {
       const result = colorRichRange(t.element, t.range, hex);
       if (!result) return;

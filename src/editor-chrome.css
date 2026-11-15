@@ -161,25 +161,20 @@
 }
 
 .studio .source-toolbar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  gap: 12px;
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-height: 30px;
 }
 .source-toolbar > div {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 4px;
   min-width: 0;
 }
-.source-toolbar .toolbar-actions {
-  justify-content: center;
-  gap: 4px;
-}
-.source-toolbar .toolbar-extras {
-  justify-content: flex-end;
-}
-.source-toolbar .toolbar-styles button,
-.source-toolbar .toolbar-actions button {
+.source-toolbar button:not(.color-trigger) {
   border: 0;
   background: transparent;
   padding: 5px;
@@ -187,32 +182,40 @@
   height: 28px;
   color: inherit;
 }
-.source-toolbar .toolbar-styles button:hover,
-.source-toolbar .toolbar-actions button:hover {
+.source-toolbar button:not(.color-trigger):hover {
   background: #e6e5e1;
 }
-
+.source-toolbar button[aria-pressed="true"] {
+  background: #ddd9d2;
+}
+.source-toolbar .color-control {
+  gap: 0;
+}
+.source-toolbar .color-control > span {
+  display: none;
+}
+.source-toolbar .color-trigger {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  border-radius: 5px;
+  padding: 0;
+}
 .source-toolbar select {
-  max-width: 108px;
+  max-width: 100px;
 }
-@container (max-width: 720px) {
-  .studio .source-toolbar {
-    display: flex;
-    justify-content: center;
-    gap: 8px 16px;
-  }
-  .source-toolbar .toolbar-styles {
-    justify-content: center;
-    flex: 1 0 100%;
-  }
-  .source-toolbar .toolbar-extras {
-    justify-content: center;
-  }
+.source-toolbar .number-label input {
+  width: 45px;
 }
-@container (max-width: 380px) {
-  .source-toolbar .toolbar-extras {
-    flex: 1 0 100%;
-  }
+.resume-paper
+  :is(.row-text, .row-bullet, .row-ordered):not(.row-header):not(.row-contact),
+.measure-host
+  :is(.row-text, .row-bullet, .row-ordered):not(.row-header):not(.row-contact) {
+  text-align: var(--body-align, start);
+}
+.studio.is-dark .source-toolbar button[aria-pressed="true"] {
+  --control-bg: #484842;
+  background: #484842;
 }
 .selection-tools .color-control {
   gap: 4px;

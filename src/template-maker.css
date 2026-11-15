@@ -4,78 +4,11 @@
   display: flex;
   flex-direction: column;
 }
-.maker-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  background: #fbfaf8;
-  border-bottom: 1px solid #dedbd5;
-}
-.maker-bar > input {
-  width: 180px;
-  min-width: 80px;
-  border: 0;
-  background: transparent;
-  font-size: 14px;
-  font-weight: 600;
-}
-.maker-bar > select {
-  margin-left: auto;
-}
-.maker-bar > span {
-  font-size: 11px;
-  color: #995a42;
-}
-.maker-preview-state {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.maker-style-controls label {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 12px;
-  gap: 8px;
-  font-size: 12px;
-}
-.maker-style-controls select {
-  max-width: 125px;
-}
-.maker-colors {
-  display: flex;
-  gap: 18px;
-}
-.maker-type-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-top: 12px;
-}
-.maker-type-grid label {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
-  margin: 0;
-}
-.maker-type-grid input {
-  width: 100%;
-  min-width: 0;
-}
 .maker-object-scope {
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding-top: 16px;
-}
-.template-maker.is-preview
-  :is(.free-front-scene, .free-back-scene, .upper-canvas) {
-  visibility: hidden;
-}
-.template-maker.is-preview .free-canvas-scroll {
-  pointer-events: none;
 }
 .resume-paper.has-template-art .row-section,
 .measure-host.has-template-art .row-section {
@@ -90,7 +23,7 @@
 }
 .resume-paper.has-template-art .row-section .ink {
   background: transparent;
-  color: var(--accent);
+  color: inherit;
   clip-path: none;
 }
 .template-page-decoration {
@@ -127,38 +60,117 @@
 .user-template-entry .template-name {
   padding-right: 50px;
 }
-.studio.is-dark .maker-bar {
-  background: #252522;
-  border-color: #45443e;
-  color: #e1dcd4;
-}
-.studio.is-dark .maker-bar :is(input, select) {
-  background: #302f2b;
-  color: #e5e0d7;
-  border-color: #4c4942;
-}
-.studio.is-dark .maker-bar button:not(.primary) {
-  background: #302f2b;
-  color: #e5e0d7;
-  border-color: #4c4942;
-}
 @media (max-width: 700px) {
-  .maker-bar {
-    flex-wrap: wrap;
-    padding: 8px;
-  }
-  .maker-bar > input {
-    flex: 1;
-  }
-  .maker-bar > select {
-    max-width: 145px;
-  }
   .user-template-entry {
     width: 100%;
   }
 }
-@media print {
-  .maker-bar {
-    display: none !important;
-  }
+
+.template-region-art {
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+.template-region-art > svg {
+  display: block;
+  overflow: visible;
+}
+.has-template-art > .paper-row {
+  position: relative;
+  z-index: 1;
+}
+.maker-zone-guides {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+.maker-zone-outline {
+  fill: none;
+  stroke: #ff9c50;
+  stroke-width: 1.2;
+  stroke-dasharray: 6 4;
+}
+.region-workshop {
+  min-height: 0;
+}
+.region-workshop .maker-save-controls {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: #fbfaf8;
+}
+.maker-save-line {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.maker-save-line input {
+  width: 100%;
+  min-width: 0;
+  background: transparent;
+  font-weight: 600;
+}
+.maker-save-line .primary {
+  width: 100%;
+}
+.maker-area-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 9px;
+  margin-top: 18px;
+}
+.maker-area-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 11px;
+  min-width: 0;
+}
+.maker-area-controls input {
+  width: 100%;
+}
+.maker-overflow-note {
+  display: block;
+  margin-top: 10px;
+  color: #936442;
+  font-size: 10px;
+}
+.maker-new {
+  margin-top: 10px;
+  border: 0;
+  padding: 4px 0;
+  background: transparent;
+  color: #8f7963;
+  font-size: 11px;
+}
+.maker-toolbar-fields {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.maker-toolbar-fields select {
+  height: 28px;
+  padding-block: 2px;
+  max-width: 106px;
+}
+.studio.is-dark .region-workshop .maker-save-controls {
+  background: #252522;
+}
+.studio.is-dark .maker-overflow-note {
+  color: #d5ad80;
+}
+.region-workshop .free-properties-heading h2 {
+  font-size: 16px;
+}
+
+.has-region-template .row-name {
+  display: flex;
+  align-items: center;
+  justify-content: var(--header-align, center);
+}
+
+.has-region-template .row-header > .ink {
+  text-align: inherit;
 }

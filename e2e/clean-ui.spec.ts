@@ -25,11 +25,21 @@ test("header stays fixed while the editor resizes, toolbar ordering and typograp
   await expect(page.locator(".editor-hint")).toHaveCount(0);
   expect(
     await page
-      .locator(".source-toolbar .toolbar-actions > button")
+      .locator(".source-toolbar button[aria-label]")
       .evaluateAll((els) =>
-        els.slice(0, 5).map((el) => el.getAttribute("aria-label")),
+        els.slice(0, 9).map((el) => el.getAttribute("aria-label")),
       ),
-  ).toEqual(["撤销", "重做", "上传证件照", "上传校徽", "自定义 CSS"]);
+  ).toEqual([
+    "间距与字号",
+    "主题颜色",
+    "正文颜色",
+    "撤销",
+    "重做",
+    "上传证件照",
+    "上传校徽",
+    "自定义 CSS",
+    "正文两端对齐",
+  ]);
   await page.getByRole("button", { name: "间距与字号", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "间距与字号", exact: true });
   await expect(dialog.locator(".page-settings > *")).toHaveCount(6);

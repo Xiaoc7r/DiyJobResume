@@ -22,9 +22,12 @@ export function useAppearance() {
   const desired = useRef(dark),
     generation = useRef(0),
     active = useRef<ViewTransition | null>(null);
+  const deadline = useRef<number | undefined>(undefined);
   const sheets = useRef(new Map<HTMLElement, string>());
   const style = useRef<HTMLStyleElement | null>(null);
   const cleanup = () => {
+    window.clearTimeout(deadline.current);
+    deadline.current = undefined;
     sheets.current.forEach((name, element) => {
       element.style.viewTransitionName = name;
     });
@@ -107,6 +110,15 @@ export function useAppearance() {
       return;
     }
     active.current = transition;
+    // Some compositors stop delivering frames mid-transition. Never leave the
+    // document stuck behind a snapshot when the browser cannot finish it.
+    deadline.current = window.setTimeout(() => {
+      if (id !== generation.current) return;
+      transition.skipTransition();
+      apply();
+      cleanup();
+      active.current = null;
+    }, 1800);
     void transition.ready
       .then(() => {
         if (id !== generation.current) return;

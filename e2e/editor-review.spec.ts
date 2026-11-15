@@ -93,14 +93,17 @@ test("toolbar is centered, purple rules run through the title center, and theme 
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/");
   await page.evaluate(() => document.fonts.ready);
-  const center = await page.locator(".source-toolbar").evaluate((el) => {
-    const frame = el.getBoundingClientRect(),
-      actions = el.querySelector(".toolbar-actions")!.getBoundingClientRect();
-    return Math.abs(
-      actions.x + actions.width / 2 - (frame.x + frame.width / 2),
-    );
-  });
-  expect(center).toBeLessThan(1);
+  await expect(
+    page.getByRole("button", { name: "正文两端对齐", exact: true }),
+  ).toHaveAttribute("aria-pressed", "false");
+  await page.getByRole("button", { name: "正文两端对齐", exact: true }).click();
+  await expect(
+    page.locator(".paper-workspace .row-text:not(.row-header)").first(),
+  ).toHaveCSS("text-align", "justify");
+  await page.getByRole("button", { name: "正文两端对齐", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "正文两端对齐", exact: true }),
+  ).toHaveAttribute("aria-pressed", "false");
   await page
     .getByRole("button", { name: "使用紫图 · 研发履历模板", exact: true })
     .click();

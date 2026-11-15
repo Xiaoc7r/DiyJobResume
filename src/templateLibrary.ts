@@ -69,7 +69,7 @@ export function applyUserTemplate(doc: Resume, template: UserTemplate): Resume {
     template: "blue",
     templateStyle: style,
     settings: {
-      ...settings,
+      ...(style.regions ? doc.settings : settings),
       headerAlign: doc.settings.headerAlign,
       customCss: doc.settings.customCss,
     },

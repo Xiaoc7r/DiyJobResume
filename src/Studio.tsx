@@ -66,6 +66,7 @@ import { STARTER_PAGE } from "./starter";
 import { rowMeasurements } from "./paperLayout";
 import { useAppearance } from "./useAppearance";
 import { NumberField } from "./NumberField";
+import { TemplateDecorations, templateZones } from "./TemplateDecorations";
 import { SourceToolbar } from "./SourceToolbar";
 import { headerLines, lineDesignResolver } from "./templateStyle";
 import { useTemplateArt } from "./templateArt";
@@ -1362,6 +1363,7 @@ export default function Studio() {
     "--accent": view.settings.accent,
     "--ink": view.settings.color,
     "--header-contact-height": headerContactHeight + "px",
+    "--body-align": view.settings.justify ? "justify" : "start",
     "--header-align":
       view.settings.headerAlign === "template"
         ? "center"
@@ -1922,7 +1924,7 @@ export default function Studio() {
     });
     return (
       <article
-        className={`resume-paper template-${view.template} ${view.templateStyle ? "has-template-art" : ""}`}
+        className={`resume-paper template-${view.template} ${view.templateStyle ? "has-template-art" : ""} ${view.templateStyle?.regions ? "has-region-template" : ""}`}
         data-page={page}
         style={{
           ...resumeStyle,
@@ -1937,6 +1939,13 @@ export default function Studio() {
           transform: scale === 1 ? undefined : `scale(${scale})`,
         }}
       >
+        {view.templateStyle?.regions && (
+          <TemplateDecorations
+            template={view.templateStyle}
+            zones={templateZones(pieces, view.settings, paperWidth, designFor)}
+            art={templateArt}
+          />
+        )}
         {view.templateStyle && (
           <div
             className="template-page-decoration"
@@ -3176,6 +3185,7 @@ export default function Studio() {
           defaultColor={doc.settings.color}
           onRichChange={syncSimple}
           onSource={(value, start, end, focus = true) => {
+            if (value === toMarkdown(ref.current.lines)) return;
             historyUpdate(
               {
                 ...ref.current,
@@ -3251,7 +3261,7 @@ export default function Studio() {
       )}
       <div
         ref={measureRef}
-        className={`measure-host template-${view.template} ${view.templateStyle ? "has-template-art" : ""}`}
+        className={`measure-host template-${view.template} ${view.templateStyle ? "has-template-art" : ""} ${view.templateStyle?.regions ? "has-region-template" : ""}`}
         aria-hidden="true"
         style={{
           ...resumeStyle,

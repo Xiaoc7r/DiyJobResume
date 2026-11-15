@@ -52,6 +52,7 @@ export interface TypeStyle {
   after: number;
 }
 export interface Settings {
+  justify?: boolean;
   customCss: string;
   headerAlign: "template" | "left" | "center";
   top: number;
@@ -527,6 +528,7 @@ export function readResume(raw: unknown): Resume {
   d.color = hex(s.color, d.color);
   d.accent = hex(s.accent, d.accent);
   d.font = ["sans", "serif", "nunito"].includes(s.font) ? s.font : "sans";
+  if (s.justify !== undefined) d.justify = s.justify === true;
   d.headerAlign = ["template", "left", "center"].includes(s.headerAlign)
     ? s.headerAlign
     : "template";
