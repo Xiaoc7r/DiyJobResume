@@ -2,49 +2,63 @@
 
 # DiyJobResume
 
-一个使用免费、源码公开、无需登录的自由在线简历编辑器。  
-选模板、填内容、调排版，数据均在浏览器本地处理。
+一个容易上手，强大且优雅，DIY程度极高的在线简历编辑器。  
+
+从模板照抄、Markdown 编辑，到自由画板和自定义模板，按自己的习惯制作简历。
+
+「数据均在浏览器本地处理」
 
 【 [点击即用](https://xiaoc7r.github.io/DiyJobResume/) 】
 
 </div>
 
-
-
 ## 🖼️ 效果预览
 
-<img width="2866" height="1532" alt="image" src="https://github.com/user-attachments/assets/6c694db8-b3e4-4c58-9d32-e130bc719a13" />
+<img width="2872" height="1612" alt="image" src="https://github.com/user-attachments/assets/47c0ad06-593b-432d-8317-4c510d4fd098" />
+
+<img width="2872" height="1620" alt="image" src="https://github.com/user-attachments/assets/b35461a6-1e5b-4836-b74f-5e11d2a70858" />
+
+<img width="2874" height="1604" alt="image" src="https://github.com/user-attachments/assets/4e9fda97-628d-4149-96a7-c701ad7d582c" />
 
 
-<img width="2859" height="1524" alt="image" src="https://github.com/user-attachments/assets/d0f3b132-321c-486b-9b22-e4adae1721f9" />
+## ✨ 项目特色
 
-<img width="2864" height="1538" alt="image" src="https://github.com/user-attachments/assets/21f4ee55-a52a-4db7-82a5-a412da90a1ec" />
+* **上手简单**：不需要从零设计，选择模板、填写内容，就能开始制作简历。
+* **编辑自由**：既能直接修改内容，也能使用 Markdown 或画板精细调整布局。
+* **模板可定制**：不局限于预设样式，可以在画板中设计自己的简历模板。
+* **AI 辅助（可选）**：支持配置 AI API，用 AI 辅助优化简历内容与排版。
+* **重视隐私**：常规编辑数据在浏览器本地处理，无需为了编辑简历注册账号。
 
-支持三种模式编辑简历：
+## 🧩 四种编辑方式
 
-小白简单编辑模式，.md编辑模式，以及画板自由编辑模式。
+|模式|适合人群|能做什么|
+|-|-|-|
+|**简单编辑模式**|初次制作简历的用户|选择模板并填写内容，快速完成常规简历编辑。|
+|**Markdown 模式**|熟悉 Markdown 的用户|直接调整 Markdown 内容和结构，更灵活地组织简历。|
+|**画板自由模式**|对排版有个性化要求的用户|拖拽简历元素、添加组件，完全自由调整布局与属性。|
+|**模板制造模式**|希望设计专属样式的用户|在画板中制作自定义模板，并在其他编辑模式中继续使用和调整。|
 
-支持接AI api用于简历智能排版优化，可diy程度极高。
+你可以从简单模式开始，再根据需要逐步深入，不被固定模板限制。
 
 
-## 🛠️ 本地运行
+## 🚀 快速开始
 
-需要安装 Node.js。
+无需安装，直接访问：[**DiyJobResume 在线简历工坊**](https://xiaoc7r.github.io/DiyJobResume/)。
+
+
+### 本地运行
+
+请先安装 [Node.js](https://nodejs.org/)，然后执行：
 
 ```bash
 git clone https://github.com/Xiaoc7r/DiyJobResume.git
-
 cd DiyJobResume
-
 npm install
-
 npm run dev
 ```
 
+启动后，按照终端提示在浏览器中打开本地地址即可。
 
-[打开简历工坊](https://xiaoc7r.github.io/DiyJobResume/)
-
-<img width="2863" height="1523" alt="image" src="https://github.com/user-attachments/assets/4ddec401-cf64-4b8d-80a3-128927c7a580" />
 
 ## 使用协议
 
