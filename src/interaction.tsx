@@ -17,16 +17,21 @@ export function NumericInput({
   label: string;
 }) {
   const [draft, setDraft] = useState(String(value)),
-    editing = useRef(false);
+    editing = useRef(false),
+    emitted = useRef(value);
   useEffect(() => {
-    if (!editing.current) setDraft(String(value));
+    if (!editing.current || value !== emitted.current) setDraft(String(value));
+    emitted.current = value;
   }, [value]);
   const finish = () => {
     editing.current = false;
     const n = draft.trim() === "" ? value : Number(draft);
     const next = Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : value;
     setDraft(String(next));
-    if (next !== value) onChange(next);
+    if (next !== value) {
+      emitted.current = next;
+      onChange(next);
+    }
   };
   return (
     <input
@@ -43,8 +48,10 @@ export function NumericInput({
         const text = e.target.value;
         setDraft(text);
         const n = Number(text);
-        if (text !== "" && Number.isFinite(n) && n >= min && n <= max)
+        if (text !== "" && Number.isFinite(n) && n >= min && n <= max) {
+          emitted.current = n;
           onChange(n);
+        }
       }}
       onBlur={finish}
       onKeyDown={(e) => {
@@ -69,7 +76,8 @@ export function holdDrag(
   allow?: (id: string) => boolean,
 ) {
   if (e.button !== 0) return;
-  if (holdMs && (e.target as HTMLElement).closest("button,input,select,a")) return;
+  if (holdMs && (e.target as HTMLElement).closest("button,input,select,a"))
+    return;
   const handle = e.currentTarget as HTMLElement,
     startX = e.clientX,
     startY = e.clientY,

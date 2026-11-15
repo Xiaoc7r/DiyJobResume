@@ -8,6 +8,8 @@ export interface TemplateStyle {
   id: string;
   name: string;
   drawings: FreeDocument;
+  headerFrame?: { x: number; y: number; width: number; height: number };
+  regions?: { header: number; section: number };
   sectionFrame: { x: number; y: number; width: number; height: number };
   slots: Partial<Record<TemplateSlot, SourceDesign>>;
 }
@@ -45,8 +47,36 @@ export function lineDesignResolver(doc: Resume) {
         : line.kind === "blank"
           ? "text"
           : line.kind;
+    const area = doc.templateStyle?.regions;
+    const extra: SourceDesign = {};
+    if (area && line.kind === "section") {
+      extra.height = area.section;
+      extra.minHeight = 0;
+    }
+    if (
+      area &&
+      line.kind === "name" &&
+      line.id === doc.lines.find((row) => row.kind === "name")?.id
+    ) {
+      const other = headerLines(doc.lines)
+        .filter((row) => row.id !== line.id)
+        .reduce((sum, row) => {
+          const d = doc.templateStyle?.slots.contact,
+            t = doc.settings.types[row.kind === "blank" ? "text" : row.kind];
+          return (
+            sum +
+            (d?.fontSize || t.size) *
+              (d?.lineHeight || doc.settings.lineHeight) +
+            t.before +
+            t.after
+          );
+        }, 0);
+      extra.height = Math.max(1, area.header - other);
+      extra.minHeight = 0;
+    }
     designs.set(line.id, {
       ...doc.templateStyle?.slots[slot],
+      ...extra,
       ...doc.freeform?.sourceDesign?.[line.id],
     });
   }
@@ -76,6 +106,30 @@ export function readTemplateStyle(raw: unknown): TemplateStyle {
     Math.abs(frame.y) > 5000
   )
     throw new Error("模板绘制区域不正确。");
+  if (
+    data.regions &&
+    (!data.headerFrame ||
+      ![data.regions.header, data.regions.section].every(
+        (n) => Number.isFinite(n) && n >= 12 && n <= 500,
+      ))
+  )
+    throw new Error("模板区域尺寸不正确。");
+  if (
+    data.headerFrame &&
+    (![
+      data.headerFrame.x,
+      data.headerFrame.y,
+      data.headerFrame.width,
+      data.headerFrame.height,
+    ].every(Number.isFinite) ||
+      Math.abs(data.headerFrame.x) > 5000 ||
+      Math.abs(data.headerFrame.y) > 5000 ||
+      data.headerFrame.width < 1 ||
+      data.headerFrame.width > 5000 ||
+      data.headerFrame.height < 1 ||
+      data.headerFrame.height > 5000)
+  )
+    throw new Error("个人信息绘制区域不正确。");
   const drawings = readFreeDocument(structuredClone(data.drawings));
   const slots: TemplateStyle["slots"] = {};
   const allowed = [
@@ -108,5 +162,22 @@ export function readTemplateStyle(raw: unknown): TemplateStyle {
       height: frame.height,
     },
     slots,
+    ...(data.headerFrame &&
+    [
+      data.headerFrame.x,
+      data.headerFrame.y,
+      data.headerFrame.width,
+      data.headerFrame.height,
+    ].every(Number.isFinite) &&
+    data.headerFrame.width > 0 &&
+    data.headerFrame.height > 0
+      ? { headerFrame: { ...data.headerFrame } }
+      : {}),
+    ...(data.regions &&
+    [data.regions.header, data.regions.section].every(
+      (n) => Number.isFinite(n) && n >= 12 && n <= 500,
+    )
+      ? { regions: { ...data.regions } }
+      : {}),
   };
 }

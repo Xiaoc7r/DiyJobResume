@@ -71,9 +71,8 @@ import {
   Globe,
   Code2,
   Link,
-  Check,
   Star,
-  Search,
+  UserRound,
   ArrowRight,
   Pencil,
   PanelLeft,
@@ -82,9 +81,10 @@ import {
   MessageCircle,
   Send,
   Linkedin,
-  CalendarDays,
   FolderOpen,
 } from "lucide-react";
+import { GiteeIcon, DouyinIcon } from "./BrandIcons";
+import { makeWorkshopShape, workshopShapes } from "./workshopShapes";
 import { NumericInput } from "./interaction";
 import { FreeLoading } from "./FreeLoading";
 import { PreviewZoom } from "./PreviewZoom";
@@ -113,13 +113,17 @@ export interface FreeStudioApi {
 interface Props {
   doc: Resume;
   apiRef: RefObject<FreeStudioApi | null>;
-  onChange: (data: FreeDocument) => void;
+  onChange: (data: FreeDocument, transient?: boolean) => void;
   onMode: (mode: "simple" | "md") => void;
   onRebuild?: () => void;
   modeTabs?: ReactNode;
   propertiesAddon?: ReactNode;
+  workshop?: boolean;
+  toolbarAddon?: ReactNode;
+  onWorkshopPoint?: (x: number, y: number) => void;
   insertion?: {
-    role: "section" | "page";
+    role: "section" | "header" | "page";
+    drawOffsetY?: number;
     x: number;
     y: number;
     width: number;
@@ -175,15 +179,15 @@ const iconSet = {
   网站: Globe,
   技术: Code2,
   链接: Link,
-  完成: Check,
+  Gitee: GiteeIcon,
   星标: Star,
-  搜索: Search,
+  用户: UserRound,
   箭头: ArrowRight,
   微信: MessagesSquare,
   QQ: MessageCircle,
   Telegram: Send,
   LinkedIn: Linkedin,
-  日历: CalendarDays,
+  抖音: DouyinIcon,
   作品集: FolderOpen,
 };
 const cloneData = <T,>(data: T): T => structuredClone(data);
@@ -231,6 +235,9 @@ export default function FreeStudio({
   onMode,
   modeTabs,
   propertiesAddon,
+  workshop = false,
+  toolbarAddon,
+  onWorkshopPoint,
   insertion,
   leftOpen = true,
   rightOpen = true,
@@ -281,11 +288,12 @@ export default function FreeStudio({
     } | null>(null);
   const emitted = useRef(doc.freeform);
   const loadAbort = useRef<AbortController | null>(null);
-  const publish = (data: FreeDocument) => {
+  const publish = (data: FreeDocument, transient = false) => {
     const next = cloneData(data);
     emitted.current = next;
-    onChangeRef.current(next);
+    onChangeRef.current(next, transient);
   };
+  const [brushWidth, setBrushWidth] = useState(2);
   const insertionRef = useRef(insertion);
   insertionRef.current = insertion;
   const frontLayer = useRef<HTMLDivElement>(null);
@@ -424,6 +432,10 @@ export default function FreeStudio({
   updateRef.current = reflect;
   const snapshot = () => {
     const c = scene.current;
+    if (c && workshop && !loading.current)
+      c.getObjects().forEach((o) =>
+        o.set("templateBounds", o.getBoundingRect()),
+      );
     if (c && !loading.current)
       model.current.pages[activePage.current].canvas = {
         version: "7.4.0",
@@ -495,7 +507,7 @@ export default function FreeStudio({
   const travel = async (direction: number) => {
     if (loading.current) return;
     if (flowBase && onUndo && onRedo) {
-      commit();
+      if (!workshop) commit();
       direction < 0 ? onUndo() : onRedo();
       return;
     }
@@ -532,7 +544,7 @@ export default function FreeStudio({
         : items;
       objects.forEach((o) => {
         const placement = insertionRef.current;
-        if (placement?.role === "section") {
+        if (placement && placement.role !== "page") {
           const box = o.getBoundingRect(),
             factor = Math.min(
               1,
@@ -1185,10 +1197,24 @@ export default function FreeStudio({
     c.freeDrawingBrush.width = 2;
     c.on("path:created", ({ path }) => {
       if (insertionRef.current)
-        path.set({ templateRole: insertionRef.current.role });
+        path.set({
+          templateRole: insertionRef.current.role,
+          top: path.top - (insertionRef.current.drawOffsetY || 0),
+        });
       path.set({ ...base, id: crypto.randomUUID(), label: "手绘线条" });
       modified();
     });
+    let liveFrame = 0;
+    const live = () => {
+      if (!workshop || liveFrame) return;
+      liveFrame = requestAnimationFrame(() => {
+        liveFrame = 0;
+        if (alive.current && !loading.current) publish(snapshot(), true);
+      });
+    };
+    c.on("object:moving", live);
+    c.on("object:scaling", live);
+    c.on("object:rotating", live);
     c.on("object:moving", ({ target }) => {
       if (!snapRef.current) return;
       const p = model.current.pages[activePage.current],
@@ -1243,6 +1269,7 @@ export default function FreeStudio({
     return () => {
       commitRef.current();
       alive.current = false;
+      cancelAnimationFrame(liveFrame);
       clearTimeout(timer.current);
       apiRef.current = null;
       if (scene.current === c) scene.current = null;
@@ -1270,6 +1297,12 @@ export default function FreeStudio({
     else if (target !== sourceSelection.target)
       setSourceSelection({ ...sourceSelection, target });
   }, [doc.lines]);
+  useEffect(() => {
+    if (scene.current?.freeDrawingBrush) {
+      scene.current.freeDrawingBrush.color = doc.settings.accent;
+      scene.current.freeDrawingBrush.width = brushWidth;
+    }
+  }, [doc.settings.accent, brushWidth]);
   useEffect(() => {
     const c = scene.current;
     if (!c) return;
@@ -1522,30 +1555,40 @@ export default function FreeStudio({
           <div className="free-side-scroll">
             {leftTab === "insert" ? (
               <>
-                <section>
-                  <h3>文字与板块</h3>
-                  <div className="free-inserts">
-                    <button disabled={busy} onClick={() => insertText()}>
-                      <Type size={19} />
-                      <span>文字</span>
-                    </button>
-                    <button
-                      disabled={busy}
-                      onClick={() => insertText("板块标题", 22)}
-                    >
-                      <Type size={23} />
-                      <span>标题</span>
-                    </button>
-                    <button disabled={busy} onClick={() => insertBlock(false)}>
-                      <BriefcaseBusiness size={19} />
-                      <span>经历板块</span>
-                    </button>
-                    <button disabled={busy} onClick={() => insertBlock(true)}>
-                      <Grid2X2 size={19} />
-                      <span>双栏板块</span>
-                    </button>
-                  </div>
-                </section>
+                {!workshop && (
+                  <>
+                    <section>
+                      <h3>文字与板块</h3>
+                      <div className="free-inserts">
+                        <button disabled={busy} onClick={() => insertText()}>
+                          <Type size={19} />
+                          <span>文字</span>
+                        </button>
+                        <button
+                          disabled={busy}
+                          onClick={() => insertText("板块标题", 22)}
+                        >
+                          <Type size={23} />
+                          <span>标题</span>
+                        </button>
+                        <button
+                          disabled={busy}
+                          onClick={() => insertBlock(false)}
+                        >
+                          <BriefcaseBusiness size={19} />
+                          <span>经历板块</span>
+                        </button>
+                        <button
+                          disabled={busy}
+                          onClick={() => insertBlock(true)}
+                        >
+                          <Grid2X2 size={19} />
+                          <span>双栏板块</span>
+                        </button>
+                      </div>
+                    </section>
+                  </>
+                )}
                 <section>
                   <h3>图片与图形</h3>
                   <div className="free-inserts">
@@ -1671,52 +1714,99 @@ export default function FreeStudio({
                     </button>
                   </div>
                 </section>
-                <section>
-                  <h3>常用图标</h3>
-                  <div className="free-icons">
-                    {Object.entries(iconSet).map(([name, Icon]) => (
+                {workshop && (
+                  <section>
+                    <h3>绘图工具</h3>
+                    <div className="free-inserts">
                       <button
-                        key={name}
-                        title={name}
-                        aria-label={`插入${name}图标`}
-                        disabled={busy}
-                        onClick={() => {
-                          void insertIcon(name as keyof typeof iconSet).catch(
-                            () => setError("图标未能添加，请重试。"),
-                          );
-                        }}
+                        onClick={() => setTool("draw")}
+                        aria-pressed={tool === "draw"}
                       >
-                        <Icon size={20} />
-                        <span>{name}</span>
+                        <Pencil size={18} />
+                        画笔
                       </button>
-                    ))}
-                  </div>
-                </section>
-                <section>
-                  <h3>表格</h3>
-                  <div className="free-table-size">
-                    <NumericInput
-                      label="表格行数"
-                      value={tableRows}
-                      min={1}
-                      max={12}
-                      onChange={setTableRows}
-                    />
-                    <span>行 ×</span>
-                    <NumericInput
-                      label="表格列数"
-                      value={tableCols}
-                      min={1}
-                      max={6}
-                      onChange={setTableCols}
-                    />
-                    <span>列</span>
-                    <button disabled={busy} onClick={insertTable}>
-                      插入
-                    </button>
-                  </div>
-                  <p>组合可整体移动，解组后可分别编辑文字和单元格。</p>
-                </section>
+                      <button onClick={() => setTool("select")}>
+                        <MousePointer2 size={18} />
+                        选择与移动
+                      </button>
+                      {workshopShapes.map((name) => (
+                        <button
+                          key={name}
+                          disabled={busy}
+                          onClick={() =>
+                            add(
+                              [makeWorkshopShape(name, doc.settings.accent)],
+                              name,
+                            )
+                          }
+                        >
+                          <Shapes size={18} />
+                          {name}
+                        </button>
+                      ))}
+                    </div>
+                    <label className="free-full-label">
+                      画笔粗细
+                      <NumericInput
+                        label="画笔粗细"
+                        value={brushWidth}
+                        min={1}
+                        max={60}
+                        onChange={setBrushWidth}
+                      />
+                    </label>
+                  </section>
+                )}
+                {!workshop && (
+                  <>
+                    <section>
+                      <h3>常用图标</h3>
+                      <div className="free-icons">
+                        {Object.entries(iconSet).map(([name, Icon]) => (
+                          <button
+                            key={name}
+                            title={name}
+                            aria-label={`插入${name}图标`}
+                            disabled={busy}
+                            onClick={() => {
+                              void insertIcon(
+                                name as keyof typeof iconSet,
+                              ).catch(() => setError("图标未能添加，请重试。"));
+                            }}
+                          >
+                            <Icon size={20} />
+                            <span>{name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </section>
+                    <section>
+                      <h3>表格</h3>
+                      <div className="free-table-size">
+                        <NumericInput
+                          label="表格行数"
+                          value={tableRows}
+                          min={1}
+                          max={12}
+                          onChange={setTableRows}
+                        />
+                        <span>行 ×</span>
+                        <NumericInput
+                          label="表格列数"
+                          value={tableCols}
+                          min={1}
+                          max={6}
+                          onChange={setTableCols}
+                        />
+                        <span>列</span>
+                        <button disabled={busy} onClick={insertTable}>
+                          插入
+                        </button>
+                      </div>
+                      <p>组合可整体移动，解组后可分别编辑文字和单元格。</p>
+                    </section>
+                  </>
+                )}
               </>
             ) : (
               <section>
@@ -1933,6 +2023,7 @@ export default function FreeStudio({
               />
               网格
             </label>
+            {toolbarAddon}
             <Tool name="自由模式使用帮助" onClick={() => setHelp((v) => !v)}>
               <HelpCircle size={17} />
             </Tool>
@@ -2016,6 +2107,14 @@ export default function FreeStudio({
             <div
               className={`free-canvas-host ${grid ? "with-grid" : ""} ${flowBase ? "with-source" : ""}`}
               onPointerDownCapture={(e) => {
+                if (workshop) {
+                  const box = e.currentTarget.getBoundingClientRect();
+                  onWorkshopPoint?.(
+                    (e.clientX - box.left) / zoomRef.current,
+                    (e.clientY - box.top) / zoomRef.current,
+                  );
+                  return;
+                }
                 if (!flowBase) return;
                 const row = (e.target as HTMLElement).closest<HTMLElement>(
                   "[data-line]",
@@ -2065,15 +2164,17 @@ export default function FreeStudio({
           >
             <div className="free-properties-heading">
               <h2>
-                {selection.length
-                  ? selection.length > 1
-                    ? `已选择 ${selection.length} 个元素`
-                    : text
-                      ? "文字设置"
-                      : one instanceof FabricImage
-                        ? "图片设置"
-                        : "元素设置"
-                  : "画布设置"}
+                {workshop
+                  ? "画布设置"
+                  : selection.length
+                    ? selection.length > 1
+                      ? `已选择 ${selection.length} 个元素`
+                      : text
+                        ? "文字设置"
+                        : one instanceof FabricImage
+                          ? "图片设置"
+                          : "元素设置"
+                    : "画布设置"}
               </h2>
               {onCloseRight && (
                 <button
@@ -2100,11 +2201,11 @@ export default function FreeStudio({
                     onChange={(e) => patch({ templateRole: e.target.value })}
                   >
                     <option value="section">每个板块标题</option>
-                    <option value="page">整页装饰</option>
+                    <option value="header">个人信息区</option>
                   </select>
                 </label>
               )}
-              {selection.length > 0 && (
+              {!workshop && selection.length > 0 && (
                 <details
                   className="free-detail-preview"
                   open
@@ -2121,7 +2222,7 @@ export default function FreeStudio({
                   />
                 </details>
               )}
-              {sourceSelection && flowBase ? (
+              {sourceSelection && flowBase && !workshop ? (
                 <SourceInspector
                   selection={sourceSelection}
                   container={host.current}
@@ -2660,73 +2761,77 @@ export default function FreeStudio({
                 </>
               ) : (
                 <>
-                  <section>
-                    <h3>当前纸张</h3>
-                    <label className="free-full-label">
-                      纸张
-                      <select
-                        aria-label="自由画布纸张"
-                        value={
-                          page.width === 794 && page.height === 1123
-                            ? "a4"
-                            : page.width === 1123 && page.height === 794
-                              ? "landscape"
-                              : "custom"
-                        }
-                        onChange={(e) => {
-                          if (e.target.value === "custom") return;
-                          withScene((c) => {
-                            const p = model.current.pages[pageIndex];
-                            p.width = e.target.value === "a4" ? 794 : 1123;
-                            p.height = e.target.value === "a4" ? 1123 : 794;
-                            if (flowBase)
-                              model.current.pages.forEach((other) => {
-                                other.width = p.width;
-                                other.height = p.height;
-                              });
-                            c.setDimensions({
-                              width: p.width * zoomRef.current,
-                              height: p.height * zoomRef.current,
-                            });
-                          });
-                        }}
-                      >
-                        <option value="a4">A4 竖版</option>
-                        <option value="landscape">A4 横版</option>
-                        <option value="custom">自定义尺寸</option>
-                      </select>
-                    </label>
-                    <div className="free-property-grid">
-                      {(["width", "height"] as const).map((key, i) => (
-                        <label key={key}>
-                          {["宽度 px", "高度 px"][i]}
-                          <NumericInput
-                            label={["自由纸张宽度", "自由纸张高度"][i]}
-                            value={page[key]}
-                            min={100}
-                            max={5000}
-                            onChange={(n) =>
+                  {!workshop && (
+                    <>
+                      <section>
+                        <h3>当前纸张</h3>
+                        <label className="free-full-label">
+                          纸张
+                          <select
+                            aria-label="自由画布纸张"
+                            value={
+                              page.width === 794 && page.height === 1123
+                                ? "a4"
+                                : page.width === 1123 && page.height === 794
+                                  ? "landscape"
+                                  : "custom"
+                            }
+                            onChange={(e) => {
+                              if (e.target.value === "custom") return;
                               withScene((c) => {
-                                model.current.pages[pageIndex][key] = n;
+                                const p = model.current.pages[pageIndex];
+                                p.width = e.target.value === "a4" ? 794 : 1123;
+                                p.height = e.target.value === "a4" ? 1123 : 794;
                                 if (flowBase)
                                   model.current.pages.forEach((other) => {
-                                    other[key] = n;
+                                    other.width = p.width;
+                                    other.height = p.height;
                                   });
                                 c.setDimensions({
-                                  width:
-                                    model.current.pages[pageIndex].width *
-                                    zoomRef.current,
-                                  height:
-                                    model.current.pages[pageIndex].height *
-                                    zoomRef.current,
+                                  width: p.width * zoomRef.current,
+                                  height: p.height * zoomRef.current,
                                 });
-                              })
-                            }
-                          />
+                              });
+                            }}
+                          >
+                            <option value="a4">A4 竖版</option>
+                            <option value="landscape">A4 横版</option>
+                            <option value="custom">自定义尺寸</option>
+                          </select>
                         </label>
-                      ))}
-                    </div>
-                  </section>
+                        <div className="free-property-grid">
+                          {(["width", "height"] as const).map((key, i) => (
+                            <label key={key}>
+                              {["宽度 px", "高度 px"][i]}
+                              <NumericInput
+                                label={["自由纸张宽度", "自由纸张高度"][i]}
+                                value={page[key]}
+                                min={100}
+                                max={5000}
+                                onChange={(n) =>
+                                  withScene((c) => {
+                                    model.current.pages[pageIndex][key] = n;
+                                    if (flowBase)
+                                      model.current.pages.forEach((other) => {
+                                        other[key] = n;
+                                      });
+                                    c.setDimensions({
+                                      width:
+                                        model.current.pages[pageIndex].width *
+                                        zoomRef.current,
+                                      height:
+                                        model.current.pages[pageIndex].height *
+                                        zoomRef.current,
+                                    });
+                                  })
+                                }
+                              />
+                            </label>
+                          ))}
+                        </div>
+                      </section>
+                    </>
+                  )}
                 </>
               )}
               {!insertion && (

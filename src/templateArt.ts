@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import type { CSSProperties } from "react";
 import type { TemplateStyle } from "./templateStyle";
 
@@ -34,14 +34,51 @@ export async function buildTemplateArt(template: TemplateStyle) {
     );
     return `url("${dataUrl(svg.replace("<svg ", '<svg preserveAspectRatio="none" '))}")`;
   };
-  const [section, pageArt] = await Promise.all([render(true), render(false)]);
-  return { section, page: pageArt };
+
+  const vector = async (
+    role: "section" | "header",
+    frame: typeof template.sectionFrame | undefined,
+  ) => {
+    if (!frame) return "";
+    const objects = page.canvas.objects
+      .filter((o) => o.templateRole === role)
+      .map((o) => ({ ...o, plane: "background" }));
+    if (!objects.length) return "";
+    const svg = await sceneSvg({ ...page, canvas: { objects } }, "background");
+    return svg.replace(
+      /<svg\b[^>]*>/,
+      `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="${frame.x} ${frame.y} ${frame.width} ${frame.height}" preserveAspectRatio="none" style="overflow:visible">`,
+    );
+  };
+  const [sectionSvg, headerSvg] = template.regions
+    ? await Promise.all([
+        vector("section", frame),
+        vector("header", template.headerFrame),
+      ])
+    : ["", ""];
+  const [section, pageArt] = template.regions
+    ? [sectionSvg ? `url("${dataUrl(sectionSvg)}")` : "none", "none"]
+    : await Promise.all([render(true), render(false)]);
+  return {
+    section,
+    page: pageArt,
+    sectionSvg,
+    headerSvg,
+  };
 }
 export function useTemplateArt(template?: TemplateStyle) {
-  const [art, setArt] = useState({ section: "none", page: "none" });
+  const [art, setArt] = useState({
+    section: "none",
+    page: "none",
+    sectionSvg: "",
+    headerSvg: "",
+  });
+  const previousId = useRef<string | undefined>(undefined);
   useEffect(() => {
     let active = true;
-    setArt({ section: "none", page: "none" });
+    if (!template || previousId.current !== template.id)
+      setArt({ section: "none", page: "none", sectionSvg: "", headerSvg: "" });
+    previousId.current = template?.id;
     if (template)
       void buildTemplateArt(template)
         .then((value) => {
@@ -53,8 +90,12 @@ export function useTemplateArt(template?: TemplateStyle) {
     };
   }, [template]);
   return {
-    style: { "--template-section-art": art.section } as CSSProperties,
+    style: {
+      "--template-section-art": template?.regions ? "none" : art.section,
+    } as CSSProperties,
     page: art.page,
     section: art.section,
+    sectionSvg: art.sectionSvg,
+    headerSvg: art.headerSvg,
   };
 }

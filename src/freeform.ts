@@ -2,6 +2,8 @@ import type { Resume } from "./flow";
 import type { CSSProperties } from "react";
 
 export interface SourceDesign {
+  minHeight?: number;
+  height?: number;
   dx?: number;
   dy?: number;
   width?: number;
@@ -223,6 +225,8 @@ export function readFreeDocument(raw: unknown): FreeDocument {
       "dx",
       "dy",
       "width",
+      "minHeight",
+      "height",
       "fontSize",
       "lineHeight",
       "borderWidth",
