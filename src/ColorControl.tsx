@@ -23,12 +23,14 @@ export function ColorControl({
   defaultValue,
   presets = false,
   onChange,
+  onOpenChange,
 }: {
   label: string;
   value: string;
   defaultValue: string;
   presets?: boolean;
   onChange: (value: string) => void;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const button = useRef<HTMLButtonElement>(null),
     panel = useRef<HTMLDivElement>(null),
@@ -36,6 +38,8 @@ export function ColorControl({
     session = useRef(0),
     apply = useRef(onChange);
   apply.current = onChange;
+  const notify = useRef(onOpenChange);
+  notify.current = onOpenChange;
   const [open, setOpen] = useState(false),
     [picking, setPicking] = useState(false),
     [sampling, setSampling] = useState(false),
@@ -60,6 +64,7 @@ export function ColorControl({
   const close = () => {
     cancel();
     setOpen(false);
+    notify.current?.(false);
   };
   useLayoutEffect(() => {
     if (!open) return;
@@ -207,7 +212,13 @@ export function ColorControl({
         aria-label={`${label}颜色`}
         aria-haspopup="dialog"
         aria-expanded={open}
-        onClick={() => (open ? close() : setOpen(true))}
+        onClick={() => {
+          if (open) close();
+          else {
+            notify.current?.(true);
+            setOpen(true);
+          }
+        }}
       />
       {open &&
         createPortal(
@@ -321,7 +332,7 @@ export function ColorControl({
                   <button
                     type="button"
                     key={color}
-                    aria-label={`主题色：${name}`}
+                    aria-label={`${label === "主题" ? "主题色" : label + "色"}：${name}`}
                     title={name}
                     aria-pressed={value.toLowerCase() === color}
                     style={{ backgroundColor: color }}

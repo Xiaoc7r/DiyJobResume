@@ -2,6 +2,40 @@ import type { Line, Settings, Template } from "./flow";
 import type { SourceDesign } from "./freeform";
 import { applySourceContentStyle } from "./freeform";
 import { rowStyle, lineHtml } from "./render";
+import { boundedCache } from "./boundedCache";
+
+// A single host owns this cache; callers provide all appearance dependencies.
+export function rowMeasurements() {
+  const cache = boundedCache<number>(2048);
+  let context: readonly unknown[] = [];
+  return {
+    prepare(next: readonly unknown[]) {
+      if (
+        context.length !== next.length ||
+        next.some((value, i) => value !== context[i])
+      ) {
+        cache.clear();
+        context = next;
+      }
+    },
+    measure(...args: Parameters<typeof measureRow>) {
+      const [, , , contact, line, text, continued, design] = args;
+      const key = JSON.stringify([
+        line.kind,
+        line.order,
+        text,
+        contact,
+        continued,
+        design,
+      ]);
+      const hit = cache.get(key);
+      if (hit !== undefined) return hit;
+      const height = measureRow(...args);
+      cache.set(key, height);
+      return height;
+    },
+  };
+}
 
 export function measureRow(
   node: HTMLDivElement,

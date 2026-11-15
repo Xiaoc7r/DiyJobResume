@@ -35,6 +35,23 @@ export function lineDesign(doc: Resume, line: Line) {
     ...doc.freeform?.sourceDesign?.[line.id],
   };
 }
+export function lineDesignResolver(doc: Resume) {
+  const headers = new Set(headerLines(doc.lines).map((line) => line.id));
+  const designs = new Map<string, SourceDesign>();
+  for (const line of doc.lines) {
+    const slot =
+      line.kind !== "name" && headers.has(line.id)
+        ? "contact"
+        : line.kind === "blank"
+          ? "text"
+          : line.kind;
+    designs.set(line.id, {
+      ...doc.templateStyle?.slots[slot],
+      ...doc.freeform?.sourceDesign?.[line.id],
+    });
+  }
+  return (line: Line) => designs.get(line.id) || {};
+}
 // This versioned shape is shared by editable backups and the future template importer.
 export function readTemplateStyle(raw: unknown): TemplateStyle {
   if (!raw || typeof raw !== "object") throw new Error("模板格式不正确。");

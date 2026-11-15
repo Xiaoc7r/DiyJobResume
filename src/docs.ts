@@ -140,9 +140,10 @@ function settleLegacyTurns(items: DocEntry[]) {
   }
 }
 
+let verifiedRaw: string | null = null;
 function write(library: DocLibrary) {
   const raw = localStorage.getItem(DOCS_KEY);
-  if (raw) {
+  if (raw && raw !== verifiedRaw) {
     let damaged = false;
     try {
       const parsed = JSON.parse(raw);
@@ -161,7 +162,9 @@ function write(library: DocLibrary) {
       localStorage.setItem(key, raw);
     }
   }
-  localStorage.setItem(DOCS_KEY, JSON.stringify(library));
+  const next = JSON.stringify(library);
+  localStorage.setItem(DOCS_KEY, next);
+  verifiedRaw = next;
 }
 
 // 读取简历列表；老版本只有单份文档，这里自动装进列表，用户不会丢稿。

@@ -13,6 +13,13 @@ import {
 import type { Kind, Line } from "./flow";
 import { changeMarkdownKind, markMarkdown, validLink } from "./formatting";
 import type { TextMark } from "./formatting";
+import { ColorControl } from "./ColorControl";
+import {
+  colorMarkdown,
+  colorRichRange,
+  cssColorHex,
+  elementColor,
+} from "./inlineColor";
 export const paragraphOptions: { kind: Kind; label: string }[] = [
   { kind: "text", label: "正文" },
   { kind: "name", label: "一级标题" },
@@ -46,10 +53,17 @@ export function SelectionTools({
   onKind,
   onColumns,
   onRichChange,
+  defaultColor = "#171717",
 }: {
   onRichChange?: () => void;
   lines: Line[];
-  onSource: (source: string, start: number, end: number) => void;
+  onSource: (
+    source: string,
+    start: number,
+    end: number,
+    focus?: boolean,
+  ) => void;
+  defaultColor?: string;
   onKind: (ids: string[], kind: Kind) => void;
   onColumns: (id: string, count: number) => void;
 }) {
@@ -59,12 +73,15 @@ export function SelectionTools({
     [url, setUrl] = useState("https://"),
     [error, setError] = useState(""),
     [columns, setColumns] = useState(false);
-  const refs = useRef({ lines, linkOpen });
-  refs.current = { lines, linkOpen };
+  const colorOpen = useRef(false);
+  const [textColor, setTextColor] = useState(defaultColor);
+  const refs = useRef({ lines, linkOpen, defaultColor });
+  refs.current = { lines, linkOpen, defaultColor };
   useEffect(() => {
     const refresh = () => {
       if (
         refs.current.linkOpen ||
+        colorOpen.current ||
         document.activeElement?.closest(".selection-tools")
       )
         return;
@@ -137,6 +154,27 @@ export function SelectionTools({
       }
       saved.current = next;
       setTarget(next);
+      if (next?.type === "rich") {
+        const anchor =
+          next.range.startContainer instanceof HTMLElement
+            ? next.range.startContainer
+            : next.range.startContainer.parentElement;
+        setTextColor(
+          anchor
+            ? elementColor(
+                anchor.closest<HTMLElement>(".inline-color") || anchor,
+              ) ||
+                cssColorHex(getComputedStyle(anchor).color) ||
+                defaultColor
+            : refs.current.defaultColor,
+        );
+      } else if (next) {
+        const prefix = next.element.value.slice(0, next.start);
+        setTextColor(
+          /<span style="color:(#[a-f\d]{6})">[^<]*$/i.exec(prefix)?.[1] ||
+            defaultColor,
+        );
+      }
     };
     document.addEventListener("selectionchange", refresh);
     document.addEventListener("select", refresh, true);
@@ -155,6 +193,25 @@ export function SelectionTools({
       document.removeEventListener("keydown", hide);
     };
   }, []);
+  const applyColor = (hex: string) => {
+    const t = saved.current;
+    if (!t) return;
+    if (t.type === "md") {
+      const result = colorMarkdown(t.element.value, t.start, t.end, hex);
+      saved.current = { ...t, start: result.start, end: result.end };
+      onSource(result.source, result.start, result.end, false);
+    } else {
+      const result = colorRichRange(t.element, t.range, hex);
+      if (!result) return;
+      saved.current = { ...t, range: result.range };
+      if (t.element.classList.contains("simple-editor")) onRichChange?.();
+      else
+        result.rows.forEach((row) =>
+          row.dispatchEvent(new Event("input", { bubbles: true })),
+        );
+    }
+    setTextColor(hex);
+  };
   const sourceAction = (next: {
     source: string;
     start: number;
@@ -214,7 +271,11 @@ export function SelectionTools({
             top: Math.max(70, Math.min(window.innerHeight - 70, target.y - 48)),
           }}
           onMouseDown={(e) => {
-            if (!(e.target instanceof HTMLSelectElement)) e.preventDefault();
+            if (
+              !(e.target instanceof HTMLSelectElement) &&
+              !(e.target as Element).closest(".color-popover")
+            )
+              e.preventDefault();
           }}
         >
           <select
@@ -264,6 +325,28 @@ export function SelectionTools({
           >
             <Link2 size={16} />
           </button>
+          <ColorControl
+            label="文字"
+            value={textColor}
+            defaultValue={defaultColor}
+            presets
+            onChange={applyColor}
+            onOpenChange={(open) => {
+              colorOpen.current = open;
+              if (!open) {
+                const t = saved.current;
+                if (!t?.element.isConnected) return;
+                t.element.focus({ preventScroll: true });
+                if (t.type === "md")
+                  t.element.setSelectionRange(t.start, t.end);
+                else if (t.range.startContainer.isConnected) {
+                  const selection = getSelection();
+                  selection?.removeAllRanges();
+                  selection?.addRange(t.range);
+                }
+              }
+            }}
+          />
           <i />
           <button
             aria-label="有序列表"

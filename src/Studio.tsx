@@ -12,14 +12,8 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import {
   Github,
   Mail,
-  Code2,
-  Undo2,
-  Redo2,
   Download,
   Upload,
-  SlidersHorizontal,
-  ImagePlus,
-  GraduationCap,
   X,
   Plus,
   GripVertical,
@@ -69,8 +63,11 @@ import { NumericInput, holdDrag } from "./interaction";
 import "./ui-theme.css";
 import { MarkdownNumbers } from "./MarkdownNumbers";
 import { STARTER_PAGE } from "./starter";
-import { measureRow } from "./paperLayout";
-import { headerLines, lineDesign } from "./templateStyle";
+import { rowMeasurements } from "./paperLayout";
+import { useAppearance } from "./useAppearance";
+import { NumberField } from "./NumberField";
+import { SourceToolbar } from "./SourceToolbar";
+import { headerLines, lineDesignResolver } from "./templateStyle";
 import { useTemplateArt } from "./templateArt";
 import {
   applyUserTemplate,
@@ -81,7 +78,6 @@ import type { UserTemplate } from "./templateLibrary";
 import { UserTemplateCard } from "./UserTemplateCard";
 import "./template-maker.css";
 import { PreviewZoom } from "./PreviewZoom";
-import { ColorControl } from "./ColorControl";
 import { ImageUploadDialog } from "./ImageUploadDialog";
 import { FreeLoading } from "./FreeLoading";
 
@@ -418,36 +414,6 @@ function Editable({
     </div>
   );
 }
-function NumberField({
-  label,
-  value,
-  onChange,
-  min = 0,
-  max = 150,
-  step = 1,
-}: {
-  label: string;
-  value: number;
-  onChange: (n: number) => void;
-  min?: number;
-  max?: number;
-  step?: number;
-}) {
-  return (
-    <label className="number-label">
-      <span>{label}</span>
-      <NumericInput
-        label={label}
-        value={value}
-        min={min}
-        max={max}
-        step={step}
-        onChange={onChange}
-      />
-    </label>
-  );
-}
-
 export default function Studio() {
   const [boot] = useState(loadLibrary),
     [docs, setDocs] = useState(boot.library.items),
@@ -489,10 +455,15 @@ export default function Studio() {
     [docMenu, setDocMenu] = useState(false),
     [confirmDelete, setConfirmDelete] = useState(false),
     [mobile, setMobile] = useState<"editor" | "preview" | "library">("preview");
-  useEffect(
-    () => saveViewPrefs({ zoom, leftWidth, autoZoom }),
-    [zoom, leftWidth, autoZoom],
-  );
+  useEffect(() => {
+    const save = () => saveViewPrefs({ zoom, leftWidth, autoZoom });
+    const timer = window.setTimeout(save, 100);
+    window.addEventListener("pagehide", save);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("pagehide", save);
+    };
+  }, [zoom, leftWidth, autoZoom]);
   const [pages, setPages] = useState<Piece[][]>([[]]),
     [fontVersion, setFontVersion] = useState(0),
     [picSelection, setPicSelection] = useState("");
@@ -512,19 +483,7 @@ export default function Studio() {
   const [agentOpen, setAgentOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(true);
   const [editorOpen, setEditorOpen] = useState(true);
-  const [dark, setDark] = useState(() => {
-    try {
-      return localStorage.getItem("diyjobresume.appearance") === "dark";
-    } catch {
-      return false;
-    }
-  });
-  useEffect(() => {
-    document.documentElement.dataset.theme = dark ? "dark" : "light";
-    try {
-      localStorage.setItem("diyjobresume.appearance", dark ? "dark" : "light");
-    } catch {}
-  }, [dark]);
+  const { dark, toggle: toggleAppearance } = useAppearance();
   const rightWidth = 248;
   const pinnedPreview = useRef(false);
   const agentPreviewApi = useRef<{
@@ -551,7 +510,14 @@ export default function Studio() {
   } | null>(null);
   const view = preview?.doc ?? doc;
   const templateArt = useTemplateArt(view.templateStyle);
-  const headerIds = new Set(headerLines(view.lines).map((line) => line.id));
+  const designFor = useMemo(
+    () => lineDesignResolver(view),
+    [view.lines, view.templateStyle, view.freeform?.sourceDesign],
+  );
+  const headerIds = useMemo(
+    () => new Set(headerLines(view.lines).map((line) => line.id)),
+    [view.lines],
+  );
   const paperWidth =
     view.freeform?.base === "flow" ? view.freeform.pages[0].width : PAGE.width;
   const paperHeight =
@@ -974,6 +940,7 @@ export default function Studio() {
     };
   }, [fileMenu]);
   const measureNode = useRef<HTMLDivElement | null>(null);
+  const measurements = useRef(rowMeasurements());
   const measureHost = () => {
     const host = measureRef.current;
     if (!host) return null;
@@ -986,8 +953,19 @@ export default function Studio() {
   useLayoutEffect(() => {
     const node = measureHost();
     if (!node) return;
+    measurements.current.prepare([
+      node,
+      view.settings,
+      view.template,
+      view.templateStyle,
+      paperWidth,
+      fontVersion,
+      headerContactHeight,
+      contactId,
+      view.freeform?.sourceDesign,
+    ]);
     const measure = (line: Line, text: string, continued: boolean) =>
-      measureRow(
+      measurements.current.measure(
         node,
         view.settings,
         view.template,
@@ -995,7 +973,7 @@ export default function Studio() {
         line,
         text,
         continued,
-        lineDesign(view, line),
+        designFor(line),
       );
     const active = document.activeElement as HTMLElement;
     if (!preview && active?.dataset.edit) {
@@ -1027,7 +1005,7 @@ export default function Studio() {
     paperWidth,
     paperHeight,
     fontVersion,
-    JSON.stringify(view.freeform?.sourceDesign || {}),
+    view.freeform?.sourceDesign,
     headerContactHeight,
     contactId,
   ]);
@@ -1378,7 +1356,7 @@ export default function Studio() {
         line.text.slice(0, piece.start) + text + line.text.slice(piece.end),
       );
   };
-  const source = toMarkdown(doc.lines),
+  const source = useMemo(() => toMarkdown(doc.lines), [doc.lines]),
     currentTemplate = templates.find((t) => t.id === doc.template)!;
   const resumeStyle = {
     "--accent": view.settings.accent,
@@ -1978,7 +1956,7 @@ export default function Studio() {
             key={piece.line.id + "-" + piece.start}
             piece={piece}
             freeMode={mode === "free"}
-            design={lineDesign(view, piece.line)}
+            design={designFor(piece.line)}
             header={headerIds.has(piece.line.id)}
             template={view.template}
             contact={piece.line.id === contactId}
@@ -2321,7 +2299,7 @@ export default function Studio() {
             aria-label="夜间模式"
             aria-pressed={dark}
             title={dark ? "切换日间模式" : "切换夜间模式"}
-            onClick={() => setDark((value) => !value)}
+            onClick={toggleAppearance}
           >
             <SunMoon size={20} />
           </button>
@@ -2805,80 +2783,19 @@ export default function Studio() {
                 }}
                 onFit={() => setAutoZoom(true)}
               />
-              <div className="format-toolbar">
-                <button
-                  title="撤销 Ctrl+Z"
-                  aria-label="撤销"
-                  disabled={!past.length}
-                  onClick={undo}
-                >
-                  <Undo2 size={17} />
-                </button>
-                <button
-                  title="重做 Ctrl+Shift+Z"
-                  aria-label="重做"
-                  disabled={!future.length}
-                  onClick={redo}
-                >
-                  <Redo2 size={17} />
-                </button>
-                <button
-                  title="上传证件照"
-                  aria-label="上传证件照"
-                  onClick={() => setUploadKind("证件照")}
-                >
-                  <ImagePlus size={17} />
-                </button>
-                <button
-                  title="上传校徽"
-                  aria-label="上传校徽"
-                  onClick={() => setUploadKind("校徽")}
-                >
-                  <GraduationCap size={19} />
-                </button>
-                <button
-                  title="自定义 CSS"
-                  aria-label="自定义 CSS"
-                  onClick={() => setCssOpen(true)}
-                >
-                  <Code2 size={19} />
-                </button>
-                <i />
-                <button
-                  title="间距与字号"
-                  aria-label="间距与字号"
-                  onClick={() => setModal("type")}
-                >
-                  <SlidersHorizontal size={17} />
-                </button>
-                <ColorControl
-                  label="正文"
-                  value={doc.settings.color}
-                  defaultValue="#171717"
-                  onChange={(color) => settings({ color })}
-                />
-                <ColorControl
-                  label="主题"
-                  value={doc.settings.accent}
-                  defaultValue={currentTemplate.color}
-                  presets
-                  onChange={(accent) => settings({ accent })}
-                />
-                <i />
-                <i />
-                <NumberField
-                  label="上下"
-                  value={doc.settings.top}
-                  min={12}
-                  onChange={(n) => settings({ top: n, bottom: n })}
-                />
-                <NumberField
-                  label="左右"
-                  value={doc.settings.left}
-                  min={12}
-                  onChange={(n) => settings({ left: n, right: n })}
-                />
-              </div>
+              <SourceToolbar
+                value={doc.settings}
+                defaultAccent={currentTemplate.color}
+                canUndo={!!past.length}
+                canRedo={!!future.length}
+                onChange={settings}
+                onUndo={undo}
+                onRedo={redo}
+                onPhoto={() => setUploadKind("证件照")}
+                onCrest={() => setUploadKind("校徽")}
+                onCss={() => setCssOpen(true)}
+                onTypes={() => setModal("type")}
+              />
             </div>
             {preview && (
               <div className="preview-banner" role="status">
@@ -3256,8 +3173,9 @@ export default function Studio() {
       {mode !== "maker" && (
         <SelectionTools
           lines={doc.lines}
+          defaultColor={doc.settings.color}
           onRichChange={syncSimple}
-          onSource={(value, start, end) => {
+          onSource={(value, start, end, focus = true) => {
             historyUpdate(
               {
                 ...ref.current,
@@ -3266,7 +3184,7 @@ export default function Studio() {
               "format",
             );
             requestAnimationFrame(() => {
-              mdRef.current?.focus();
+              if (focus) mdRef.current?.focus();
               mdRef.current?.setSelectionRange(start, end);
             });
           }}

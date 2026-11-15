@@ -25,7 +25,7 @@ test("header stays fixed while the editor resizes, toolbar ordering and typograp
   await expect(page.locator(".editor-hint")).toHaveCount(0);
   expect(
     await page
-      .locator(".format-toolbar > button")
+      .locator(".source-toolbar .toolbar-actions > button")
       .evaluateAll((els) =>
         els.slice(0, 5).map((el) => el.getAttribute("aria-label")),
       ),
