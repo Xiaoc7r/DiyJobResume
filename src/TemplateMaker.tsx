@@ -13,7 +13,12 @@ import {
 import type { FreeDocument } from "./freeform";
 import { lineHtml, editableText, fonts, rowStyle } from "./render";
 import { measureRow } from "./paperLayout";
-import { headerLines, lineDesign, templateSlot } from "./templateStyle";
+import {
+  headerLines,
+  lineDesign,
+  lineDesignResolver,
+  templateSlot,
+} from "./templateStyle";
 import type { TemplateStyle } from "./templateStyle";
 import { buildTemplateArt, useTemplateArt } from "./templateArt";
 import {
@@ -211,7 +216,7 @@ export function TemplateMaker({
     return () => document.fonts.removeEventListener("loadingdone", done);
   }, []);
   const update = (next: Resume) => {
-    if (JSON.stringify(next) === JSON.stringify(docRef.current)) return;
+    if (next === docRef.current) return;
     savedRef.current = false;
     history.current.past.push(docRef.current);
     history.current.past = history.current.past.slice(-30);
@@ -253,6 +258,10 @@ export function TemplateMaker({
       settings: { ...docRef.current.settings, ...patch },
     });
   const size = doc.freeform!.pages[0];
+  const designFor = useMemo(
+    () => lineDesignResolver(doc),
+    [doc.lines, doc.templateStyle, doc.freeform?.sourceDesign],
+  );
   const paperStyle = {
     fontFamily: fonts[doc.settings.font],
     color: doc.settings.color,
@@ -278,7 +287,7 @@ export function TemplateMaker({
             line,
             text,
             continued,
-            lineDesign(doc, line),
+            designFor(line),
           ),
       ),
     );
@@ -294,7 +303,7 @@ export function TemplateMaker({
     let y = doc.settings.top;
     for (const piece of pages[0] || []) {
       if (piece.line.kind === "section") {
-        const design = lineDesign(doc, piece.line);
+        const design = designFor(piece.line);
         return {
           x: doc.settings.left + (design.dx || 0),
           y: y + (design.dy || 0),
@@ -396,13 +405,13 @@ export function TemplateMaker({
           className="paper-row"
           data-line={piece.line.id}
           key={piece.line.id + piece.start}
-          style={sourceFrameStyle(lineDesign(doc, piece.line))}
+          style={sourceFrameStyle(designFor(piece.line))}
         >
           <SampleContent
             piece={piece}
             settings={doc.settings}
             header={headerIds.has(piece.line.id)}
-            design={lineDesign(doc, piece.line)}
+            design={designFor(piece.line)}
             preview={preview}
             onText={(text) =>
               update({

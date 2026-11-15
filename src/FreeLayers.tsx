@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import type { FreePage } from "./freeform";
 import "./free-layers.css";
 
@@ -6,7 +6,7 @@ export interface LayerSvg {
   background: string;
   foreground: string;
 }
-export function FreeLayers({
+export const FreeLayers = memo(function FreeLayers({
   page,
   plane,
   ready,
@@ -16,9 +16,6 @@ export function FreeLayers({
   ready?: LayerSvg;
 }) {
   const [svg, setSvg] = useState("");
-  const signature = page
-    ? JSON.stringify([page.width, page.height, page.canvas.objects])
-    : "";
   useEffect(() => {
     let cancelled = false;
     if (ready || !page?.canvas.objects.length) {
@@ -36,7 +33,7 @@ export function FreeLayers({
     return () => {
       cancelled = true;
     };
-  }, [signature, plane, ready]);
+  }, [page, plane, ready]);
   return (
     <div
       aria-hidden="true"
@@ -44,4 +41,4 @@ export function FreeLayers({
       dangerouslySetInnerHTML={{ __html: ready ? ready[plane] : svg }}
     />
   );
-}
+});

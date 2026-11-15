@@ -119,9 +119,9 @@
     .free-mobile-nav
   )
   button:not(.primary):not(.color-trigger):not(.icon-button) {
-  background-color: #302f2b;
+  background-color: var(--control-bg, #302f2b);
   color: #ded8cd;
-  border-color: #4c4942;
+  border-color: var(--control-border, #4c4942);
 }
 .studio.is-dark :is(.mode-tabs, .free-library-tabs, .library-tabs) {
   background: #34322c;
@@ -144,7 +144,6 @@
     .module-group button,
     .custom-module,
     .free-inserts button,
-    .free-object-list > div,
     .agent-config,
     .agent-plan,
     .agent-message
@@ -302,4 +301,57 @@ html[data-theme="dark"] .crest-library-link {
 .studio.is-dark :is(.mobile-nav button.active, .free-mobile-nav button.active) {
   background: #4a3a30;
   color: #f1c7aa;
+}
+
+/* Match the light theme's transparent affordances; reveal them only on intent. */
+.studio.is-dark
+  :is(
+    .format-toolbar,
+    .free-icons,
+    .history-buttons,
+    .mode-tabs,
+    .free-actions-list,
+    .free-object-list,
+    .file-menu,
+    .doc-menu,
+    .library-tabs,
+    .free-library-tabs,
+    .user-template-actions
+  ) {
+  --control-bg: transparent;
+  --control-border: transparent;
+}
+.studio.is-dark
+  :is(
+    .free-icons button,
+    .format-toolbar button,
+    .free-actions-list button,
+    .file-menu button
+  ):hover:not(:disabled) {
+  --control-bg: #3b3b36;
+  --control-border: #66665f;
+  background-color: #3b3b36;
+  border-color: #66665f;
+}
+.studio.is-dark
+  :is(
+    .mode-tabs button[aria-selected="true"],
+    .library-tabs button[aria-selected="true"],
+    .free-library-tabs button[aria-pressed="true"],
+    .free-toolbar button[aria-pressed="true"]
+  ) {
+  --control-bg: #3a3933;
+}
+.studio.is-dark .free-object-list > div {
+  background: transparent;
+}
+.studio.is-dark .free-object-list > div:is(:hover, .selected) {
+  background: #393934;
+}
+.studio.is-dark .edit-field:is(:hover, .hovered) {
+  outline-color: #69696366;
+  background: #ffffff06;
+}
+.studio.is-dark .edit-field:not(:hover):not(.hovered):not(.active) {
+  outline-color: transparent;
 }

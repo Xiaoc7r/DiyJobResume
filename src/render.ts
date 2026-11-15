@@ -1,4 +1,7 @@
 import MarkdownIt from "markdown-it";
+import { boundedCache } from "./boundedCache";
+import { colorOpen, elementColor } from "./inlineColor";
+import { normalizeHex } from "./color";
 import type { Line, Settings, Template } from "./flow";
 export const escapeHtml = (s: string) =>
   s.replace(
@@ -12,6 +15,53 @@ const markdown = new MarkdownIt({ html: false, breaks: true, linkify: false });
 markdown.disable("image");
 markdown.validateLink = (href) =>
   /^(https?:\/\/|mailto:)[^\s<>"']+$/i.test(href);
+markdown.inline.ruler.before("html_inline", "safe_color", (state, silent) => {
+  if (Number(state.env?.colorDepth || 0) >= 24) return false;
+  const open =
+    /^<span\s+style=["']color:\s*(#[a-f\d]{6}|#[a-f\d]{3});?["']\s*>/i.exec(
+      state.src.slice(state.pos),
+    );
+  if (!open) return false;
+  const tags = /<span\b[^>]*>|<\/span>/gi;
+  tags.lastIndex = state.pos + open[0].length;
+  let depth = 1,
+    match: RegExpExecArray | null,
+    end = -1;
+  while ((match = tags.exec(state.src))) {
+    depth += match[0].toLowerCase() === "</span>" ? -1 : 1;
+    if (!depth) {
+      end = match.index;
+      break;
+    }
+  }
+  if (end < 0) return false;
+  if (!silent) {
+    const token = state.push("safe_color", "span", 0);
+    token.content = state.src.slice(state.pos + open[0].length, end);
+    token.meta = { hex: normalizeHex(open[1]) };
+  }
+  state.pos = end + 7;
+  return true;
+});
+markdown.renderer.rules.safe_color = (tokens, index, _options, env) => {
+  const token = tokens[index],
+    hex = token.meta!.hex as string;
+  return `<span class="inline-color" data-inline-color="${hex}" style="color:${hex}!important">${markdown.renderInline(token.content, { inlineColor: hex, colorDepth: Number(env?.colorDepth || 0) + 1 })}</span>`;
+};
+for (const name of ["strong_open", "em_open", "s_open", "code_inline"]) {
+  const original = markdown.renderer.rules[name];
+  markdown.renderer.rules[name] = (tokens, index, options, env, self) => {
+    const html = original
+      ? original(tokens, index, options, env, self)
+      : self.renderToken(tokens, index, options);
+    return env?.inlineColor
+      ? html.replace(
+          /^<\w+/,
+          (tag) => tag + ` style="color:${env.inlineColor}!important"`,
+        )
+      : html;
+  };
+}
 // Chinese punctuation can border emphasis without an ASCII space.
 markdown.inline.ruler.before("emphasis", "cjk_strong", (state, silent) => {
   if (
@@ -28,8 +78,8 @@ markdown.inline.ruler.before("emphasis", "cjk_strong", (state, silent) => {
   state.pos = end + 2;
   return true;
 });
-markdown.renderer.rules.cjk_strong = (tokens, index) =>
-  "<strong>" + markdown.renderInline(tokens[index].content) + "</strong>";
+markdown.renderer.rules.cjk_strong = (tokens, index, _options, env) =>
+  "<strong>" + markdown.renderInline(tokens[index].content, env) + "</strong>";
 markdown.inline.ruler.before("emphasis", "cjk_italic", (state, silent) => {
   if (state.src[state.pos] !== "*" || state.src[state.pos + 1] === "*")
     return false;
@@ -42,8 +92,8 @@ markdown.inline.ruler.before("emphasis", "cjk_italic", (state, silent) => {
   state.pos = end + 1;
   return true;
 });
-markdown.renderer.rules.cjk_italic = (tokens, index) =>
-  "<em>" + markdown.renderInline(tokens[index].content) + "</em>";
+markdown.renderer.rules.cjk_italic = (tokens, index, _options, env) =>
+  "<em>" + markdown.renderInline(tokens[index].content, env) + "</em>";
 markdown.inline.ruler.before(
   "html_inline",
   "safe_underline",
@@ -59,15 +109,22 @@ markdown.inline.ruler.before(
     return true;
   },
 );
-markdown.renderer.rules.safe_underline = (tokens, index) =>
-  "<u>" + markdown.renderInline(tokens[index].content) + "</u>";
-markdown.renderer.rules.link_open = (tokens, index, options, _env, self) => {
+markdown.renderer.rules.safe_underline = (tokens, index, _options, env) =>
+  "<u>" + markdown.renderInline(tokens[index].content, env) + "</u>";
+markdown.renderer.rules.link_open = (tokens, index, options, env, self) => {
   tokens[index].attrSet("target", "_blank");
   tokens[index].attrSet("rel", "noopener noreferrer");
+  if (env?.inlineColor)
+    tokens[index].attrSet("style", `color:${env.inlineColor}!important`);
   return self.renderToken(tokens, index, options);
 };
+const inlineCache = boundedCache<string>();
 export function inline(s: string): string {
-  return markdown.renderInline(s);
+  const hit = inlineCache.get(s);
+  if (hit !== undefined) return hit;
+  const html = markdown.renderInline(s);
+  inlineCache.set(s, html, html.length);
+  return html;
 }
 export function lineHtml(
   line: Line,
@@ -83,13 +140,17 @@ export function lineHtml(
       )
       .join("");
   }
-  return `<span class="ink"${line.kind === "section" ? ` data-title="${escapeHtml(text)}"` : ""}>${inline(text) || "<br>"}</span>`;
+  return `<span class="ink"${line.kind === "section" ? ` data-title="${escapeHtml(inline(text).replace(/<[^>]*>/g, ""))}"` : ""}>${inline(text) || "<br>"}</span>`;
 }
 export function domMarkdown(node: Node): string {
   if (node.nodeType === Node.TEXT_NODE)
     return (node.textContent || "").replaceAll("\u00a0", " ");
   if (!(node instanceof HTMLElement)) return "";
   const content = Array.from(node.childNodes).map(domMarkdown).join("");
+  const color = ["SPAN", "FONT"].includes(node.tagName)
+    ? elementColor(node)
+    : null;
+  if (color) return colorOpen(color) + content + "</span>";
   switch (node.tagName) {
     case "BR":
       return "\n";

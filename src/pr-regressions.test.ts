@@ -32,6 +32,19 @@ it("keeps damaged bytes on load and backs them up before overwrite", () => {
   expect(data.get(RECOVERY_KEY)).toBe("{broken");
   expect(JSON.parse(data.get(DOCS_KEY)!).items).toHaveLength(1);
 });
+it("still detects an external corruption after a successful cached save", () => {
+  const { data } = store();
+  const doc = initialResume();
+  const library = {
+    activeId: "a",
+    items: [{ id: "a", name: doc.name, updatedAt: 1, doc }],
+  };
+  saveLibrary(library);
+  data.set(DOCS_KEY, "{changed-in-another-tab");
+  saveLibrary(library);
+  expect(data.get(RECOVERY_KEY)).toBe("{changed-in-another-tab");
+  expect(JSON.parse(data.get(DOCS_KEY)!).items[0].doc.lines).toEqual(doc.lines);
+});
 it("refuses overwrite when damaged backup cannot be saved", () => {
   const { data, storage } = store({ [DOCS_KEY]: "{broken" });
   storage.setItem = () => {
