@@ -37,6 +37,9 @@ export function blankResume(template: Template, name: string): Resume {
     ...doc,
     name,
     pictures: [],
+    freeform: undefined,
+    freeformArchive: undefined,
+    freeformBaseline: undefined,
     // 只留姓名和联系方式，方便直接开始写
     lines:
       template === "blank"

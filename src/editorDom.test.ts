@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from "vitest";
+import { defaultPictures } from "./defaultPictures";
 import { textRangeOf } from "./editorDom";
 import { editableText } from "./render";
 import { parseMarkdown, toMarkdown, initialResume, readResume } from "./flow";
@@ -20,8 +21,9 @@ describe("editing selection and whitespace regressions", () => {
     expect(editableText(el)).toBe("  A ");
   });
   it("keeps a deleted row icon anchored across reload instead of moving it to the header", () => {
-    const doc = initialResume(),
-      icon = doc.pictures.find((p) => p.anchor)!;
+    const doc = initialResume();
+    doc.pictures = defaultPictures(doc.lines);
+    const icon = doc.pictures.find((p) => p.anchor)!;
     doc.lines = doc.lines.filter((l) => l.id !== icon.anchor);
     expect(
       readResume(JSON.parse(JSON.stringify(doc))).pictures.find(
@@ -31,6 +33,7 @@ describe("editing selection and whitespace regressions", () => {
   });
   it("keeps the restore baseline and small anchored icons in editable backups", () => {
     const doc = initialResume();
+    doc.pictures = defaultPictures(doc.lines);
     doc.freeformBaseline = {
       settings: structuredClone(doc.settings),
       template: doc.template,

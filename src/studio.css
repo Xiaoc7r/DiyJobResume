@@ -802,13 +802,10 @@ a {
   cursor: grab;
 }
 .template-black .row-section {
-  border-bottom-width: 2px;
-}
-.template-ribbon .row-name {
-  text-align: left;
+  border-bottom-width: 1.5px;
 }
 .template-ribbon .row-section {
-  border-bottom: 1px solid #b9b9b9;
+  border-bottom: 1.5px solid #b9b9b9;
   color: white;
 }
 .template-ribbon .row-section .ink {
@@ -829,10 +826,7 @@ a {
   transform: skew(10deg);
 }
 .paper-row:has(.row-name) + .paper-row .row-text {
-  text-align: center;
-}
-.template-ribbon .paper-row:has(.row-name) + .paper-row .row-text {
-  text-align: left;
+  text-align: var(--header-align, center) !important;
 }
 .paper-end {
   color: #99988f;
@@ -1011,7 +1005,7 @@ a {
 }
 .mini-ribbon > strong,
 .mini-ribbon > small {
-  text-align: left;
+  text-align: center;
 }
 .mini-ribbon b {
   background: var(--mini-accent);
@@ -1928,25 +1922,17 @@ a {
   text-align: left;
 }
 .template-academic .row-section {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  border-bottom: 0;
+  border-bottom-color: color-mix(in srgb, var(--accent) 30%, white);
 }
-.template-academic .row-section:after {
-  content: "";
-  height: 2px;
-  background: color-mix(in srgb, var(--accent) 22%, white);
-  flex: 1;
-}
+
 .template-teal .row-name {
   color: var(--ink);
   text-align: left;
 }
 .template-teal .row-section {
   color: var(--accent);
-  border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, white);
-  border-left: 3px solid var(--accent);
+  border-bottom: 1.5px solid color-mix(in srgb, var(--accent) 35%, white);
+  box-shadow: inset 3px 0 var(--accent);
   padding-left: 8px;
   background: linear-gradient(
     90deg,
@@ -1962,22 +1948,22 @@ a {
   background: var(--accent);
 }
 .template-violet .row-section {
-  border: 0;
-  border-left: 4px solid var(--accent);
+  border-bottom-color: transparent;
+  box-shadow: inset 4px 0 var(--accent);
   padding-left: 10px;
   background: color-mix(in srgb, var(--accent) 6%, white);
 }
 .mini-academic strong {
   color: #171717;
-  text-align: left;
+  text-align: center;
 }
 .mini-academic b {
-  border-bottom: 2px solid #d4dfeb;
-  color: #0756a5;
+  border-bottom: 1px solid #dcd3eb;
+  color: #7056a4;
 }
 .mini-teal strong {
   color: #171717;
-  text-align: left;
+  text-align: center;
 }
 .mini-teal b {
   color: #588591;
@@ -2023,6 +2009,9 @@ a {
 }
 .template-teal [data-title="教育背景"]:after {
   content: "Education";
+}
+.template-teal [data-title="实习经历"]:after {
+  content: "Internship";
 }
 .template-teal [data-title="工作经历"]:after {
   content: "Work Experience";

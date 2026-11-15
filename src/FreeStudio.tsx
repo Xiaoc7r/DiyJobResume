@@ -275,6 +275,7 @@ export default function FreeStudio({
     onChangeRef.current(next);
   };
   const frontLayer = useRef<HTMLDivElement>(null);
+  const backLayer = useRef<HTMLDivElement>(null);
   const detailPreview = useRef<HTMLDivElement>(null);
   const updateDetailPreview = useRef<() => void>(() => {});
   const [sourceSelection, setSourceSelection] =
@@ -1075,18 +1076,29 @@ export default function FreeStudio({
       hidden.forEach((o) => {
         o.visible = true;
       });
-      if (flowBase && frontLayer.current) {
-        const svg = c
-          .getObjects()
-          .filter((o) => o.visible && (o as Item).plane !== "background")
-          .map((o) => {
-            const markup = o.toSVG();
-            return o.group instanceof ActiveSelection
-              ? `<g transform="matrix(${o.group.calcTransformMatrix().join(" ")})">${markup}</g>`
-              : markup;
-          })
-          .join("");
-        frontLayer.current.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 ${model.current.pages[activePage.current].width} ${model.current.pages[activePage.current].height}">${svg}</svg>`;
+      if (flowBase) {
+        for (const [background, layer] of [
+          [true, backLayer.current],
+          [false, frontLayer.current],
+        ] as const) {
+          if (!layer) continue;
+          const svg = c
+            .getObjects()
+            .filter(
+              (o) =>
+                o.visible &&
+                ((o as Item).plane === "background") === background,
+            )
+            .map((o) => {
+              const markup = o.toSVG();
+              return o.group instanceof ActiveSelection
+                ? `<g transform="matrix(${o.group.calcTransformMatrix().join(" ")})">${markup}</g>`
+                : markup;
+            })
+            .join("");
+          const p = model.current.pages[activePage.current];
+          layer.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 ${p.width} ${p.height}">${svg}</svg>`;
+        }
       }
       updateDetailPreview.current();
       if (flowBase) {
@@ -1993,6 +2005,7 @@ export default function FreeStudio({
                 } as CSSProperties
               }
             >
+              {flowBase && <div ref={backLayer} className="free-back-scene" />}
               {flowBase && (
                 <div className="free-source-paper">
                   {renderPaper?.(pageIndex, zoom, { hideDecorations: true })}

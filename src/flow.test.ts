@@ -98,17 +98,13 @@ describe("continuous document", () => {
   });
   it("keeps a normal line inside its own section", () => {
     const doc = initialResume();
-    doc.lines = parseMarkdown(
-      "# 姓名\n## A\n- a1\n- a2\n## B\n- b1",
-    );
+    doc.lines = parseMarkdown("# 姓名\n## A\n- a1\n- a2\n## B\n- b1");
     const a1 = doc.lines[2].id;
     expect(blockRange(doc.lines, 2)).toEqual({ start: 1, end: 4 });
     // 想拖进 B 板块（下标 5 之前）→ 被限制在 A 板块末尾
     expect(resolveDropBoundary(doc.lines, a1, 5)).toBe(4);
     const next = moveGroupToBoundary(doc, a1, 4);
-    expect(toMarkdown(next.lines)).toBe(
-      "# 姓名\n## A\n- a2\n- a1\n## B\n- b1",
-    );
+    expect(toMarkdown(next.lines)).toBe("# 姓名\n## A\n- a2\n- a1\n## B\n- b1");
   });
   it("does not let a normal line jump above its own section title", () => {
     const doc = initialResume();
@@ -116,9 +112,7 @@ describe("continuous document", () => {
     const a2 = doc.lines[3].id;
     expect(resolveDropBoundary(doc.lines, a2, 0)).toBe(2);
     const next = moveGroupToBoundary(doc, a2, 2);
-    expect(toMarkdown(next.lines)).toBe(
-      "# 姓名\n## A\n- a2\n- a1\n## B\n- b1",
-    );
+    expect(toMarkdown(next.lines)).toBe("# 姓名\n## A\n- a2\n- a1\n## B\n- b1");
   });
   it("keeps an already-valid block boundary untouched", () => {
     const doc = initialResume();
@@ -181,4 +175,33 @@ it("starts the whiteboard empty and preserves typed content across template chan
   expect(toMarkdown(readResume(JSON.parse(JSON.stringify(typed))).lines)).toBe(
     "# 我的名字\n\n我的经历",
   );
+});
+
+it("creates independent QAQ examples with six canvas objects and no private history", () => {
+  const first = initialResume(),
+    second = initialResume();
+  expect(first.name).toBe("炒肉多示例简历QAQ");
+  expect(first.freeform!.pages[0]).toMatchObject({ width: 794, height: 1165 });
+  expect(first.freeform!.pages[0].canvas.objects).toHaveLength(6);
+  expect(first.freeformArchive).toBeUndefined();
+  expect(first.freeformBaseline).toBeUndefined();
+  expect(first.lines[0].id).not.toBe(second.lines[0].id);
+  const contact = first.lines.find((line) =>
+    line.text.includes("xxiaocr@gmail.com"),
+  )!;
+  expect(first.freeform!.sourceDesign![contact.id]).toEqual({
+    dx: 12,
+    fontSize: 14,
+  });
+  expect(Object.keys(first.freeform!.sourceDesign!)).toHaveLength(3);
+  expect(
+    Object.keys(first.freeform!.sourceDesign!).every((id) =>
+      first.lines.some((line) => line.id === id),
+    ),
+  ).toBe(true);
+});
+it("reading an older source-only draft does not add the example decorations", () => {
+  const old = initialResume();
+  delete old.freeform;
+  expect(readResume(old).freeform).toBeUndefined();
 });

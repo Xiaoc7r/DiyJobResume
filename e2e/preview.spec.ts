@@ -41,6 +41,11 @@ test("large previews remain scrollable and free mode shares zoom with an unobstr
       ".free-detail-viewport canvas, .free-detail-viewport .moveable-control-box",
     ),
   ).toHaveCount(0);
+  // The supplied example decorations start locked; unlock the selected item before moving it.
+  await page
+    .getByRole("button", { name: "解锁元素", exact: true })
+    .first()
+    .click();
   const before = await page
     .locator(".free-detail-viewport > div")
     .getAttribute("style");
