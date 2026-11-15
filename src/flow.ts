@@ -1,4 +1,4 @@
-import { defaultPictures } from "./defaultPictures";
+import { createStarter } from "./starter";
 import { demoFor } from "./samples";
 import { experienceBlocks } from "./experience";
 import type { ExperienceBlock } from "./experience";
@@ -92,12 +92,6 @@ export const templates: {
     color: "#0756a5",
   },
   {
-    id: "academic",
-    name: "蓝图 · 研发履历",
-    desc: "简洁表头 · 延伸细线 · 清晰分区",
-    color: "#0756a5",
-  },
-  {
     id: "black",
     name: "黑线 · 专业履历",
     desc: "居中表头 · 黑色横线 · 三列经历",
@@ -120,6 +114,12 @@ export const templates: {
     name: "青岚 · 工程实践",
     desc: "青色细线 · 留白分区 · 清爽技术风",
     color: "#588591",
+  },
+  {
+    id: "academic",
+    name: "紫图 · 研发履历",
+    desc: "紫色细线 · 清晰分区 · 紧凑排版",
+    color: "#7056a4",
   },
   {
     id: "blank",
@@ -241,38 +241,31 @@ export const toMarkdown = (lines: Line[]) =>
     .join("\n");
 export const demo = demoFor("blue");
 export function initialResume(template: Template = "blue"): Resume {
-  const lines: Line[] =
-    template === "blank"
-      ? [{ id: uid(), kind: "text", text: "" }]
-      : parseMarkdown(demoFor(template));
+  if (template !== "blank")
+    return createStarter(
+      template,
+      templates.find((t) => t.id === template)!.color,
+    );
   return {
     version: 2,
-    name: template === "blank" ? "空白简历" : "炒肉多示例简历",
+    name: "空白简历",
     template,
-    lines,
-    settings: {
-      ...defaultSettings(),
-      accent: templates.find((t) => t.id === template)!.color,
-    },
-    pictures: template === "blank" ? [] : defaultPictures(lines),
+    lines: [{ id: uid(), kind: "text", text: "" }],
+    settings: { ...defaultSettings(), accent: "#171717" },
+    pictures: [],
   };
 }
 export function applyTemplate(doc: Resume, template: Template): Resume {
   return {
     ...doc,
     template,
-    lines:
-      template !== "blank" &&
-      doc.template !== "blank" &&
-      toMarkdown(doc.lines) === demoFor(doc.template)
-        ? parseMarkdown(demoFor(template), doc.lines)
-        : doc.lines,
     settings: {
       ...doc.settings,
       accent: templates.find((t) => t.id === template)!.color,
     },
   };
 }
+
 export const modules: { name: string; variants: ExperienceBlock[] }[] = [
   {
     name: "教育背景",
@@ -521,7 +514,9 @@ export function readResume(raw: unknown): Resume {
     throw new Error("这不是有效的简历备份。");
   const r = raw as Record<string, any>;
   if (r.version === 1 && Array.isArray(r.blocks)) {
-    const doc = initialResume();
+    const doc = initialResume("blank");
+    doc.template = "blue";
+    doc.settings = defaultSettings();
     doc.name = str(r.name, "我的简历");
     doc.lines = [];
     doc.pictures = [];
@@ -560,12 +555,13 @@ export function readResume(raw: unknown): Resume {
   }
   if (r.version !== 2 || !Array.isArray(r.lines) || r.lines.length > 2000)
     throw new Error("备份格式或版本不支持。");
-  const doc = initialResume(),
+  const doc = initialResume("blank"),
     seen = new Set<string>();
   doc.name = str(r.name, "我的简历").slice(0, 100);
   doc.template = templates.some((t) => t.id === r.template)
     ? r.template
     : "blue";
+  doc.settings.accent = templates.find((t) => t.id === doc.template)!.color;
   doc.lines = r.lines.map((l: any) => {
     if (!l || !Object.hasOwn(kindLabels, l.kind) || typeof l.text !== "string")
       throw new Error("备份中的内容格式不正确。");

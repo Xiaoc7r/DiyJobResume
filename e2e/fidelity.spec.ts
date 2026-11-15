@@ -142,6 +142,11 @@ test("source text pixels and layout survive switching while entry icons become e
         .querySelectorAll<HTMLElement>(".selected, .group-hover")
         .forEach((el) => el.classList.remove("selected", "group-hover"));
       if (isFree) {
+        const background = document.createElement("div");
+        background.className = "free-layer-svg free-layer-background";
+        background.innerHTML =
+          document.querySelector(".free-back-scene")!.innerHTML;
+        paper.prepend(background);
         const overlay = document.createElement("div");
         overlay.className = "free-layer-svg free-layer-foreground";
         overlay.innerHTML =
@@ -275,7 +280,7 @@ test("new icons and background rectangles remain visible through mode changes an
     page.locator(".resume-paper .free-layer-background svg"),
   ).toHaveCount(1);
   await page.getByRole("tab", { name: "Markdown", exact: true }).click();
-  await expect(page.locator(".free-layer-background rect")).toHaveCount(1);
+  await expect(page.locator(".free-layer-background rect")).toHaveCount(3);
   await expect(page.getByRole("status").first()).toContainText("已保存");
   await page.reload();
   await expect(
@@ -297,7 +302,7 @@ test("all six templates preserve their entire source DOM when opening free mode"
 }) => {
   for (const template of [
     "炒肉多经典",
-    "蓝图 · 研发履历",
+    "紫图 · 研发履历",
     "黑线 · 专业履历",
     "标签 · 技术履历",
     "红序 · 系统架构",
@@ -381,7 +386,7 @@ test("source, local logo and shapes are included in both image exports", async (
       const { loadImage } = await import("@napi-rs/canvas");
       const image = await loadImage(data);
       expect(image.width).toBe(1588);
-      expect(image.height).toBe(2246);
+      expect(image.height).toBe(2330);
     }
     await expect(page.locator('.free-message[role="alert"]')).toHaveCount(0);
   }

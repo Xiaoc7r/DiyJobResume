@@ -113,7 +113,7 @@ test("zoom persists in both directions and resetting the layout preserves edits"
     "保留我的文字",
   );
   await page.getByRole("tab", { name: "简单编辑", exact: true }).click();
-  await expect(page.locator(".free-layer-background rect")).toHaveCount(0);
+  await expect(page.locator(".free-layer-background rect")).toHaveCount(2);
   await expect(page.locator(".free-source-banner")).toHaveCount(0);
   await expect(
     page.getByRole("separator", { name: "调整右侧面板宽度" }),
@@ -122,10 +122,10 @@ test("zoom persists in both directions and resetting the layout preserves edits"
     .locator(".mini-paper")
     .first()
     .evaluate((el) => el.clientWidth / el.clientHeight);
-  expect(ratio).toBeCloseTo(210 / 297, 2);
+  expect(ratio).toBeCloseTo(794 / 1165, 2);
 });
 
-test("default sample is one A4 with the supplied school and anchored entry icons", async ({
+test("default sample keeps the supplied extended paper, crest and six canvas elements", async ({
   page,
 }, testInfo) => {
   await expect(
@@ -134,9 +134,9 @@ test("default sample is one A4 with the supplied school and anchored entry icons
       exact: true,
     }),
   ).toBeVisible();
-  await expect(page.getByLabel("简历名称")).toHaveValue("炒肉多示例简历");
+  await expect(page.getByLabel("简历名称")).toHaveValue("炒肉多示例简历QAQ");
   await expect(page.locator(".resume-paper")).toHaveCount(1);
-  await expect(page.locator(".resume-paper .floating-picture")).toHaveCount(4);
+  await expect(page.locator(".resume-paper .floating-picture")).toHaveCount(1);
   await page.screenshot({ path: testInfo.outputPath("desktop.png") });
   const previewStyle = await page.addStyleTag({
     content:
@@ -160,27 +160,12 @@ test("default sample is one A4 with the supplied school and anchored entry icons
       };
     });
   });
-  const aligned = await page
-    .locator(".floating-picture[data-anchor]")
-    .evaluateAll((elements) =>
-      elements.map((el) => {
-        const paper = el.closest(".resume-paper")!,
-          scale = paper.getBoundingClientRect().width / 794,
-          row = paper.querySelector(
-            `[data-line="${(el as HTMLElement).dataset.anchor}"]`,
-          )!;
-        return (
-          (el.getBoundingClientRect().top - row.getBoundingClientRect().top) /
-          scale
-        );
-      }),
-    );
-  expect(aligned).toHaveLength(3);
-  for (const delta of aligned) expect(Math.abs(delta - 3)).toBeLessThan(0.6);
-  expect(boxes[0].x).toBeCloseTo(40, 0);
-  expect(boxes[0].y).toBeCloseTo(20, 0);
-  for (const b of boxes.slice(1)) {
-    expect(b.w).toBeCloseTo(16, 0);
-    expect(b.h).toBeCloseTo(16, 0);
-  }
+  expect(boxes).toHaveLength(1);
+  expect(Math.abs(boxes[0].x - 41.022350368)).toBeLessThan(1 / 64 + 0.002);
+  expect(Math.abs(boxes[0].y - 21.199555999)).toBeLessThan(1 / 64 + 0.002);
+  expect(Math.abs(boxes[0].w - 58.673101129)).toBeLessThan(1 / 64 + 0.002);
+  expect(Math.abs(boxes[0].h - 58.735095222)).toBeLessThan(1 / 64 + 0.002);
+  await expect(page.locator(".resume-paper")).toHaveCSS("height", "1165px");
+  await expect(page.locator(".free-layer-foreground svg image")).toHaveCount(3);
+  await expect(page.locator(".free-layer-background svg rect")).toHaveCount(2);
 });

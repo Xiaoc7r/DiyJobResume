@@ -102,11 +102,11 @@ describe("template defaults and CSS backups", () => {
   it("uses the requested template order and common typography", () => {
     expect(templates.map((t) => t.id)).toEqual([
       "blue",
-      "academic",
       "black",
       "ribbon",
       "violet",
       "teal",
+      "academic",
       "blank",
     ]);
     const first = initialResume();

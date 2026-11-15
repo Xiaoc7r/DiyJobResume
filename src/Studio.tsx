@@ -68,6 +68,7 @@ import { withColumns } from "./formatting";
 import { NumericInput, holdDrag } from "./interaction";
 import "./ui-theme.css";
 import { MarkdownNumbers } from "./MarkdownNumbers";
+import { STARTER_PAGE } from "./starter";
 import { PreviewZoom } from "./PreviewZoom";
 import { ColorControl } from "./ColorControl";
 import { ImageUploadDialog } from "./ImageUploadDialog";
@@ -1388,9 +1389,7 @@ export default function Studio() {
     "--header-contact-height": headerContactHeight + "px",
     "--header-align":
       view.settings.headerAlign === "template"
-        ? view.template === "ribbon"
-          ? "left"
-          : "center"
+        ? "center"
         : view.settings.headerAlign,
     fontFamily: fonts[view.settings.font],
     color: view.settings.color,
@@ -2936,14 +2935,20 @@ export default function Studio() {
                             <div
                               className={`mini-paper mini-${t.id}`}
                               style={
-                                { "--mini-accent": t.color } as CSSProperties
+                                {
+                                  "--mini-accent": t.color,
+                                  aspectRatio:
+                                    t.id === "blank"
+                                      ? `${PAGE.width} / ${PAGE.height}`
+                                      : `${STARTER_PAGE.width} / ${STARTER_PAGE.height}`,
+                                } as CSSProperties
                               }
                             >
                               {t.id !== "blank" && (
                                 <>
                                   <strong>炒肉多</strong>
                                   <small>
-                                    138 0000 2468 | xxiaocr@gmail.com
+                                    123 4567 8910 | xxiaocr@gmail.com
                                   </small>
                                   {[
                                     "教育背景",
