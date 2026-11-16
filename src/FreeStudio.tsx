@@ -78,12 +78,11 @@ import {
   PanelLeft,
   PanelRight,
   MessagesSquare,
-  MessageCircle,
   Send,
   Linkedin,
   FolderOpen,
 } from "lucide-react";
-import { GiteeIcon, DouyinIcon } from "./BrandIcons";
+import { GiteeIcon, DouyinIcon, QQIcon } from "./BrandIcons";
 import { makeWorkshopShape, workshopShapes } from "./workshopShapes";
 import { NumericInput } from "./interaction";
 import { FreeLoading } from "./FreeLoading";
@@ -97,6 +96,7 @@ import { blankFreePage, freeText } from "./freeform";
 import type { FreeDocument, FreePage } from "./freeform";
 import type { Resume } from "./flow";
 import "./free-studio.css";
+import { DetailRenderer, sceneLayers, setSvgContent } from "./scenePreview";
 
 type Item = FabricObject & {
   id?: string;
@@ -179,16 +179,16 @@ const iconSet = {
   网站: Globe,
   技术: Code2,
   链接: Link,
-  Gitee: GiteeIcon,
+  作品集: FolderOpen,
   星标: Star,
   用户: UserRound,
   箭头: ArrowRight,
   微信: MessagesSquare,
-  QQ: MessageCircle,
+  QQ: QQIcon,
   Telegram: Send,
   LinkedIn: Linkedin,
   抖音: DouyinIcon,
-  作品集: FolderOpen,
+  Gitee: GiteeIcon,
 };
 const cloneData = <T,>(data: T): T => structuredClone(data);
 const isText = (o?: FabricObject | null): o is Textbox => o instanceof IText;
@@ -266,14 +266,17 @@ export default function FreeStudio({
     scroll = useRef<HTMLDivElement>(null),
     flowRoot = useRef<HTMLDivElement>(null);
   const scene = useRef<Canvas | null>(null),
-    model = useRef<FreeDocument>(cloneData(doc.freeform!)),
+    model = useRef<FreeDocument>(undefined!),
     activePage = useRef(0);
+  if (!model.current) model.current = cloneData(doc.freeform!);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
-  const history = useRef<string[]>([JSON.stringify(model.current)]),
+  const history = useRef<string[]>([]),
     cursor = useRef(0),
     loading = useRef(false),
     alive = useRef(true);
+  if (!history.current.length)
+    history.current.push(JSON.stringify(model.current));
   const updateRef = useRef<() => void>(() => {}),
     commitRef = useRef<() => void>(() => {});
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined),
@@ -364,6 +367,8 @@ export default function FreeStudio({
   zoomRef.current = zoom;
   toolRef.current = tool;
 
+  const detailRenderer = useRef<DetailRenderer | null>(null);
+  const renderedLayers = useRef({ background: "", foreground: "" });
   updateDetailPreview.current = () => {
     const c = scene.current,
       viewport = detailPreview.current;
@@ -375,50 +380,29 @@ export default function FreeStudio({
       !viewport.parentElement?.hasAttribute("open")
     )
       return;
-    const p = model.current.pages[activePage.current];
-    const r = selected.getBoundingRect(),
-      factor = 2;
-    const source = host.current
-      ?.querySelector<HTMLElement>(".free-source-paper > .resume-paper")
-      ?.cloneNode(true) as HTMLElement | undefined;
-    if (source) {
-      source.style.transform = "none";
-      source.style.pointerEvents = "none";
-      source
-        .querySelectorAll("[contenteditable], [data-edit], [data-line], [id]")
-        .forEach((el) => {
-          for (const attr of [
-            "contenteditable",
-            "data-edit",
-            "data-line",
-            "id",
-          ])
-            el.removeAttribute(attr);
-        });
-      source
-        .querySelectorAll(".free-layer, .row-tools, .picture-handle")
-        .forEach((el) => el.remove());
-    }
-    const layer = (background: boolean) =>
-      `<svg xmlns="http://www.w3.org/2000/svg" width="${p.width}" height="${p.height}" style="position:absolute;inset:0" viewBox="0 0 ${p.width} ${p.height}">${c
-        .getObjects()
-        .filter(
-          (o) =>
-            o.visible && ((o as Item).plane === "background") === background,
-        )
-        .map((o) => {
-          const markup = o.toSVG();
-          return o.group instanceof ActiveSelection
-            ? `<g transform="matrix(${o.group.calcTransformMatrix().join(" ")})">${markup}</g>`
-            : markup;
-        })
-        .join("")}</svg>`;
-    const sheet = document.createElement("div");
-    sheet.style.cssText = `position:absolute;width:${p.width}px;height:${p.height}px;background:${p.background};transform-origin:0 0;transform:translate(${viewport.clientWidth / 2 - (r.left + r.width / 2) * factor}px,${viewport.clientHeight / 2 - (r.top + r.height / 2) * factor}px) scale(${factor})`;
-    sheet.innerHTML = layer(true);
-    if (source) sheet.append(source);
-    sheet.insertAdjacentHTML("beforeend", layer(false));
-    viewport.replaceChildren(sheet);
+    detailRenderer.current ??= new DetailRenderer();
+    detailRenderer.current.render(
+      viewport,
+      model.current.pages[activePage.current],
+      selected.getBoundingRect(),
+      renderedLayers.current,
+      () =>
+        host.current?.querySelector<HTMLElement>(
+          ".free-source-paper > .resume-paper",
+        ),
+      [
+        doc.lines,
+        doc.settings,
+        doc.template,
+        doc.templateStyle,
+        doc.pictures,
+        doc.freeform?.sourceDesign,
+        model.current.pages[activePage.current].width,
+        model.current.pages[activePage.current].height,
+        activePage.current,
+        sourcePageCount,
+      ],
+    );
   };
   useEffect(() => {
     updateDetailPreview.current();
@@ -1121,31 +1105,19 @@ export default function FreeStudio({
       hidden.forEach((o) => {
         o.visible = true;
       });
-      if (flowBase) {
-        for (const [background, layer] of [
-          [true, backLayer.current],
-          [false, frontLayer.current],
-        ] as const) {
-          if (!layer) continue;
-          const svg = c
-            .getObjects()
-            .filter(
-              (o) =>
-                o.visible &&
-                ((o as Item).plane === "background") === background,
-            )
-            .map((o) => {
-              const markup = o.toSVG();
-              return o.group instanceof ActiveSelection
-                ? `<g transform="matrix(${o.group.calcTransformMatrix().join(" ")})">${markup}</g>`
-                : markup;
-            })
-            .join("");
-          const p = model.current.pages[activePage.current];
-          layer.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 ${p.width} ${p.height}">${svg}</svg>`;
-        }
+      if (
+        flowBase ||
+        detailPreview.current?.parentElement?.hasAttribute("open")
+      ) {
+        const p = model.current.pages[activePage.current];
+        renderedLayers.current = sceneLayers(c.getObjects() as Item[], p);
       }
+      // Read detail viewport geometry before writing any SVG layer DOM.
       updateDetailPreview.current();
+      if (flowBase) {
+        setSvgContent(backLayer.current, renderedLayers.current.background);
+        setSvgContent(frontLayer.current, renderedLayers.current.foreground);
+      }
       if (flowBase) {
         if (toolRef.current !== "select") {
           c.upperCanvasEl.style.clipPath = "";
@@ -1155,11 +1127,12 @@ export default function FreeStudio({
           paths: string[] = [];
         const rectangle = (x: number, y: number, w: number, h: number) =>
           paths.push(`M${x * z} ${y * z}h${w * z}v${h * z}h${-w * z}Z`);
+        const active = new Set(c.getActiveObjects());
         c.getObjects()
           .filter((o) => o.visible)
           .forEach((item) => {
             const r = item.getBoundingRect(),
-              pad = c.getActiveObjects().includes(item) ? 42 : 4;
+              pad = active.has(item) ? 42 : 4;
             if ((item as Item).plane === "background") {
               rectangle(r.left - pad, r.top - pad, r.width + pad * 2, pad + 5);
               rectangle(
@@ -1221,8 +1194,9 @@ export default function FreeStudio({
         r = target.getBoundingRect();
       const xs = [0, 42, p.width / 2, p.width - 42, p.width],
         ys = [0, 31, p.height / 2, p.height - 31, p.height];
+      const active = new Set(c.getActiveObjects());
       c.getObjects()
-        .filter((o) => o !== target && !c.getActiveObjects().includes(o))
+        .filter((o) => o !== target && !active.has(o))
         .forEach((o) => {
           const b = o.getBoundingRect();
           xs.push(b.left, b.left + b.width / 2, b.left + b.width);
@@ -2209,7 +2183,10 @@ export default function FreeStudio({
                 <details
                   className="free-detail-preview"
                   open
-                  onToggle={() => updateDetailPreview.current()}
+                  onToggle={() => {
+                    scene.current?.requestRenderAll();
+                    updateDetailPreview.current();
+                  }}
                 >
                   <summary>
                     局部预览 <span>2× · 无选框</span>

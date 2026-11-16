@@ -1,4 +1,5 @@
 import { FabricObject, StaticCanvas, Group } from "fabric";
+import { boundedAsyncCache } from "./boundedCache";
 import type { FreePage } from "./freeform";
 
 // Shared by the editor, normal preview and export. Custom fields must round-trip together.
@@ -19,8 +20,11 @@ FabricObject.customProperties = [
   "interactive",
 ];
 
-const svgCache = new Map<string, Promise<string>>();
-let cachedBytes = 0;
+const cachedSvg = boundedAsyncCache<string>(
+  30,
+  16_000_000,
+  (svg) => svg.length * 2,
+);
 export function sceneSvg(page: FreePage, plane?: "background" | "foreground") {
   const objects = plane
     ? page.canvas.objects.filter(
@@ -35,9 +39,7 @@ export function sceneSvg(page: FreePage, plane?: "background" | "foreground") {
     plane ? "" : page.background,
     objects,
   ]);
-  const existing = svgCache.get(key);
-  if (existing) return existing;
-  const promise = (async () => {
+  return cachedSvg(key, async () => {
     const canvas = new StaticCanvas(undefined, {
       width: page.width,
       height: page.height,
@@ -65,18 +67,5 @@ export function sceneSvg(page: FreePage, plane?: "background" | "foreground") {
     } finally {
       await canvas.dispose();
     }
-  })();
-  if (key.length < 8_000_000) {
-    svgCache.set(key, promise);
-    cachedBytes += key.length;
-    while (svgCache.size > 30 || cachedBytes > 16_000_000) {
-      const oldest = svgCache.keys().next().value!;
-      cachedBytes -= oldest.length;
-      svgCache.delete(oldest);
-    }
-    promise.catch(() => {
-      if (svgCache.delete(key)) cachedBytes -= key.length;
-    });
-  }
-  return promise;
+  });
 }

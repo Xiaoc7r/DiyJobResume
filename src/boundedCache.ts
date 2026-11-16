@@ -32,3 +32,54 @@ export function boundedCache<T>(limit = 1024, maxBytes = 2_000_000) {
     },
   };
 }
+
+// Includes pending keys and completed values. Evicted tasks may finish, but must
+// never put themselves back into the cache or remove a newer request's entry.
+export function boundedAsyncCache<T>(
+  limit: number,
+  maxBytes: number,
+  size: (value: T) => number,
+) {
+  const entries = new Map<string, { promise: Promise<T>; bytes: number }>();
+  let bytes = 0;
+  const remove = (key: string) => {
+    const entry = entries.get(key);
+    if (entry) {
+      bytes -= entry.bytes;
+      entries.delete(key);
+    }
+  };
+  const trim = () => {
+    while (entries.size > limit || bytes > maxBytes)
+      remove(entries.keys().next().value!);
+  };
+  return (key: string, create: () => Promise<T>): Promise<T> => {
+    const hit = entries.get(key);
+    if (hit) {
+      entries.delete(key);
+      entries.set(key, hit);
+      return hit.promise;
+    }
+    const promise = Promise.resolve().then(create),
+      entry = { promise, bytes: key.length * 2 };
+    if (entry.bytes <= maxBytes) {
+      entries.set(key, entry);
+      bytes += entry.bytes;
+      trim();
+      void promise.then(
+        (value) => {
+          if (entries.get(key) !== entry) return;
+          const extra = size(value);
+          entry.bytes += extra;
+          bytes += extra;
+          if (entry.bytes > maxBytes) remove(key);
+          trim();
+        },
+        () => {
+          if (entries.get(key) === entry) remove(key);
+        },
+      );
+    }
+    return promise;
+  };
+}
