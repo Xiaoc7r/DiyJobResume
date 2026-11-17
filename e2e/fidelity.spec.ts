@@ -540,6 +540,9 @@ test("typing directly in the original paper edits the same source in every mode"
   page,
 }) => {
   await page.getByRole("tab", { name: "自由模式", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "插入邮箱图标", exact: true }),
+  ).toBeEnabled();
   await page.locator(".free-source-paper .row-name").fill("原稿直接编辑");
   await page.getByRole("tab", { name: "Markdown", exact: true }).click();
   expect(

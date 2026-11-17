@@ -4,8 +4,13 @@ test("zoom and grid changes reuse the canvas model and vector DOM; QQ is a pengu
   page,
 }) => {
   await page.goto("/");
+  await page.evaluate(() => document.fonts.ready);
   await page.getByRole("tab", { name: "自由模式", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "插入QQ图标", exact: true }),
+  ).toBeEnabled();
   await expect(page.locator(".free-front-scene svg image")).toHaveCount(3);
+  await expect(page.getByRole("status").first()).toContainText("已保存");
   const names = await page
     .locator(".free-icons button")
     .evaluateAll((nodes) => nodes.map((el) => el.getAttribute("aria-label")));
