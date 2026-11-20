@@ -5,9 +5,20 @@ import {
   ArrowLeft,
   ArrowRight,
   Check,
+  Table2,
+  Circle,
+  Triangle,
+  Mail,
+  Phone,
+  Github,
+  Link,
+  LockKeyhole,
+  Eye,
+  Palette,
+  BriefcaseBusiness,
+  Award,
   Code2,
   GraduationCap,
-  Grip,
   ImagePlus,
   MousePointer2,
   Pencil,
@@ -20,18 +31,20 @@ import {
   X,
 } from "lucide-react";
 import { applyTemplate, initialResume, templates, toMarkdown } from "./flow";
-import { lineHtml, rowStyle } from "./render";
+import { lineHtml } from "./render";
 import "./product-tour.css";
+import { TourResume } from "./TourResume";
+import { QQIcon, GiteeIcon } from "./BrandIcons";
 
 const steps = [
   {
     title: "两种写法，同一份简历",
-    text: "简单编辑直接写，Markdown 整篇改；切换时内容同步。也可以直接点纸上的文字修改。",
-    detail: "工具栏：统一调整间距与字号，上传证件照、校徽。",
+    text: "· 简单编辑直观且清晰，适合小白直接修改简历内容本身，",
+    detail: "· Markdown灵活且自由，适合从底层直接修改简历内容格式。",
   },
   {
     title: "自由摆放，不受版式限制",
-    text: "添加图片、图标与图形，在画布元素里定位、锁定和管理。",
+    text: "简历所有元素可在画布内自由管理，允许额外添加任意元素。",
     detail: "右侧可自定义纸张高度，让更长的内容留在同一页。",
   },
   {
@@ -61,16 +74,9 @@ export function ProductTour({
   const paperArea = useRef<HTMLDivElement>(null);
   const dialog = useRef<HTMLDivElement>(null),
     close = useRef<HTMLButtonElement>(null);
-  const sample = useMemo(() => {
-    const doc = initialResume();
-    return {
-      ...doc,
-      lines: doc.lines.filter(
-        (line) => line.kind !== "blank" && line.text.trim(),
-      ),
-    };
-  }, []);
-  const selected = templates[(step === 2 ? tick : 0) % 6];
+  const sample = useMemo(() => initialResume(), []);
+  const choices = templates.filter((t) => t.id !== "blank");
+  const selected = choices[(step === 2 ? tick : 0) % choices.length];
   const resume = useMemo(
     () => applyTemplate(sample, selected.id),
     [sample, selected.id],
@@ -119,7 +125,7 @@ export function ProductTour({
     const schedule = () => {
       clearInterval(timer);
       if (!document.hidden && !reduced.matches)
-        timer = setInterval(() => setTick((n) => n + 1), 2600);
+        timer = setInterval(() => setTick((n) => n + 1), 1400);
     };
     schedule();
     document.addEventListener("visibilitychange", schedule);
@@ -134,14 +140,17 @@ export function ProductTour({
   const free = step === 1,
     maker = step === 3,
     md = step === 0 && tick % 2 === 1;
+  const phase = tick % 4;
+  const demoObjects = sample.freeform!.pages[0].canvas.objects;
   return createPortal(
     <div
-      className={`product-tour ${dark ? "tour-dark" : ""}`}
+      className={`product-tour tour-immersive ${dark ? "tour-dark" : ""}`}
       ref={dialog}
       role="dialog"
       aria-modal="true"
       aria-label="四步使用指引"
       data-step={step + 1}
+      data-phase={phase}
       onClick={advance}
       onKeyDown={(e) => {
         e.stopPropagation();
@@ -217,8 +226,27 @@ export function ProductTour({
               <div className="tour-panel-body" key={tick % 2}>
                 {tick % 2 === 0 ? (
                   <>
-                    <h3>添加元素</h3>
-                    <div className="tour-tools-grid">
+                    <h3>文字与板块</h3>
+                    <div className="tour-tools-grid tour-free-tools">
+                      <span>
+                        <Pencil />
+                        文字
+                      </span>
+                      <span className="tour-table-tool">
+                        <Table2 />
+                        表格
+                      </span>
+                      <span>
+                        <BriefcaseBusiness />
+                        经历板块
+                      </span>
+                      <span>
+                        <Square />
+                        双栏板块
+                      </span>
+                    </div>
+                    <h3>图片与图形</h3>
+                    <div className="tour-tools-grid tour-free-tools">
                       <span className="tour-upload">
                         <ImagePlus />
                         上传图片
@@ -228,25 +256,82 @@ export function ProductTour({
                         矩形
                       </span>
                       <span>
-                        <Pencil />
-                        画笔
+                        <Circle />
+                        圆形
                       </span>
                       <span>
-                        <Plus />
-                        图标
+                        <Triangle />
+                        三角形
                       </span>
+                    </div>
+                    <h3>常用图标</h3>
+                    <div className="tour-demo-icons">
+                      {[
+                        Mail,
+                        Phone,
+                        Github,
+                        GraduationCap,
+                        BriefcaseBusiness,
+                        Award,
+                        Link,
+                        QQIcon,
+                        GiteeIcon,
+                      ].map((Icon, i) => (
+                        <span key={i}>
+                          <Icon size={23} />
+                        </span>
+                      ))}
+                    </div>
+                    <div className="tour-table-demo">
+                      <span>技能</span>
+                      <span>熟悉程度</span>
+                      <span>Java</span>
+                      <span>熟练</span>
                     </div>
                   </>
                 ) : (
                   <>
                     <h3>当前页元素</h3>
-                    {["校徽", "公司图标", "项目图标"].map((s) => (
-                      <div className="tour-object" key={s}>
-                        <Grip size={16} />
-                        {s}
-                        <Check size={14} />
+                    {demoObjects.map((object, i) => (
+                      <div
+                        className={`tour-object ${i === phase ? "active" : ""}`}
+                        key={String(object.id)}
+                      >
+                        {object.type === "Image" ? (
+                          <img src={String(object.src)} alt="" />
+                        ) : object.type === "Group" ? (
+                          <Link size={18} />
+                        ) : (
+                          <Square size={18} />
+                        )}
+                        <span>
+                          {object.type === "Image"
+                            ? i === 0
+                              ? "视频.png"
+                              : "京东.png"
+                            : object.type === "Group"
+                              ? "链接"
+                              : "标题色带"}
+                        </span>
+                        <Eye size={15} />
+                        <LockKeyhole size={15} />
                       </div>
                     ))}
+                    <div className="tour-selected-detail">
+                      <h4>当前画布元素</h4>
+                      <div className="tour-icon-samples">
+                        {demoObjects
+                          .filter((o) => o.type === "Image")
+                          .map((o) => (
+                            <img
+                              key={String(o.id)}
+                              src={String(o.src)}
+                              alt=""
+                            />
+                          ))}
+                      </div>
+                      <span>定位 · 移动 · 锁定</span>
+                    </div>
                   </>
                 )}
               </div>
@@ -261,7 +346,7 @@ export function ProductTour({
                   <span className="tour-line-icon" />,
                   <ImagePlus />,
                 ].map((icon, i) => (
-                  <span key={i} className={tick % 4 === i ? "active" : ""}>
+                  <span key={i} className={phase === i ? "active" : ""}>
                     {icon}
                     {["画笔", "矩形", "直线", "上传图片"][i]}
                   </span>
@@ -308,33 +393,30 @@ export function ProductTour({
                   <Undo2 />
                   <Redo2 />
                   <i />
-                  <span>✓ 吸附</span>
-                  <span>✓ 网格</span>
+                  <span>
+                    <Check size={14} />
+                    吸附
+                  </span>
+                  <span>
+                    <Check size={14} />
+                    网格
+                  </span>
                 </>
               ) : (
                 <>
-                  <span
-                    data-tip="间距与字号"
-                    className={tick % 3 === 0 ? "tour-tool-mark" : ""}
-                  >
-                    <SlidersHorizontal size={18} />
+                  <span data-tip="间距与字号" className="tour-tool-mark">
+                    <SlidersHorizontal size={25} />
                   </span>
                   <b className="tour-swatch" />
                   <i />
                   <Undo2 />
                   <Redo2 />
                   <i />
-                  <span
-                    data-tip="上传证件照"
-                    className={tick % 3 === 1 ? "tour-tool-mark" : ""}
-                  >
-                    <ImagePlus size={18} />
+                  <span data-tip="上传证件照" className="tour-tool-mark">
+                    <ImagePlus size={25} />
                   </span>
-                  <span
-                    data-tip="上传校徽"
-                    className={tick % 3 === 2 ? "tour-tool-mark" : ""}
-                  >
-                    <GraduationCap size={20} />
+                  <span data-tip="上传校徽" className="tour-tool-mark">
+                    <GraduationCap size={27} />
                   </span>
                   <Code2 />
                   <span>上下 30</span>
@@ -342,6 +424,12 @@ export function ProductTour({
                 </>
               )}
             </div>
+            {step === 0 && (
+              <div className="tour-sync-note">
+                <Check size={16} />
+                内容同步，允许直接点简历进行文字修改
+              </div>
+            )}
           </div>
           <div
             ref={paperArea}
@@ -349,15 +437,30 @@ export function ProductTour({
           >
             {maker ? (
               <div className="tour-maker-sheet">
-                <div className="tour-maker-header">
-                  <strong>姓名</strong>
+                <div
+                  className={`tour-maker-header tour-maker-phase-${phase}`}
+                  style={{ height: phase > 0 ? 88 : 80 }}
+                >
+                  <strong>{phase > 0 ? "示例姓名" : "姓名"}</strong>
                   <small>手机 · 邮箱 · 个人主页</small>
                 </div>
-                {headings.map((h) => (
+                {headings.map((h, index) => (
                   <div className="tour-maker-section" key={h}>
-                    <div className={`tour-maker-zone tour-art-${tick % 3}`}>
+                    <div
+                      className={`tour-maker-zone tour-art-${Math.min(phase, 2)}`}
+                    >
                       <strong>{h}</strong>
                       <span />
+                      <i className="tour-maker-emblem">
+                        {
+                          [
+                            <GraduationCap size={18} />,
+                            <BriefcaseBusiness size={18} />,
+                            <Code2 size={18} />,
+                            <Award size={18} />,
+                          ][index]
+                        }
+                      </i>
                     </div>
                     <div className="tour-placeholder">
                       <i />
@@ -374,33 +477,14 @@ export function ProductTour({
                 </div>
               </div>
             ) : (
-              <div
-                className={`tour-paper resume-paper template-${selected.id} ${free ? "tour-grid" : ""}`}
-                style={
-                  {
-                    zoom: paperScale,
-                    "--accent": resume.settings.accent,
-                    "--ink": resume.settings.color,
-                  } as CSSProperties
-                }
-              >
-                {resume.lines.slice(0, free ? 28 : 24).map((line, i) => (
-                  <div
-                    key={line.id}
-                    className={`flow-row row-${line.kind} ${i === 1 ? "row-contact" : ""}`}
-                    style={rowStyle(line, resume.settings)}
-                    dangerouslySetInnerHTML={{ __html: lineHtml(line) }}
-                  />
-                ))}
-                {free && (
-                  <span
-                    className="tour-floating-icon"
-                    style={{ left: `${7 + (tick % 2) * 5}%` }}
-                  >
-                    <ImagePlus size={22} />
-                  </span>
-                )}
-              </div>
+              <TourResume
+                doc={resume}
+                scale={Math.min(paperScale, 0.76)}
+                grid={free}
+                editing={step === 0}
+                height={free && tick % 2 ? 1360 : undefined}
+                changed={step === 2 ? selected.name : undefined}
+              />
             )}
           </div>
         </main>
@@ -422,9 +506,15 @@ export function ProductTour({
                 </label>
               </div>
               <div
-                className="tour-page-outline"
-                style={{ height: tick % 2 ? 172 : 144 }}
-              />
+                className={`tour-page-outline ${tick % 2 ? "is-tall" : ""}`}
+                style={{ height: tick % 2 ? 240 : 160 }}
+              >
+                <span>{tick % 2 ? "1360 px" : "1165 px"}</span>
+                <strong>1 页</strong>
+              </div>
+              <div className="tour-size-difference">
+                {tick % 2 ? "拉长纸张，容纳更多内容" : "保持宽度，调整高度"}
+              </div>
               <h4>页面操作</h4>
               <p>
                 <Plus size={16} /> 新增页面
@@ -432,20 +522,25 @@ export function ProductTour({
             </div>
           ) : maker ? (
             <div className="tour-panel-body">
-              <div
-                className={`tour-demo-save ${tick % 3 === 2 ? "active" : ""}`}
-              >
+              <div className={`tour-demo-save ${phase === 3 ? "active" : ""}`}>
                 <Save size={16} />
-                {tick % 3 === 2 ? "已保存到整套模板" : "保存模板"}
+                {phase === 3 ? "已保存到整套模板" : "保存模板"}
               </div>
               <h4>区域与文字</h4>
               {["个人信息高度", "板块标题高度", "姓名字号", "板块标题字号"].map(
                 (s, i) => (
                   <div className="tour-setting" key={s}>
                     {s}
-                    <b>{[84, 30, 24, 16][i]}</b>
+                    <b>{[phase > 0 ? 88 : 80, 29, 24, 17][i]}</b>
                   </div>
                 ),
+              )}
+              {phase === 3 && (
+                <div className="tour-saved-template">
+                  <Palette size={20} />
+                  <strong>我的模板</strong>
+                  <span>已加入整套模板</span>
+                </div>
               )}
             </div>
           ) : (
@@ -458,23 +553,30 @@ export function ProductTour({
                 <div
                   className="tour-template-track"
                   style={{
-                    transform: `translateY(-${step === 2 ? Math.max(0, (tick % 6) - 1) * 124 : 0}px)`,
+                    transform: `translateY(-${step === 2 ? Math.max(0, (tick % choices.length) - 1) * 124 : 0}px)`,
                   }}
                 >
-                  {templates.slice(0, 6).map((t) => (
+                  {choices.map((t) => (
                     <div
                       className={`tour-template ${selected.id === t.id ? "active" : ""}`}
                       key={t.id}
                     >
                       <div
-                        className={`tour-mini-page template-${t.id}`}
-                        style={{ "--accent": t.color } as CSSProperties}
+                        className={`tour-mini-page template-${t.id} mini-${t.id}`}
+                        style={
+                          {
+                            "--accent": t.color,
+                            "--mini-accent": t.color,
+                          } as CSSProperties
+                        }
                       >
                         <b>炒肉多</b>
                         {headings.slice(0, 3).map((h) => (
                           <div key={h}>
                             <strong className="row-section">
-                              <span className="ink">{h}</span>
+                              <span className="ink" data-title={h}>
+                                {h}
+                              </span>
                             </strong>
                             <i />
                             <i />

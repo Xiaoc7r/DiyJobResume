@@ -801,3 +801,484 @@
   height: 1em;
   background: #b87559;
 }
+
+/* One uninterrupted stage; copy floats over a quiet lower edge of the demonstration. */
+.tour-immersive {
+  padding: 0 18px 18px;
+}
+.tour-immersive .tour-heading {
+  min-height: 48px;
+}
+.tour-immersive .tour-scene {
+  position: relative;
+  border-radius: 14px;
+}
+.tour-immersive .tour-scene::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 225px;
+  z-index: 6;
+  background: linear-gradient(transparent, #fbfaf8ef 36%, #fbfaf8 85%);
+  pointer-events: none;
+}
+.tour-immersive.tour-dark .tour-scene::after {
+  background: linear-gradient(transparent, #292824ef 36%, #292824 85%);
+}
+.tour-immersive .tour-caption {
+  display: contents;
+}
+.tour-immersive .tour-copy {
+  position: absolute;
+  left: 48px;
+  bottom: 65px;
+  z-index: 7;
+  max-width: min(690px, calc(100% - 350px));
+  color: var(--tour-text);
+  opacity: 0.92;
+  pointer-events: auto;
+}
+.tour-immersive .tour-copy h2 {
+  font-size: 25px;
+  margin-bottom: 10px;
+}
+.tour-immersive .tour-copy p {
+  font-size: 13px;
+  line-height: 1.9;
+  max-width: none;
+}
+.tour-immersive .tour-copy .tour-detail {
+  color: inherit;
+  font-size: 13px;
+  margin-top: 4px;
+}
+.tour-immersive .tour-navigation {
+  position: absolute;
+  right: 48px;
+  bottom: 70px;
+  z-index: 8;
+}
+.tour-immersive .tour-click-hint {
+  position: absolute;
+  bottom: 38px;
+  right: 48px;
+  z-index: 8;
+  font-size: 11px;
+}
+.tour-immersive .tour-paper {
+  min-height: 0;
+  box-shadow: 0 6px 20px #302e2b12;
+}
+.tour-immersive .tour-paper .row-bullet {
+  padding-left: 16px;
+}
+.tour-immersive .tour-paper .row-bullet::before {
+  display: block;
+  content: "•";
+  width: auto;
+  height: auto;
+  top: inherit;
+  background: none;
+}
+.tour-immersive .tour-paper .row-text {
+  margin-bottom: 0;
+}
+.tour-immersive .tour-original-picture {
+  position: absolute;
+  z-index: 2;
+  object-fit: contain;
+}
+.tour-immersive .tour-paper-editing .row-name::after {
+  top: 2px;
+}
+.tour-immersive .tour-paper:not(.tour-paper-editing) .row-name::after {
+  display: none;
+}
+.tour-immersive .tour-scene-0 .tour-toolbar {
+  min-height: 168px;
+}
+.tour-immersive .tour-tool-mark {
+  width: 42px;
+  height: 42px;
+  background: #f1dfd3;
+  color: #985235;
+  outline: 0;
+  border-radius: 10px;
+}
+.tour-immersive .tour-tool-mark::after {
+  font-size: 11px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0;
+  margin-top: 5px;
+  color: var(--tour-text);
+}
+.tour-immersive .tour-sync-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 27px;
+  color: var(--tour-text);
+  font-size: 12px;
+}
+.tour-immersive .tour-sync-note svg {
+  color: #62826b;
+  flex: none;
+}
+.tour-immersive .tour-left {
+  box-shadow: inset -1px 0 #b8755930;
+}
+.tour-immersive .tour-simple {
+  line-height: 1.8;
+}
+.tour-immersive .tour-free-tools {
+  gap: 7px;
+  margin-bottom: 18px;
+}
+.tour-immersive .tour-free-tools > span {
+  min-height: 51px;
+  flex-direction: row;
+  gap: 8px;
+  border: 1px solid var(--tour-line);
+  background: transparent;
+}
+.tour-immersive .tour-free-tools > span:has(svg.lucide-table-2) {
+  color: #a26044;
+  background: #b875591c;
+}
+.tour-immersive .tour-panel-body h3 {
+  margin-bottom: 13px;
+}
+.tour-demo-icons {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  padding: 6px 0 20px;
+}
+.tour-demo-icons > span {
+  display: grid;
+  place-items: center;
+  min-height: 30px;
+}
+.tour-table-demo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-top: 1px solid var(--tour-line);
+  border-left: 1px solid var(--tour-line);
+  margin-top: 6px;
+}
+.tour-table-demo > span {
+  padding: 9px;
+  font-size: 11px;
+  border-bottom: 1px solid var(--tour-line);
+  border-right: 1px solid var(--tour-line);
+}
+.tour-table-demo > span:nth-child(-n + 2) {
+  background: #b875591c;
+  font-weight: 600;
+}
+.tour-immersive .tour-object {
+  gap: 9px;
+  padding: 12px 8px;
+  margin-bottom: 4px;
+  border: 0;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.tour-immersive .tour-object.active {
+  background: #b8755922;
+}
+.tour-immersive .tour-object > img {
+  width: 21px;
+  height: 21px;
+  object-fit: contain;
+}
+.tour-immersive .tour-object > span {
+  flex: 1;
+}
+.tour-immersive .tour-object svg:last-child {
+  margin: 0;
+}
+.tour-immersive .tour-object > svg {
+  flex: none;
+}
+.tour-selected-detail {
+  margin-top: 25px;
+  border-top: 1px solid var(--tour-line);
+  padding-top: 20px;
+}
+.tour-icon-samples {
+  display: flex;
+  gap: 22px;
+  margin-bottom: 14px;
+}
+.tour-icon-samples > img {
+  width: 38px;
+  height: 38px;
+  object-fit: contain;
+}
+.tour-selected-detail > span {
+  font-size: 11px;
+  color: var(--tour-muted);
+}
+.tour-immersive .tour-dimensions .tour-number-change {
+  font-size: 23px;
+  font-weight: 600;
+  background: #b8755912;
+  padding: 10px 7px;
+}
+.tour-immersive .tour-dimensions strong {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+}
+.tour-immersive .tour-page-outline {
+  position: relative;
+  width: 135px;
+  border-width: 2px;
+  border-radius: 2px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 18px 10px;
+  background: linear-gradient(#fff0 80%, #b8755918);
+  transition: height 500ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.tour-page-outline > span {
+  align-self: center;
+  font-size: 14px;
+  color: #a26044;
+}
+.tour-page-outline > strong {
+  font-size: 12px;
+  font-weight: 500;
+  text-align: center;
+  color: var(--tour-muted);
+}
+.tour-size-difference {
+  text-align: center;
+  margin: -6px 0 24px;
+  font-size: 12px;
+  color: var(--tour-text);
+}
+.tour-immersive .tour-style-change {
+  position: absolute;
+  top: 83px;
+  right: 42px;
+  z-index: 5;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: var(--accent);
+  color: white;
+  font-size: 11px;
+  animation: tour-change-reveal 650ms ease-out;
+}
+@keyframes tour-change-reveal {
+  from {
+    opacity: 0.1;
+    transform: translateX(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.tour-immersive .tour-template-track {
+  transition-duration: 450ms;
+}
+.tour-immersive .tour-template.active {
+  background: #b8755928;
+  box-shadow: inset 3px 0 #b87559;
+}
+.tour-immersive .tour-maker-sheet {
+  min-height: 850px;
+  padding-top: 28px;
+}
+.tour-immersive .tour-maker-header {
+  transition: background-color 500ms ease;
+  align-content: center;
+}
+.tour-maker-phase-1 {
+  border-bottom: 3px solid #b87559;
+}
+.tour-maker-phase-2,
+.tour-maker-phase-3 {
+  background: #f8ece1;
+  border-bottom: 3px solid #b87559;
+}
+.tour-immersive .tour-maker-section {
+  margin-top: 24px;
+}
+.tour-immersive .tour-maker-zone {
+  height: 29px;
+  padding-block: 4px;
+  transition: background-color 450ms ease;
+}
+.tour-immersive .tour-art-2 {
+  background: #f8ece1;
+  padding-left: 34px;
+}
+.tour-immersive .tour-art-2 span {
+  height: 2px;
+  background: #b87559;
+}
+.tour-maker-emblem {
+  display: none;
+  position: absolute;
+  top: 5px;
+  left: 8px;
+  color: #9c5d40;
+}
+.tour-art-2 .tour-maker-emblem {
+  display: block;
+}
+.tour-saved-template {
+  display: grid;
+  gap: 10px;
+  align-items: center;
+  grid-template-columns: auto 1fr;
+  background: #b8755914;
+  padding: 16px;
+  border-radius: 8px;
+  margin-top: 24px;
+  animation: tour-reveal 300ms ease-out;
+}
+.tour-saved-template span {
+  grid-column: 1/-1;
+  font-size: 11px;
+  color: var(--tour-muted);
+}
+@media (max-width: 1050px) {
+  .tour-immersive .tour-copy {
+    left: 36px;
+    max-width: calc(100% - 300px);
+  }
+  .tour-immersive .tour-copy h2 {
+    font-size: 22px;
+  }
+  .tour-immersive .tour-navigation,
+  .tour-immersive .tour-click-hint {
+    right: 36px;
+  }
+  .tour-immersive .tour-tool-row {
+    gap: 9px;
+  }
+  .tour-immersive .tour-tool-row > svg,
+  .tour-immersive .tour-tool-row > b,
+  .tour-immersive .tour-tool-row > i {
+    display: none;
+  }
+}
+@media (max-width: 700px) {
+  .tour-immersive {
+    padding: 0 8px 8px;
+  }
+  .tour-immersive .tour-heading {
+    min-height: 42px;
+  }
+  .tour-immersive .tour-copy {
+    bottom: 109px;
+    left: 25px;
+    right: 25px;
+    max-width: none;
+  }
+  .tour-immersive .tour-copy h2 {
+    font-size: 20px;
+  }
+  .tour-immersive .tour-copy p,
+  .tour-immersive .tour-copy .tour-detail {
+    font-size: 11px;
+    line-height: 1.7;
+  }
+  .tour-immersive .tour-navigation {
+    bottom: 43px;
+    left: 25px;
+    right: 25px;
+    margin: 0;
+  }
+  .tour-immersive .tour-click-hint {
+    bottom: 18px;
+    right: 25px;
+    font-size: 10px;
+  }
+  .tour-immersive .tour-scene::after {
+    height: 280px;
+    background: linear-gradient(transparent, #fbfaf8f7 24%, #fbfaf8 60%);
+  }
+  .tour-immersive.tour-dark .tour-scene::after {
+    background: linear-gradient(transparent, #292824f7 24%, #292824 60%);
+  }
+  .tour-immersive .tour-tool-row {
+    justify-content: space-between;
+    gap: 5px;
+  }
+  .tour-immersive .tour-tool-row > svg,
+  .tour-immersive .tour-tool-row > i,
+  .tour-immersive .tour-tool-row > b,
+  .tour-immersive .tour-tool-row > span:not(.tour-tool-mark) {
+    display: none;
+  }
+  .tour-immersive .tour-tool-mark {
+    display: inline-flex;
+    width: 36px;
+    height: 36px;
+  }
+  .tour-immersive .tour-tool-mark::after {
+    font-size: 8px;
+  }
+  .tour-immersive .tour-sync-note {
+    font-size: 9px;
+    line-height: 1.6;
+  }
+  .tour-immersive .tour-free-tools > span {
+    font-size: 10px;
+    gap: 4px;
+  }
+  .tour-immersive .tour-dimensions .tour-number-change {
+    font-size: 17px;
+  }
+  .tour-immersive .tour-page-outline {
+    width: 100px;
+  }
+  .tour-immersive .tour-size-difference {
+    font-size: 10px;
+  }
+  .tour-immersive .tour-maker-sheet {
+    padding: 18px 8%;
+  }
+  .tour-immersive .tour-maker-section {
+    margin-top: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tour-immersive *,
+  .tour-immersive *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+.tour-immersive .tour-maker-phase-3 {
+  background: #86583f;
+  color: white;
+  border-bottom-color: #86583f;
+}
+.tour-immersive .tour-copy {
+  color: var(--tour-text);
+}
+
+.tour-mini-page.mini-purplebar > b {
+  background: var(--accent);
+  color: white;
+  padding-block: 3px;
+  margin-inline: -7px;
+}
+
+.tour-paper .free-layer-svg {
+  height: var(--tour-art-height);
+  bottom: auto;
+}
+.tour-immersive .tour-free-tools > .tour-table-tool {
+  background: #b8755922;
+  color: #985235;
+}
