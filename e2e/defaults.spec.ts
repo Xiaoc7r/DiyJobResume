@@ -7,6 +7,9 @@ const names = [
   "红序 · 系统架构",
   "青岚 · 工程实践",
   "紫图 · 研发履历",
+  "黑调",
+  "复试",
+  "紫横",
 ];
 const geometry = async (page: import("@playwright/test").Page) =>
   page.locator(".resume-paper").evaluateAll((papers) =>
@@ -35,7 +38,7 @@ const saved = async (page: import("@playwright/test").Page) => {
   });
 };
 
-test("the QAQ example keeps its extended paper and six elements through all six templates and modes", async ({
+test("the QAQ example keeps its extended paper and six elements through all nine templates and modes", async ({
   page,
 }) => {
   await page.goto("/");
