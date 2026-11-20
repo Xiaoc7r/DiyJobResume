@@ -81,6 +81,7 @@ import "./template-maker.css";
 import { PreviewZoom } from "./PreviewZoom";
 import { ImageUploadDialog } from "./ImageUploadDialog";
 import { FreeLoading } from "./FreeLoading";
+import { useHelpBeacon } from "./useHelpBeacon";
 
 import {
   blankResume,
@@ -112,6 +113,9 @@ import {
   selectedRows,
   outsideSelection,
 } from "./editorDom";
+const ProductTour = lazy(() =>
+  import("./ProductTour").then((module) => ({ default: module.ProductTour })),
+);
 const FreeStudio = lazy(() => import("./FreeStudio"));
 const TemplateMaker = lazy(() =>
   import("./TemplateMaker").then((module) => ({
@@ -416,6 +420,8 @@ function Editable({
   );
 }
 export default function Studio() {
+  const [tourOpen, setTourOpen] = useState(false);
+  const helpBeacon = useHelpBeacon();
   const [boot] = useState(loadLibrary),
     [docs, setDocs] = useState(boot.library.items),
     [activeId, setActiveId] = useState(boot.library.activeId);
@@ -451,7 +457,7 @@ export default function Studio() {
     [autoZoom, setAutoZoom] = useState(
       () => readViewPrefs().autoZoom ?? readViewPrefs().zoom === undefined,
     ),
-    [modal, setModal] = useState<"type" | "help" | null>(null),
+    [modal, setModal] = useState<"type" | null>(null),
     [fileMenu, setFileMenu] = useState(false),
     [docMenu, setDocMenu] = useState(false),
     [confirmDelete, setConfirmDelete] = useState(false),
@@ -2361,10 +2367,13 @@ export default function Studio() {
             <Sparkles size={18} />
           </button>
           <button
-            className="icon-button"
+            className={`icon-button help-beacon ${helpBeacon.unseen ? "is-unseen" : ""}`}
             title="使用帮助"
             aria-label="使用帮助"
-            onClick={() => setModal("help")}
+            onClick={() => {
+              helpBeacon.acknowledge();
+              setTourOpen(true);
+            }}
           >
             <HelpCircle size={18} />
           </button>
@@ -3361,6 +3370,11 @@ export default function Studio() {
           }}
         />
       )}
+      {tourOpen && (
+        <Suspense fallback={null}>
+          <ProductTour dark={dark} onClose={() => setTourOpen(false)} />
+        </Suspense>
+      )}
       {modal && (
         <div
           className={`modal-backdrop ${modal === "type" ? "type-backdrop" : ""}`}
@@ -3483,115 +3497,7 @@ export default function Studio() {
                   完成调整
                 </button>
               </>
-            ) : (
-              <div className="help-body">
-                <p>
-                  <b>1. 界面分三栏：</b>左边写内容，中间看效果，右边调样式。
-                  顶栏的「编辑区」「简历样式」「AI
-                  排版」控制这三栏：点一下收起，再点展开；
-                  两栏之间的竖线可以左右拖动改宽度。右边「简历样式」和「AI
-                  排版」是互斥的， 打开一个会自动关掉另一个。
-                </p>
-                <p>
-                  <b>2. 多份简历：</b>顶栏简历名称右边的 <b>▾</b>{" "}
-                  打开「我的简历」：新建空白、
-                  复制当前这份、删除当前这份（会问一次，且至少保留一份）。
-                  每份简历的撤销记录和 AI
-                  对话各自独立；以前只存过一份的草稿会自动收进列表。
-                </p>
-                <p>
-                  <b>3. 写内容（左栏）：</b>
-                  默认「直接编辑」，点任意一行就能改；选中文字会浮出格式工具（加粗、斜体、
-                  下划线、标签、链接）。<code>Enter</code> 新增下一段，
-                  <code>
-                    Shift+Enter
-                  </code> 行内换行。鼠标移到某行，左边会出现 <b>+</b>，
-                  从模块库插入板块或条目；在文字上长按约 0.4 秒可以拖动排序
-                  （拖板块标题会带着整段内容走）。 需要大段替换时，切到 Markdown
-                  看/改整篇源码。
-                </p>
-                <p>
-                  <b>4. 点哪跳哪：</b>
-                  在左栏点某一行，中间纸张会滚到对应位置并闪一下；反过来点纸上某一行，
-                  左边也会跳到那一行并高亮。Markdown 模式下同样有效。
-                </p>
-                <p>
-                  <b>5. 调样式（右栏）：</b>
-                  六套模板（炒肉多经典、黑线、标签式、学术、青岚、红序）点一下即换，内容不受影响。
-                  「拼接内容」把选好的板块或经历模板插到当前行后面。
-                  「间距与字号」能按内容类型分别调上下间距和字号，也能改行距和四边页边距；
-                  底部还可以写自定义 CSS。
-                </p>
-                <p>
-                  <b>6. 预览区（中间）：</b>
-                  纸张就是
-                  A4（794×1123px），缩放只改显示大小、不改变排版，所以预览和导出
-                  PDF 一致。 内容变多会自动续页，单条太长会切到下一页继续。
-                  工具栏的图片按钮可以上传照片或校徽，拖到合适位置，右下角拉大小。
-                </p>
-                <p>
-                  <b>7. 撤销与保存：</b>
-                  顶栏 <b>↶ ↷</b> 或 <code>Ctrl+Z</code> /{" "}
-                  <code>Ctrl+Shift+Z</code>， 最多 60
-                  步，连续打字会合并成一步。改动会自动存到本机浏览器，
-                  顶栏右侧显示「已保存到本机」。
-                </p>
-                <p>
-                  <b>8. AI 排版（对话）：</b>
-                  点顶栏「AI
-                  排版」打开助手。首次使用先填三项参数，点「测试连接」、
-                  勾选授权说明，再「保存并启用」：
-                </p>
-                <ul className="help-list">
-                  <li>
-                    <b>接口地址</b>：填到 <code>/v1</code> 为止，例如
-                    <code>https://api.openai.com/v1</code>；兼容 OpenAI
-                    接口的服务都能用（DeepSeek、通义、Kimi、硅基流动、自建中转等）。
-                  </li>
-                  <li>
-                    <b>模型名</b>：填服务商文档里的完整名字，例如
-                    <code>gpt-4o-mini</code>、<code>deepseek-chat</code>。
-                  </li>
-                  <li>
-                    <b>API Key</b>：只保存在这台电脑的浏览器里。
-                  </li>
-                </ul>
-                <p>
-                  填好后在「对话」里说人话即可，例如「排宽松点」「换成学术风」
-                  「把教育背景放最前面」「把第三条写短些」。
-                  它会先列出将要改动的项目，右侧纸张先显示效果，你点「接受」才写进简历。
-                  对话会记住上下文，关掉面板、刷新页面都还在；右上角 🧹 可清空。
-                </p>
-                <p>
-                  <b>9. 一键排版：</b>
-                  助手顶部切到「一键排版」，把整段简历粘进大输入框，点「开始排版」。
-                  它会识别姓名、联系方式、【板块】、经历行和要点，按当前模板排好，
-                  过程中显示「正在排版… N%」。排完直接写进简历，结果旁边有
-                  <b>撤销排版</b> 可以回退。配置了接口时会自动再做一次 AI 复核
-                  （能改结构甚至整篇重排，默认不改文字）；没配接口就只用本地规则。
-                </p>
-                <p>
-                  <b>10. 导出与备份：</b>
-                  「导出 PDF」打开打印窗口，选“另存为 PDF”，A4、100%
-                  缩放、关闭页眉页脚、 勾选背景图形。「文件」菜单可下载 JSON
-                  备份、导出 Markdown、导入备份或 Markdown； 导入 JSON
-                  会新增一份简历，不会覆盖当前这份。
-                </p>
-                <p className="muted">
-                  <b>数据存在哪：</b>
-                  全部保存在这台电脑的浏览器本地，没有账号、不上传。清除浏览器数据、
-                  换浏览器或换设备都会看不到；照片以 base64
-                  存在简历里，浏览器容量约 5MB，
-                  放多张大图可能保存失败。重要版本请下载 JSON 备份。
-                </p>
-                <p className="muted">
-                  <b>联网范围：</b>
-                  只有「AI
-                  排版」会联网——点发送时把排版参数、板块标题和简历正文发到你填的接口。
-                  编辑、排版、导出等其余功能都在本机运行。
-                </p>
-              </div>
-            )}
+            ) : null}
           </section>
         </div>
       )}
