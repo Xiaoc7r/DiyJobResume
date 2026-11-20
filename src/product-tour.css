@@ -794,10 +794,10 @@
 }
 .tour-scene-0 .tour-paper .row-name::after {
   content: "";
-  display: inline-block;
+  position: absolute;
+  left: calc(50% + 40px);
+  top: 4px;
   width: 1px;
   height: 1em;
   background: #b87559;
-  margin-left: 4px;
-  vertical-align: -0.1em;
 }
