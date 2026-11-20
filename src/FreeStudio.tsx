@@ -97,6 +97,14 @@ import type { FreeDocument, FreePage } from "./freeform";
 import type { Resume } from "./flow";
 import "./free-studio.css";
 import { DetailRenderer, sceneLayers, setSvgContent } from "./scenePreview";
+import {
+  CanvasBindings,
+  setPictureClip,
+  pictureBackground,
+} from "./canvasBindings";
+import { pageWithTemplateArt } from "./canvasBindingModel";
+import { configureCanvasControls, setElementSize } from "./canvasControls";
+import type { Picture } from "./flow";
 
 type Item = FabricObject & {
   id?: string;
@@ -113,7 +121,11 @@ export interface FreeStudioApi {
 interface Props {
   doc: Resume;
   apiRef: RefObject<FreeStudioApi | null>;
-  onChange: (data: FreeDocument, transient?: boolean) => void;
+  onChange: (
+    data: FreeDocument,
+    transient?: boolean,
+    pictures?: Picture[],
+  ) => void;
   onMode: (mode: "simple" | "md") => void;
   onRebuild?: () => void;
   modeTabs?: ReactNode;
@@ -269,6 +281,11 @@ export default function FreeStudio({
     model = useRef<FreeDocument>(undefined!),
     activePage = useRef(0);
   if (!model.current) model.current = cloneData(doc.freeform!);
+  const docRef = useRef(doc);
+  docRef.current = doc;
+  const bindings = useRef(new CanvasBindings());
+  const pendingPictures = useRef(doc.pictures),
+    emittedPictures = useRef(doc.pictures);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   const history = useRef<string[]>([]),
@@ -294,7 +311,8 @@ export default function FreeStudio({
   const publish = (data: FreeDocument, transient = false) => {
     const next = cloneData(data);
     emitted.current = next;
-    onChangeRef.current(next, transient);
+    emittedPictures.current = pendingPictures.current;
+    onChangeRef.current(next, transient, pendingPictures.current);
   };
   const [brushWidth, setBrushWidth] = useState(2);
   const insertionRef = useRef(insertion);
@@ -408,6 +426,8 @@ export default function FreeStudio({
     updateDetailPreview.current();
   }, [selection, zoom, doc]);
   const reflect = () => {
+    const active = scene.current?.getActiveObject();
+    if (active) configureCanvasControls(active);
     const selected = (scene.current?.getActiveObjects() || []) as Item[];
     setSelection(selected);
     if (selected.length) setSourceSelection(null);
@@ -420,11 +440,20 @@ export default function FreeStudio({
       c.getObjects().forEach((o) =>
         o.set("templateBounds", o.getBoundingRect()),
       );
-    if (c && !loading.current)
-      model.current.pages[activePage.current].canvas = {
-        version: "7.4.0",
-        objects: (c.toObject() as FreePage["canvas"]).objects,
-      };
+    if (c && !loading.current) {
+      if (!workshop && flowBase)
+        pendingPictures.current = bindings.current.snapshot(
+          c,
+          docRef.current,
+          model.current,
+          activePage.current,
+        );
+      else
+        model.current.pages[activePage.current].canvas = {
+          version: "7.4.0",
+          objects: (c.toObject() as FreePage["canvas"]).objects,
+        };
+    }
     return model.current;
   };
   const commit = () => {
@@ -432,7 +461,10 @@ export default function FreeStudio({
     if (loading.current || !alive.current) return;
     const data = snapshot(),
       serialized = JSON.stringify(data);
-    if (serialized !== history.current[cursor.current]) {
+    if (
+      serialized !== history.current[cursor.current] ||
+      pendingPictures.current !== docRef.current.pictures
+    ) {
       history.current = history.current.slice(0, cursor.current + 1);
       history.current.push(serialized);
       while (
@@ -471,6 +503,19 @@ export default function FreeStudio({
         o.set({ ...base });
         o.setCoords();
       });
+      if (flowBase && !workshop)
+        await bindings.current.install(
+          c,
+          docRef.current,
+          model.current,
+          index,
+          host.current?.querySelector(".free-source-paper > .resume-paper") ||
+            null,
+          base,
+        );
+      if (!alive.current || controller.signal.aborted || scene.current !== c)
+        return;
+      c.getObjects().forEach(configureCanvasControls);
       activePage.current = index;
       setPageIndex(index);
       setSelection([]);
@@ -559,6 +604,7 @@ export default function FreeStudio({
               ? "background"
               : "foreground",
         });
+        configureCanvasControls(o);
         c.add(o);
       });
       c.setActiveObject(
@@ -660,7 +706,19 @@ export default function FreeStudio({
       clipboard.current.map((o) => o.clone() as Promise<Item>),
     );
     if (!alive.current) return;
-    objects.forEach((o) => o.set({ left: o.left + 16, top: o.top + 16 }));
+    objects.forEach((o) =>
+      o.set({
+        left: o.left + 16,
+        top: o.top + 16,
+        label: `${o.label || "元素"}副本`,
+        lockMovementX: false,
+        lockMovementY: false,
+        lockScalingX: false,
+        lockScalingY: false,
+        lockRotation: false,
+        hasControls: true,
+      }),
+    );
     add(objects, "副本");
   };
   const groupSelection = () =>
@@ -939,7 +997,11 @@ export default function FreeStudio({
     try {
       let url: string;
       if (flowBase) {
-        const p = cloneData(model.current.pages[activePage.current]);
+        const p = pageWithTemplateArt(
+          docRef.current,
+          cloneData(model.current.pages[activePage.current]),
+          activePage.current,
+        )!;
         const { sceneSvg } = await import("./freeScene");
         const layers = {
           background: await sceneSvg(p, "background"),
@@ -1027,7 +1089,8 @@ export default function FreeStudio({
         layers?: LayerSvg;
         sourceIndex?: number;
       }[] = [];
-      for (const p of exportPages)
+      for (const [index, raw] of exportPages.entries()) {
+        const p = pageWithTemplateArt(docRef.current, raw, index)!;
         result.push({
           svg: flowBase ? "" : await makeSvg(p),
           page: cloneData(p),
@@ -1044,6 +1107,7 @@ export default function FreeStudio({
               }
             : {}),
         });
+      }
       if (!alive.current) return;
       flushSync(() => {
         setPrintPages(result);
@@ -1134,6 +1198,13 @@ export default function FreeStudio({
             const r = item.getBoundingRect(),
               pad = active.has(item) ? 42 : 4;
             if ((item as Item).plane === "background") {
+              if (active.has(item))
+                rectangle(
+                  r.left + r.width / 2 - 7 / z,
+                  r.top + r.height / 2 - 7 / z,
+                  14 / z,
+                  14 / z,
+                );
               rectangle(r.left - pad, r.top - pad, r.width + pad * 2, pad + 5);
               rectangle(
                 r.left - pad,
@@ -1243,6 +1314,7 @@ export default function FreeStudio({
     return () => {
       commitRef.current();
       alive.current = false;
+      bindings.current.cancel();
       cancelAnimationFrame(liveFrame);
       clearTimeout(timer.current);
       apiRef.current = null;
@@ -1251,11 +1323,53 @@ export default function FreeStudio({
     };
   }, []);
   useEffect(() => {
-    if (!flowBase || !doc.freeform || emitted.current === doc.freeform) return;
+    if (
+      !flowBase ||
+      !doc.freeform ||
+      (emitted.current === doc.freeform &&
+        emittedPictures.current === doc.pictures)
+    )
+      return;
     emitted.current = doc.freeform;
+    emittedPictures.current = doc.pictures;
+    pendingPictures.current = doc.pictures;
     model.current = cloneData(doc.freeform);
     void loadPage(Math.min(activePage.current, model.current.pages.length - 1));
-  }, [doc.freeform]);
+  }, [doc.freeform, doc.pictures]);
+  useEffect(() => {
+    if (!flowBase || workshop || !scene.current || loading.current) return;
+    const frame = requestAnimationFrame(() => {
+      const c = scene.current;
+      if (!c || loading.current) return;
+      void bindings.current
+        .install(
+          c,
+          docRef.current,
+          model.current,
+          activePage.current,
+          host.current?.querySelector(".free-source-paper > .resume-paper") ||
+            null,
+          base,
+          false,
+        )
+        .then(() => {
+          if (alive.current) {
+            c.getObjects().forEach(configureCanvasControls);
+            reflect();
+          }
+        })
+        .catch(() => setError("模板装饰未能更新，可切换模式后重试。"));
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [
+    doc.lines,
+    doc.settings,
+    doc.template,
+    doc.templateStyle,
+    doc.pictures,
+    page.width,
+    page.height,
+  ]);
   useEffect(() => {
     if (!sourceSelection || !flowBase) return;
     const row = host.current?.querySelector<HTMLElement>(
@@ -1308,7 +1422,11 @@ export default function FreeStudio({
       });
     while (
       data.pages.length > Math.max(1, needed) &&
-      !data.pages.at(-1)!.canvas.objects.length
+      !data.pages.at(-1)!.canvas.objects.length &&
+      !docRef.current.pictures.some((p) => p.page === data.pages.length - 1) &&
+      !Object.values(data.templateArt || {}).some(
+        (pages) => pages[data.pages.length - 1]?.length,
+      )
     )
       data.pages.pop();
     if (previous !== data.pages.length) {
@@ -1787,62 +1905,129 @@ export default function FreeStudio({
                 <h3>当前页元素</h3>
                 <p>点击定位；锁定可防止误拖，隐藏的元素不参与导出。</p>
                 <div className="free-object-list">
-                  {[...objects].reverse().map((o, i) => (
-                    <div
-                      key={o.id || i}
-                      className={selection.includes(o) ? "selected" : ""}
-                    >
-                      <button
-                        className="free-object-name"
-                        onClick={() => {
-                          scene.current?.discardActiveObject();
-                          scene.current?.setActiveObject(o);
-                          scene.current?.requestRenderAll();
-                          reflect();
-                          setMobilePanel("properties");
-                        }}
+                  {[...objects]
+                    .reverse()
+                    .filter((o) => bindings.current.get(o)?.kind !== "template")
+                    .map((o, i) => (
+                      <div
+                        key={o.id || i}
+                        className={selection.includes(o) ? "selected" : ""}
                       >
-                        {isText(o) ? <Type size={14} /> : <Shapes size={14} />}
-                        <span>
-                          {o.label ||
-                            (isText(o) ? o.text.slice(0, 20) : "元素")}
-                        </span>
-                      </button>
-                      <Tool
-                        name={o.visible ? "隐藏元素" : "显示元素"}
-                        onClick={() =>
-                          withScene(() => {
-                            o.visible = !o.visible;
-                          })
-                        }
-                      >
-                        {o.visible ? <Eye size={13} /> : <EyeOff size={13} />}
-                      </Tool>
-                      <Tool
-                        name={o.lockMovementX ? "解锁元素" : "锁定元素"}
-                        onClick={() =>
-                          withScene(() => {
-                            const lock = !o.lockMovementX;
-                            o.set({
-                              lockMovementX: lock,
-                              lockMovementY: lock,
-                              lockScalingX: lock,
-                              lockScalingY: lock,
-                              lockRotation: lock,
-                              hasControls: !lock,
-                            });
-                          })
-                        }
-                      >
-                        {o.lockMovementX ? (
-                          <Lock size={13} />
-                        ) : (
-                          <Unlock size={13} />
-                        )}
-                      </Tool>
-                    </div>
-                  ))}
+                        <button
+                          className="free-object-name"
+                          onClick={() => {
+                            scene.current?.discardActiveObject();
+                            scene.current?.setActiveObject(o);
+                            scene.current?.requestRenderAll();
+                            reflect();
+                            setMobilePanel("properties");
+                          }}
+                        >
+                          {isText(o) ? (
+                            <Type size={14} />
+                          ) : (
+                            <Shapes size={14} />
+                          )}
+                          <span>
+                            {o.label ||
+                              (isText(o) ? o.text.slice(0, 20) : "元素")}
+                            {(bindings.current.get(o)?.kind === "picture" ||
+                              (o instanceof FabricImage &&
+                                /校徽|证件照/.test(o.get("label") || ""))) && (
+                              <small className="free-binding-note">
+                                {o.backgroundColor
+                                  ? ["#ffffff", "rgb(255,255,255)"].includes(
+                                      o.backgroundColor.replaceAll(" ", ""),
+                                    )
+                                    ? "白底"
+                                    : "有底色"
+                                  : "透明底"}
+                              </small>
+                            )}
+                          </span>
+                        </button>
+                        <Tool
+                          name={o.visible ? "隐藏元素" : "显示元素"}
+                          onClick={() =>
+                            withScene(() => {
+                              o.visible = !o.visible;
+                            })
+                          }
+                        >
+                          {o.visible ? <Eye size={13} /> : <EyeOff size={13} />}
+                        </Tool>
+                        <Tool
+                          name={o.lockMovementX ? "解锁元素" : "锁定元素"}
+                          onClick={() =>
+                            withScene(() => {
+                              const lock = !o.lockMovementX;
+                              o.set({
+                                lockMovementX: lock,
+                                lockMovementY: lock,
+                                lockScalingX: lock,
+                                lockScalingY: lock,
+                                lockRotation: lock,
+                                hasControls: !lock,
+                              });
+                            })
+                          }
+                        >
+                          {o.lockMovementX ? (
+                            <Lock size={13} />
+                          ) : (
+                            <Unlock size={13} />
+                          )}
+                        </Tool>
+                      </div>
+                    ))}
                 </div>
+                {objects.some(
+                  (o) => bindings.current.get(o)?.kind === "template",
+                ) && (
+                  <div className="free-template-list">
+                    <h3>模板装饰</h3>
+                    <div className="free-object-list">
+                      {objects
+                        .filter(
+                          (o) => bindings.current.get(o)?.kind === "template",
+                        )
+                        .map((o, i) => (
+                          <div
+                            key={o.id || i}
+                            className={selection.includes(o) ? "selected" : ""}
+                          >
+                            <button
+                              className="free-art-name"
+                              onClick={() => {
+                                scene.current?.discardActiveObject();
+                                scene.current?.setActiveObject(o);
+                                scene.current?.requestRenderAll();
+                                reflect();
+                                setMobilePanel("properties");
+                              }}
+                            >
+                              <Shapes size={14} />
+                              <span>{o.label || "模板装饰"}</span>
+                            </button>
+                            <Tool
+                              name={o.visible ? "隐藏模板元素" : "显示模板元素"}
+                              onClick={() =>
+                                withScene(() => {
+                                  o.visible = !o.visible;
+                                })
+                              }
+                            >
+                              {o.visible ? (
+                                <Eye size={13} />
+                              ) : (
+                                <EyeOff size={13} />
+                              )}
+                            </Tool>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
               </section>
             )}
           </div>
@@ -2261,34 +2446,9 @@ export default function FreeStudio({
                               step={1}
                               onChange={(n) =>
                                 withScene(() => {
-                                  if (key === "width") {
-                                    if (isText(one))
-                                      one.set({ width: n / one.scaleX });
-                                    else {
-                                      const next = n / Math.max(1, one.width);
-                                      one.set({
-                                        scaleX: next,
-                                        ...(keepRatio
-                                          ? {
-                                              scaleY:
-                                                (one.scaleY * next) /
-                                                one.scaleX,
-                                            }
-                                          : {}),
-                                      });
-                                    }
-                                  } else if (key === "height") {
-                                    const next = n / Math.max(1, one.height);
-                                    one.set({
-                                      scaleY: next,
-                                      ...(keepRatio
-                                        ? {
-                                            scaleX:
-                                              (one.scaleX * next) / one.scaleY,
-                                          }
-                                        : {}),
-                                    });
-                                  } else one.set({ [key]: n });
+                                  if (key === "width" || key === "height")
+                                    setElementSize(one, key, n, keepRatio);
+                                  else one.set({ [key]: n });
                                 })
                               }
                             />
@@ -2530,6 +2690,68 @@ export default function FreeStudio({
                   {one instanceof FabricImage && (
                     <section>
                       <h3>图片处理</h3>
+                      <div
+                        className="free-text-tools"
+                        role="group"
+                        aria-label="图片背景"
+                      >
+                        <button
+                          onClick={() =>
+                            withScene(() => {
+                              one.set({
+                                backgroundColor: "",
+                                resetPictureBackground: false,
+                              });
+                              setPictureClip(
+                                one,
+                                String(one.get("label") || ""),
+                                "transparent",
+                              );
+                            })
+                          }
+                        >
+                          透明底
+                        </button>
+                        <button
+                          onClick={() =>
+                            withScene(() => {
+                              one.set({
+                                backgroundColor: "#ffffff",
+                                resetPictureBackground: false,
+                              });
+                              setPictureClip(
+                                one,
+                                String(one.get("label") || ""),
+                                "#ffffff",
+                              );
+                            })
+                          }
+                        >
+                          白底
+                        </button>
+                        {bindings.current.get(one)?.kind === "picture" && (
+                          <button
+                            onClick={() =>
+                              withScene(() => {
+                                const b = bindings.current.get(one);
+                                if (b?.kind !== "picture") return;
+                                const bg = pictureBackground(
+                                  { ...b.original, background: undefined },
+                                  docRef.current,
+                                );
+                                one.set({
+                                  backgroundColor:
+                                    bg === "transparent" ? "" : bg,
+                                  resetPictureBackground: true,
+                                });
+                                setPictureClip(one, b.original.label, bg);
+                              })
+                            }
+                          >
+                            随模板
+                          </button>
+                        )}
+                      </div>
                       <div className="free-text-tools">
                         <button
                           onClick={() =>

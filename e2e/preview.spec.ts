@@ -34,8 +34,12 @@ test("large previews remain scrollable and free mode shares zoom with an unobstr
   await checkEdges(".free-canvas-scroll", ".free-page-frame");
   await zoom().fill("100");
   await page.getByRole("button", { name: /^画布元素/ }).click();
-  await page.locator(".free-object-name").first().click();
-  await expect(page.locator(".free-detail-viewport svg image")).toHaveCount(3);
+  const decoration = page
+    .locator(".free-object-name")
+    .filter({ hasText: "标题色带" })
+    .first();
+  await decoration.click();
+  await expect(page.locator(".free-detail-viewport svg image")).toHaveCount(4);
   await expect(
     page.locator(
       ".free-detail-viewport canvas, .free-detail-viewport .moveable-control-box",
@@ -50,7 +54,7 @@ test("large previews remain scrollable and free mode shares zoom with an unobstr
     .locator(".free-detail-viewport > div")
     .getAttribute("style");
   // Keyboard movement uses the same live transform path as dragging.
-  await page.locator(".free-object-name").first().press("ArrowRight");
+  await decoration.press("ArrowRight");
   await expect
     .poll(() =>
       page.locator(".free-detail-viewport > div").getAttribute("style"),

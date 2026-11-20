@@ -79,6 +79,12 @@ import type { UserTemplate } from "./templateLibrary";
 import { UserTemplateCard } from "./UserTemplateCard";
 import "./template-maker.css";
 import "./builtin-templates.css";
+import "./canvas-bindings.css";
+import {
+  pageWithTemplateArt,
+  pictureBackground,
+  templateKey,
+} from "./canvasBindingModel";
 import { PreviewZoom } from "./PreviewZoom";
 import { ImageUploadDialog } from "./ImageUploadDialog";
 import { FreeLoading } from "./FreeLoading";
@@ -1400,6 +1406,7 @@ export default function Studio() {
   const dragPicture = (e: ReactPointerEvent, pic: Picture, resize = false) => {
     e.preventDefault();
     e.stopPropagation();
+    if (pic.locked) return;
     setPicSelection(pic.id);
     const base = ref.current,
       startX = e.clientX,
@@ -1655,9 +1662,17 @@ export default function Studio() {
     el.addEventListener("pointerup", end);
     el.addEventListener("pointercancel", end);
   };
-  const updateFreeform = (data: FreeDocument) => {
+  const updateFreeform = (
+    data: FreeDocument,
+    _transient = false,
+    pictures?: Picture[],
+  ) => {
     if (activeIdRef.current !== activeId) return;
-    const next = { ...ref.current, freeform: data };
+    const next = {
+      ...ref.current,
+      freeform: data,
+      ...(pictures ? { pictures } : {}),
+    };
     historyUpdate(next);
   };
   const restoreFreeLayout = () => {
@@ -1931,7 +1946,7 @@ export default function Studio() {
     });
     return (
       <article
-        className={`resume-paper template-${view.template} ${view.templateStyle ? "has-template-art" : ""} ${view.templateStyle?.regions ? "has-region-template" : ""}`}
+        className={`resume-paper template-${view.template} ${view.templateStyle ? "has-template-art" : ""} ${view.templateStyle?.regions ? "has-region-template" : ""} ${options.hideDecorations || view.freeform?.templateArt?.[templateKey(view)]?.[page] != null ? "bound-template-art" : ""}`}
         data-page={page}
         style={{
           ...resumeStyle,
@@ -1962,7 +1977,7 @@ export default function Studio() {
         )}
         {view.freeform?.base === "flow" && !options.hideDecorations && (
           <FreeLayers
-            page={view.freeform.pages[page]}
+            page={pageWithTemplateArt(view, view.freeform.pages[page], page)}
             plane="background"
             ready={options.layers}
           />
@@ -2021,12 +2036,23 @@ export default function Studio() {
               top: p.y,
               width: p.w,
               height: p.h,
+              visibility:
+                options.hideDecorations || p.hidden ? "hidden" : undefined,
+              backgroundColor: pictureBackground(p, view),
+              borderRadius:
+                p.label.includes("校徽") &&
+                pictureBackground(p, view) !== "transparent"
+                  ? "50%"
+                  : "0",
+              transform: p.angle ? `rotate(${p.angle}deg)` : undefined,
+              transformOrigin: "top left",
             }}
             onPointerDown={(e) => dragPicture(e, p)}
             tabIndex={0}
             role="img"
             aria-label={p.label + "，拖动调整位置"}
             onKeyDown={(e) => {
+              if (p.locked) return;
               if (e.key === "Delete") {
                 historyUpdate({
                   ...doc,
@@ -2106,7 +2132,7 @@ export default function Studio() {
         ))}
         {view.freeform?.base === "flow" && !options.hideDecorations && (
           <FreeLayers
-            page={view.freeform.pages[page]}
+            page={pageWithTemplateArt(view, view.freeform.pages[page], page)}
             plane="foreground"
             ready={options.layers}
           />

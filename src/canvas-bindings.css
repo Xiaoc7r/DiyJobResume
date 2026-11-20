@@ -1,0 +1,45 @@
+/* Keep layout and text intact; editable canvas paint replaces only template decoration. */
+.resume-paper.bound-template-art::before,
+.resume-paper.bound-template-art .row-section::after,
+.resume-paper.bound-template-art .row-section .ink::before {
+  visibility: hidden;
+}
+.resume-paper.bound-template-art .row-section,
+.resume-paper.bound-template-art .row-section .ink {
+  border-color: transparent;
+  box-shadow: none;
+  background-color: transparent;
+  background-image: none;
+}
+.resume-paper.bound-template-art .template-region-art,
+.resume-paper.bound-template-art .template-page-decoration {
+  visibility: hidden;
+}
+.free-binding-note {
+  font-size: 11px;
+  color: #8f7963;
+  margin-left: 6px;
+}
+.free-template-list {
+  border-top: 1px solid var(--border, #e5e0da);
+  margin-top: 18px;
+  padding-top: 18px;
+}
+.free-art-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1;
+  min-width: 0;
+  padding: 8px 4px;
+  border: 0;
+  background: transparent;
+  justify-content: flex-start;
+  text-align: left;
+  font-size: 12px;
+}
+.free-art-name span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -116,14 +116,14 @@ test("source text pixels and layout survive switching while entry icons become e
       }
     }
     // Native <img> and editable SVG images sample fractional edge pixels differently.
-    // No movement or change in the source text is allowed outside those three icon rectangles.
+    // No movement or change in source text is allowed outside the four editable image rectangles.
     expect(outsideDifferences).toBe(0);
     expect(total / (a.width * a.height * 3)).toBeLessThan(0.05);
   };
   const capture = async (name: string) => {
     const free = (await page.locator(".free-canvas-host").count()) > 0;
     if (free)
-      await expect(page.locator(".free-front-scene svg image")).toHaveCount(3);
+      await expect(page.locator(".free-front-scene svg image")).toHaveCount(4);
     else if (name !== "before")
       await expect(
         page.locator(".free-layer-foreground svg image"),
@@ -162,12 +162,10 @@ test("source text pixels and layout survive switching while entry icons become e
     }, free);
     if (name === "before")
       iconRects = await fixture.evaluate((root) =>
-        [...root.querySelectorAll(".floating-picture[data-anchor]")].map(
-          (el) => {
-            const r = el.getBoundingClientRect();
-            return { x: r.left, y: r.top, right: r.right, bottom: r.bottom };
-          },
-        ),
+        [...root.querySelectorAll(".floating-picture")].map((el) => {
+          const r = el.getBoundingClientRect();
+          return { x: r.left, y: r.top, right: r.right, bottom: r.bottom };
+        }),
       );
     const result = await page.locator("[data-pixel-fixture]").screenshot({
       path: testInfo.outputPath(name + ".png"),
@@ -297,7 +295,7 @@ test("new icons and background rectangles remain visible through mode changes an
   await expect(page.locator(".free-layer-background circle")).toHaveCount(0);
 });
 
-test("all six templates preserve their entire source DOM when opening free mode", async ({
+test("all six templates preserve source text metrics while template paint becomes editable", async ({
   page,
 }) => {
   for (const template of [
@@ -318,9 +316,9 @@ test("all six templates preserve their entire source DOM when opening free mode"
       .evaluate((el) => {
         const s = getComputedStyle(el);
         return [
-          s.backgroundColor,
-          s.borderBottom,
-          s.borderLeft,
+          s.borderBottomWidth,
+          s.borderLeftWidth,
+          s.lineHeight,
           s.color,
           s.fontSize,
         ];
@@ -335,15 +333,20 @@ test("all six templates preserve their entire source DOM when opening free mode"
         .evaluate((el) => {
           const s = getComputedStyle(el);
           return [
-            s.backgroundColor,
-            s.borderBottom,
-            s.borderLeft,
+            s.borderBottomWidth,
+            s.borderLeftWidth,
+            s.lineHeight,
             s.color,
             s.fontSize,
           ];
         }),
       template,
     ).toEqual(title);
+    await page.getByRole("button", { name: /^画布元素/ }).click();
+    expect(
+      await page.locator(".free-art-name").count(),
+      template,
+    ).toBeGreaterThan(0);
     await page.getByRole("tab", { name: "简单编辑", exact: true }).click();
   }
 });

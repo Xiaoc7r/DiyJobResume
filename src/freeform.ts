@@ -55,6 +55,7 @@ export interface FreePage {
   canvas: { objects: Record<string, unknown>[]; version?: string };
 }
 export interface FreeDocument {
+  templateArt?: Record<string, (Record<string, unknown>[] | null)[]>;
   version: 1;
   source: string;
   pages: FreePage[];
@@ -265,10 +266,29 @@ export function readFreeDocument(raw: unknown): FreeDocument {
     for (const [id, design] of Object.entries(data.sourceDesign).slice(0, 2000))
       if (/^[a-z\d_-]{1,80}$/i.test(id))
         sourceDesign[id] = normalizeDesign(design);
+  const templateArt: NonNullable<FreeDocument["templateArt"]> = {};
+  if (data.templateArt && typeof data.templateArt === "object") {
+    for (const [key, pages] of Object.entries(data.templateArt).slice(0, 30)) {
+      if (
+        !/^[a-z\d_-]{1,80}$/i.test(key) ||
+        ["__proto__", "constructor", "prototype"].includes(key) ||
+        !Array.isArray(pages) ||
+        pages.length > 20
+      )
+        throw new Error("模板装饰格式不正确。");
+      templateArt[key] = pages.map((objects) => {
+        if (objects === null) return null;
+        if (!Array.isArray(objects)) throw new Error("模板装饰格式不正确。");
+        objects.forEach((o) => validate(o, 0));
+        return objects;
+      });
+    }
+  }
   return {
     version: 1,
     source: typeof data.source === "string" ? data.source : "",
     pages: data.pages,
+    ...(Object.keys(templateArt).length ? { templateArt } : {}),
     ...(data.base === "flow" ? { base: "flow" as const, sourceDesign } : {}),
   };
 }
