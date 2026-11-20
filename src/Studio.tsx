@@ -78,6 +78,7 @@ import {
 import type { UserTemplate } from "./templateLibrary";
 import { UserTemplateCard } from "./UserTemplateCard";
 import "./template-maker.css";
+import "./builtin-templates.css";
 import { PreviewZoom } from "./PreviewZoom";
 import { ImageUploadDialog } from "./ImageUploadDialog";
 import { FreeLoading } from "./FreeLoading";

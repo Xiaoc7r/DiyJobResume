@@ -28,6 +28,9 @@ export type Template =
   | "academic"
   | "teal"
   | "violet"
+  | "noir"
+  | "reexam"
+  | "purplebar"
   | "blank";
 export interface Line {
   id: string;
@@ -124,6 +127,24 @@ export const templates: {
     name: "紫图 · 研发履历",
     desc: "紫色细线 · 清晰分区 · 紧凑排版",
     color: "#7056a4",
+  },
+  {
+    id: "noir",
+    name: "黑调",
+    desc: "黑色粗线 · 双语标题 · 简洁稳重",
+    color: "#292929",
+  },
+  {
+    id: "reexam",
+    name: "复试",
+    desc: "蓝色标题 · 延伸细线 · 清晰留白",
+    color: "#1559a2",
+  },
+  {
+    id: "purplebar",
+    name: "紫横",
+    desc: "紫色横幅 · 细线分区 · 鲜明有序",
+    color: "#6554d9",
   },
   {
     id: "blank",

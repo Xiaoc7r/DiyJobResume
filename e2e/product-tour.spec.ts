@@ -38,15 +38,16 @@ test("four-step help loops through demonstrations without changing the résumé 
   const tour = page.getByRole("dialog", { name: "四步使用指引" });
   await expect(tour).toHaveAttribute("data-step", "1");
   await expect(tour.locator(".tour-simple")).toBeVisible();
-  await page.clock.runFor(2700);
+  await expect(tour.locator(".tour-tool-mark")).toHaveCount(3);
+  await page.clock.runFor(1450);
   await expect(tour.locator(".tour-md")).toBeVisible();
-  await page.clock.runFor(2600);
+  await page.clock.runFor(1400);
   await expect(tour.locator(".tour-simple")).toBeVisible();
   await tour.locator(".tour-heading > span").click();
   await expect(tour).toHaveAttribute("data-step", "2");
-  await expect(tour.locator(".tour-tools-grid")).toBeVisible();
-  await page.clock.runFor(2700);
-  await expect(tour.locator(".tour-object")).toHaveCount(3);
+  await expect(tour.locator(".tour-tools-grid").first()).toBeVisible();
+  await page.clock.runFor(1450);
+  await expect(tour.locator(".tour-object")).toHaveCount(6);
   await expect(tour.locator(".tour-number-change")).toHaveText("1360");
   // Clicking the copy, paper, or surrounding scene advances just like the button.
   await tour.locator("h2").click();
@@ -54,13 +55,13 @@ test("four-step help loops through demonstrations without changing the résumé 
   await expect(tour.locator(".tour-template.active")).toContainText(
     "炒肉多经典",
   );
-  await page.clock.runFor(2700);
+  await page.clock.runFor(1450);
   await expect(tour.locator(".tour-template.active")).toContainText("黑线");
   await tour.getByRole("button", { name: "下一步" }).click();
   await expect(tour).toHaveAttribute("data-step", "4");
-  await page.clock.runFor(2700);
+  await page.clock.runFor(1450);
   await expect(tour.locator(".tour-art-1")).toHaveCount(4);
-  await page.clock.runFor(2600);
+  await page.clock.runFor(2800);
   await expect(tour.locator(".tour-demo-save")).toContainText("已保存");
   await tour.getByRole("button", { name: "开始制作" }).click();
   await expect(tour).toHaveCount(0);
@@ -98,7 +99,7 @@ test("help remains accessible on a small screen and restores free-canvas focus o
     expect(await tour.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(
       true,
     );
-    const box = await tour.locator(".tour-caption").boundingBox();
+    const box = await tour.locator(".tour-navigation").boundingBox();
     expect(box!.y + box!.height).toBeLessThanOrEqual(844);
     if (step < 4) await page.keyboard.press("ArrowRight");
   }

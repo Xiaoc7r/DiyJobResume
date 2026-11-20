@@ -107,6 +107,9 @@ describe("template defaults and CSS backups", () => {
       "violet",
       "teal",
       "academic",
+      "noir",
+      "reexam",
+      "purplebar",
       "blank",
     ]);
     const first = initialResume();
