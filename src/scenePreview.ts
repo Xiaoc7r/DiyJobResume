@@ -2,6 +2,7 @@ import { ActiveSelection } from "fabric";
 import type { FabricObject } from "fabric";
 import type { FreePage } from "./freeform";
 import type { LayerSvg } from "./FreeLayers";
+import { prepareImageSvg } from "./canvasSvg";
 
 const markup = new WeakMap<HTMLElement, string>();
 export function setSvgContent(node: HTMLElement | null, svg: string) {
@@ -22,6 +23,7 @@ export function sceneLayers(
       (object as FabricObject & { plane?: string }).plane === "background"
         ? "background"
         : "foreground";
+    prepareImageSvg(object);
     const svg = object.toSVG();
     layers[plane] +=
       object.group instanceof ActiveSelection

@@ -1,6 +1,7 @@
 import { FabricObject, StaticCanvas, Group } from "fabric";
 import { boundedAsyncCache } from "./boundedCache";
 import type { FreePage } from "./freeform";
+import { prepareImageSvg } from "./canvasSvg";
 
 // Shared by the editor, normal preview and export. Custom fields must round-trip together.
 FabricObject.customProperties = [
@@ -50,6 +51,7 @@ export function sceneSvg(page: FreePage, plane?: "background" | "foreground") {
       canvas.backgroundColor = plane ? "" : page.background;
       const links = (items: FabricObject[]) =>
         items.forEach((object) => {
+          prepareImageSvg(object);
           const link = (object as FabricObject & { link?: string }).link;
           if (link && /^(https?:|mailto:)/i.test(link)) {
             const original = object.toSVG.bind(object),

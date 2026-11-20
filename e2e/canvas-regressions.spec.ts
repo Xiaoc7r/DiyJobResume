@@ -46,6 +46,9 @@ test("crest is selectable, editable, copyable and keeps transparent/white varian
     .locator(".free-object-name")
     .filter({ hasText: /^校徽白底$/ })
     .click();
+  await expect(
+    page.locator('.free-front-scene svg rect[fill="#ffffff"]'),
+  ).toHaveCount(1);
   await page.getByRole("button", { name: "复制选中元素", exact: true }).click();
   await expect(
     page.locator(".free-object-name").filter({ hasText: "校徽副本白底" }),
