@@ -256,3 +256,42 @@
   height: 1px;
   background: #c6bbdc;
 }
+
+.help-beacon {
+  position: relative;
+}
+@media (max-width: 900px) {
+  .header-actions > .help-beacon {
+    display: inline-flex;
+  }
+}
+.help-beacon.is-unseen {
+  animation: help-breathe 3.2s ease-in-out infinite;
+}
+.help-beacon.is-unseen::after {
+  content: "";
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  right: 3px;
+  top: 3px;
+  background: #b87559;
+  border-radius: 50%;
+}
+@keyframes help-breathe {
+  0%,
+  100% {
+    color: #786d64;
+    background: transparent;
+  }
+  50% {
+    color: #a45b3c;
+    background: #b875591c;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .help-beacon.is-unseen {
+    animation: none;
+  }
+}
