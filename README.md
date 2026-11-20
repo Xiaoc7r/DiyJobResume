@@ -14,7 +14,7 @@
 
 ## 🖼️ 效果预览
 
-<img width="2872" height="1612" alt="image" src="https://github.com/user-attachments/assets/47c0ad06-593b-432d-8317-4c510d4fd098" />
+<img width="2872" height="1612" alt="image" src="https://github.com/user-attachments/assets/8faab788-ea13-49c5-9e1a-fea536b5262c" />
 
 <img width="2872" height="1620" alt="image" src="https://github.com/user-attachments/assets/b35461a6-1e5b-4836-b74f-5e11d2a70858" />
 
