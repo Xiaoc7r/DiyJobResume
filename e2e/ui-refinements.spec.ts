@@ -188,6 +188,10 @@ test("four modes have identical panel geometry, neutral night controls, and mode
       ),
   ).toBe(true);
   await page.screenshot({ path: "../ui-refine-night.png" });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(
+    page.locator('.free-mobile-nav button[aria-pressed="true"]'),
+  ).toHaveCSS("background-color", "rgb(58, 57, 51)");
 });
 
 test("icon order, useful shapes and contact links are available without adding clutter", async ({

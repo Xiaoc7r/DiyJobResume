@@ -401,7 +401,11 @@ html[data-theme="dark"] .crest-library-link {
   border-color: transparent;
 }
 .studio.is-dark
-  :is(.free-toolbar button, .source-toolbar button)[aria-pressed="true"] {
+  :is(
+    .free-toolbar button,
+    .source-toolbar button,
+    .free-mobile-nav button
+  )[aria-pressed="true"] {
   background: #3a3933;
   color: #edc4a7;
   border-color: transparent;
