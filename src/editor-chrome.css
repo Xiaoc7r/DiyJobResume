@@ -431,3 +431,30 @@
 .studio .free-properties-heading {
   padding-bottom: 15px;
 }
+
+/* Sampling can reach the paper beneath the translucent palette. */
+.color-popover.is-picking {
+  opacity: 1;
+  background: #fbfaf84d;
+  pointer-events: none;
+  box-shadow: 0 5px 20px #0001;
+}
+.color-popover.is-picking > :not(footer),
+.color-popover.is-picking footer > :not(.color-pipette) {
+  opacity: 0.15;
+}
+.color-popover.is-picking .color-pipette {
+  pointer-events: auto;
+  background: #fbfaf8eb;
+  border-radius: 5px;
+}
+html[data-theme="dark"] .color-popover.is-picking {
+  background: #2b2a264d;
+}
+html[data-theme="dark"] .color-popover.is-picking .color-pipette {
+  background: #2b2a26eb;
+}
+.color-picking .free-canvas-host,
+.color-picking .free-canvas-host * {
+  cursor: crosshair !important;
+}

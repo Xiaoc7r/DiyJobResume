@@ -92,18 +92,19 @@ test("rich and Markdown selections accept repeated palette clicks without resele
 test("canvas sampling has a pixel magnifier, accurate HEX and cancellation", async ({
   page,
 }) => {
+  await page.getByLabel("预览缩放", { exact: true }).fill("100");
   await page.getByRole("button", { name: "主题颜色", exact: true }).click();
   const panel = page.getByRole("dialog", { name: "主题调色板", exact: true });
   await panel.getByRole("button", { name: "画布取色", exact: true }).click();
   const box = await page
     .locator(".paper-workspace .resume-paper")
     .boundingBox();
-  await page.mouse.move(box!.x + 12, box!.y + 12);
+  await page.mouse.move(box!.x + 140, box!.y + 12);
   const lens = page.getByLabel("像素取色放大镜", { exact: true });
   await expect(lens).toBeVisible({ timeout: 30000 });
   await expect(lens.locator("strong")).toHaveText("#ffffff");
   await expect(lens.locator("canvas")).toHaveAttribute("width", "110");
-  await page.mouse.click(box!.x + 12, box!.y + 12);
+  await page.mouse.click(box!.x + 140, box!.y + 12);
   await expect(panel.getByLabel("主题 HEX", { exact: true })).toHaveValue(
     "#ffffff",
   );
