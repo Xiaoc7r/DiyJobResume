@@ -1,27 +1,7 @@
 import { normalizeHex } from "./color";
+import { rewriteColors } from "./inlineColorMarkup";
 
 export const colorOpen = (hex: string) => `<span style="color:${hex}">`;
-function withoutCompleteColors(text: string) {
-  const tags = /<span\b[^>]*>|<\/span>/gi,
-    stack: { start: number; end: number; color: boolean }[] = [],
-    remove: [number, number][] = [];
-  let match: RegExpExecArray | null;
-  while ((match = tags.exec(text))) {
-    if (match[0].toLowerCase() === "</span>") {
-      const open = stack.pop();
-      if (open?.color)
-        remove.push([open.start, open.end], [match.index, tags.lastIndex]);
-    } else
-      stack.push({
-        start: match.index,
-        end: tags.lastIndex,
-        color: /^<span style="color:#[a-f\d]{3,6}">$/i.test(match[0]),
-      });
-  }
-  for (const [a, b] of remove.sort((a, b) => b[0] - a[0]))
-    text = text.slice(0, a) + text.slice(b);
-  return text;
-}
 export function cssColorHex(value: string) {
   const hex = normalizeHex(value);
   if (hex) return hex;
@@ -70,51 +50,7 @@ export function colorMarkdown(
       end = Math.max(end, close);
     }
   }
-  const before = source.slice(0, start),
-    after = source.slice(end),
-    text = source.slice(start, end);
-  const old = /<span style="color:#[a-f\d]{6}">$/.exec(before);
-  if (old && after.startsWith("</span>") && !text.includes("\n")) {
-    const prefix = before.slice(0, -old[0].length) + colorOpen(hex);
-    return {
-      source: prefix + text + after,
-      start: prefix.length,
-      end: prefix.length + text.length,
-    };
-  }
-  let offset = 0,
-    first = -1,
-    last = 0;
-  const changed = text
-    .split("\n")
-    .map((part, index) => {
-      // Heading/list syntax and entry column separators must stay structural.
-      const atLineStart =
-        index > 0 || start === 0 || source[start - 1] === "\n";
-      const prefix = atLineStart
-        ? /^(?:#{1,6}[ \t]|[-*]\s|\d+[.)]\s)/.exec(part)?.[0] || ""
-        : "";
-      const rest = withoutCompleteColors(part.slice(prefix.length));
-      const chunks = rest.split(" | ");
-      let result = prefix;
-      for (let i = 0; i < chunks.length; i++) {
-        if (i) result += " | ";
-        const chunk = chunks[i];
-        if (!chunk) continue;
-        const open = colorOpen(hex);
-        if (first < 0) first = offset + result.length + open.length;
-        result += open + chunk + "</span>";
-        last = offset + result.length - 7;
-      }
-      offset += result.length + 1;
-      return result;
-    })
-    .join("\n");
-  return {
-    source: before + changed + after,
-    start: start + Math.max(0, first),
-    end: start + last,
-  };
+  return rewriteColors(source, start, end, hex);
 }
 
 // Split at row boundaries so formatting cannot reparent React-owned blocks.

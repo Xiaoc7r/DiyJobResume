@@ -295,3 +295,139 @@
     animation: none;
   }
 }
+
+/* Shared panel and mode geometry in all four editors. */
+.studio :is(.library-heading, .free-properties-heading) {
+  height: 64px;
+  min-height: 64px;
+  flex: 0 0 64px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+}
+.studio :is(.library-heading, .free-properties-heading) h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+}
+.studio .library-heading-row {
+  width: 100%;
+}
+.studio .editor-heading {
+  min-height: 58px;
+  height: 58px;
+  flex: 0 0 58px;
+  padding: 12px 8px;
+}
+.studio .mode-tabs button {
+  font-size: 12px;
+  padding: 7px 9px;
+}
+.font-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #908b81;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.studio .free-upload-primary {
+  background: #f1e5db;
+  border-color: #d2ae94;
+  color: #754a35;
+}
+.studio .free-upload-primary:hover {
+  background: #ead7c7;
+  border-color: #b8805a;
+}
+.contact-popover {
+  min-width: 244px;
+  padding: 12px;
+}
+.contact-popover > span {
+  padding: 2px 8px 6px;
+  margin: 0;
+}
+.contact-popover > a {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 8px;
+  text-decoration: none;
+  border-radius: 6px;
+}
+.contact-popover > a:hover {
+  background: #f5f1eb;
+}
+.contact-popover strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 550;
+  color: #37312b;
+}
+.contact-popover small {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  color: #8d7f72;
+}
+.color-sampling-lens {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 10050;
+  pointer-events: none;
+  padding: 6px;
+  background: #242421;
+  color: #fff;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px #0003;
+  font-size: 12px;
+}
+.color-sampling-lens[hidden] {
+  display: none;
+}
+.color-sampling-lens > div {
+  position: relative;
+  width: 110px;
+  height: 110px;
+  overflow: hidden;
+  border-radius: 5px;
+}
+.color-sampling-lens canvas {
+  display: block;
+  width: 110px;
+  height: 110px;
+  image-rendering: pixelated;
+}
+.color-sampling-lens i {
+  position: absolute;
+  left: 50px;
+  top: 50px;
+  width: 10px;
+  height: 10px;
+  border: 1px solid #fff;
+  outline: 1px solid #151515;
+}
+.color-sampling-lens strong {
+  display: block;
+  text-align: center;
+  padding: 6px 0 2px;
+  font-size: 11px;
+  letter-spacing: 0.4px;
+}
+.studio :is(.editor-panel, .free-left) .editor-heading {
+  height: 58px;
+  min-height: 58px;
+  flex-basis: 58px;
+  padding: 12px 8px;
+}
+.studio :is(.editor-panel, .free-left) .mode-tabs button {
+  padding: 7px 9px;
+  border-radius: 5px;
+  font-size: 12px;
+}
+.studio .free-properties-heading {
+  padding-bottom: 15px;
+}

@@ -2,6 +2,7 @@ import MarkdownIt from "markdown-it";
 import { boundedCache } from "./boundedCache";
 import { colorOpen, elementColor } from "./inlineColor";
 import { normalizeHex } from "./color";
+import { normalizeColorMarkup } from "./inlineColorMarkup";
 import type { Line, Settings, Template } from "./flow";
 export const escapeHtml = (s: string) =>
   s.replace(
@@ -169,6 +170,7 @@ export function domMarkdown(node: Node): string {
     case "CODE":
       return "`" + content + "`";
     case "A": {
+      if (!content) return "";
       const href = node.getAttribute("href") || "";
       return /^(https?:\/\/|mailto:)/i.test(href)
         ? `[${content}](${href})`
@@ -183,13 +185,18 @@ export function domMarkdown(node: Node): string {
 }
 export function editableText(el: HTMLElement) {
   const cells = el.querySelectorAll(":scope > .entry-cell");
-  return cells.length
-    ? Array.from(cells)
-        .map((c) =>
-          Array.from(c.childNodes).map(domMarkdown).join("").replace(/\n$/, ""),
-        )
-        .join(" | ")
-    : Array.from(el.childNodes).map(domMarkdown).join("").replace(/\n$/, "");
+  return normalizeColorMarkup(
+    cells.length
+      ? Array.from(cells)
+          .map((c) =>
+            Array.from(c.childNodes)
+              .map(domMarkdown)
+              .join("")
+              .replace(/\n$/, ""),
+          )
+          .join(" | ")
+      : Array.from(el.childNodes).map(domMarkdown).join("").replace(/\n$/, ""),
+  );
 }
 export const fonts = {
   sans: '"Noto Sans SC", sans-serif',

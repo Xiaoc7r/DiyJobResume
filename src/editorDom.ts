@@ -30,7 +30,12 @@ export function placeCursor(el: HTMLElement, offset: number) {
   selection?.removeAllRanges();
   selection?.addRange(range);
 }
-export function textRangeOf(root: HTMLElement, start: number, end: number) {
+export function textRangeOf(
+  root: HTMLElement,
+  start: number,
+  end: number,
+  forwardStart = false,
+) {
   const length = root.textContent?.length || 0;
   start = Math.max(0, Math.min(length, start));
   end = Math.max(start, Math.min(length, end));
@@ -43,7 +48,10 @@ export function textRangeOf(root: HTMLElement, start: number, end: number) {
     endOffset = 0;
   while (node) {
     const len = node.textContent?.length || 0;
-    if (!startNode && start <= pos + len) {
+    if (
+      !startNode &&
+      (start < pos + len || (!forwardStart && start === pos + len))
+    ) {
       startNode = node;
       startOffset = start - pos;
     }
@@ -64,6 +72,15 @@ export function textRangeOf(root: HTMLElement, start: number, end: number) {
   );
   range.setEnd(endNode, endOffset);
   return range;
+}
+
+export function rangeOffsets(root: HTMLElement, range: Range) {
+  const prefix = document.createRange();
+  prefix.selectNodeContents(root);
+  prefix.setEnd(range.startContainer, range.startOffset);
+  const start = prefix.toString().length;
+  prefix.setEnd(range.endContainer, range.endOffset);
+  return { start, end: prefix.toString().length };
 }
 
 // Resolve selections whose boundaries can be the editing host itself (Ctrl+A).

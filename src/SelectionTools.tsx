@@ -14,6 +14,7 @@ import type { Kind, Line } from "./flow";
 import { changeMarkdownKind, markMarkdown, validLink } from "./formatting";
 import type { TextMark } from "./formatting";
 import { ColorControl } from "./ColorControl";
+import { rangeOffsets, textRangeOf } from "./editorDom";
 import {
   colorMarkdown,
   colorRichRange,
@@ -33,6 +34,7 @@ type Target =
   | {
       type: "md";
       element: HTMLTextAreaElement;
+      source: string;
       start: number;
       end: number;
       ids: string[];
@@ -43,6 +45,7 @@ type Target =
       type: "rich";
       element: HTMLElement;
       range: Range;
+      offsets: { start: number; end: number };
       ids: string[];
       x: number;
       y: number;
@@ -100,6 +103,7 @@ export function SelectionTools({
         next = {
           type: "md",
           element: active,
+          source: active.value,
           start,
           end,
           ids: refs.current.lines.slice(first, last + 1).map((l) => l.id),
@@ -145,6 +149,10 @@ export function SelectionTools({
               type: "rich",
               element: el.closest<HTMLElement>(".simple-editor") || el,
               range: range.cloneRange(),
+              offsets: rangeOffsets(
+                el.closest<HTMLElement>(".simple-editor") || el,
+                range,
+              ),
               ids,
               x: rect.x + rect.width / 2,
               y: rect.y,
@@ -197,12 +205,24 @@ export function SelectionTools({
     const t = saved.current;
     if (!t) return;
     if (t.type === "md") {
-      const result = colorMarkdown(t.element.value, t.start, t.end, hex);
-      saved.current = { ...t, start: result.start, end: result.end };
+      const result = colorMarkdown(t.source, t.start, t.end, hex);
+      saved.current = {
+        ...t,
+        source: result.source,
+        start: result.start,
+        end: result.end,
+      };
       if (result.source !== t.element.value)
         onSource(result.source, result.start, result.end, false);
     } else {
-      const result = colorRichRange(t.element, t.range, hex);
+      const range = textRangeOf(
+        t.element,
+        t.offsets.start,
+        t.offsets.end,
+        true,
+      );
+      if (!range) return;
+      const result = colorRichRange(t.element, range, hex);
       if (!result) return;
       saved.current = { ...t, range: result.range };
       if (t.element.classList.contains("simple-editor")) onRichChange?.();
@@ -228,9 +248,16 @@ export function SelectionTools({
       sourceAction(markMarkdown(t.element.value, t.start, t.end, mark, link));
     else {
       t.element.focus({ preventScroll: true });
+      const range = textRangeOf(
+        t.element,
+        t.offsets.start,
+        t.offsets.end,
+        true,
+      );
+      if (!range) return;
       const selection = window.getSelection();
       selection?.removeAllRanges();
-      selection?.addRange(t.range);
+      selection?.addRange(range);
       document.execCommand(
         (
           {
@@ -340,10 +367,17 @@ export function SelectionTools({
                 t.element.focus({ preventScroll: true });
                 if (t.type === "md")
                   t.element.setSelectionRange(t.start, t.end);
-                else if (t.range.startContainer.isConnected) {
+                else {
+                  const range = textRangeOf(
+                    t.element,
+                    t.offsets.start,
+                    t.offsets.end,
+                    true,
+                  );
+                  if (!range) return;
                   const selection = getSelection();
                   selection?.removeAllRanges();
-                  selection?.addRange(t.range);
+                  selection?.addRange(range);
                 }
               }
             }}

@@ -102,7 +102,7 @@
   border-color: #4e4a42;
 }
 .studio.is-dark
-  :is(
+  :where(
     .app-header,
     .editor-panel,
     .library-panel,
@@ -118,12 +118,12 @@
     .mobile-nav,
     .free-mobile-nav
   )
-  button:not(.primary):not(.color-trigger):not(.icon-button) {
+  button:where(:not(.primary):not(.color-trigger):not(.icon-button)) {
   background-color: var(--control-bg, #302f2b);
   color: #ded8cd;
   border-color: var(--control-border, #4c4942);
 }
-.studio.is-dark :is(.mode-tabs, .free-library-tabs, .library-tabs) {
+.studio.is-dark .mode-tabs {
   background: #34322c;
   border-color: #45433b;
 }
@@ -354,4 +354,79 @@ html[data-theme="dark"] .crest-library-link {
 }
 .studio.is-dark .edit-field:not(:hover):not(.hovered):not(.active) {
   outline-color: transparent;
+}
+
+/* Neutral controls retain the same resting visibility as the day interface. */
+.studio.is-dark :is(.document-name, .doc-name-wrap input) {
+  background: transparent;
+  border-color: transparent;
+}
+.studio.is-dark :is(.free-library-tabs, .library-tabs) {
+  background: transparent;
+  border-color: #45443e;
+}
+.studio.is-dark :is(.free-library-tabs button, .library-tabs button) {
+  background: transparent;
+  border-color: transparent;
+}
+.studio.is-dark
+  :is(
+    .free-library-tabs button[aria-pressed="true"],
+    .library-tabs button[aria-selected="true"]
+  ) {
+  background: transparent;
+  border-bottom-color: #c18b6d;
+  color: #e5bb9f;
+}
+.studio.is-dark
+  :is(
+    .free-toolbar button,
+    .source-toolbar button,
+    .zoom-control button,
+    .history-buttons button,
+    .free-object-list button,
+    .header-actions .icon-button
+  ) {
+  background: transparent;
+  border-color: transparent;
+}
+.studio.is-dark
+  :is(
+    .free-toolbar button,
+    .source-toolbar button,
+    .zoom-control button,
+    .header-actions .icon-button
+  ):hover:not(:disabled) {
+  background: #ffffff0c;
+  border-color: transparent;
+}
+.studio.is-dark
+  :is(.free-toolbar button, .source-toolbar button)[aria-pressed="true"] {
+  background: #3a3933;
+  color: #edc4a7;
+  border-color: transparent;
+}
+.studio.is-dark .free-icons button {
+  background: transparent;
+  border-color: transparent;
+}
+.studio.is-dark .free-icons button:hover {
+  background: #ffffff0b;
+  border-color: transparent;
+}
+.studio.is-dark .contact-popover :is(strong, small) {
+  color: inherit;
+}
+.studio.is-dark .contact-popover > a:hover {
+  background: #ffffff09;
+}
+.studio.is-dark .font-label {
+  color: #b3aca1;
+}
+.studio.is-dark .mode-tabs button:not([aria-selected="true"]):hover {
+  background: #ffffff0b;
+  border-color: transparent;
+}
+.studio.is-dark .free-upload-primary:hover {
+  background: #594234 !important;
 }

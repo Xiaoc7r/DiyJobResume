@@ -14,8 +14,8 @@ test("zoom and grid changes reuse the canvas model and vector DOM; QQ is a pengu
   const names = await page
     .locator(".free-icons button")
     .evaluateAll((nodes) => nodes.map((el) => el.getAttribute("aria-label")));
-  expect(names[10]).toBe("插入作品集图标");
-  expect(names.at(-1)).toBe("插入Gitee图标");
+  expect(names[9]).toBe("插入Gitee图标");
+  expect(names.at(-1)).toBe("插入作品集图标");
   await page.evaluate(() => {
     const win = window as any;
     win.previewCounters = { clones: 0, serializations: 0, layerWrites: 0 };
@@ -61,9 +61,9 @@ test("zoom and grid changes reuse the canvas model and vector DOM; QQ is a pengu
   await page.getByRole("button", { name: "插入QQ图标", exact: true }).click();
   await page.getByRole("button", { name: /^画布元素/ }).click();
   await expect(page.locator(".free-object-name").first()).toHaveText("QQ");
-  await expect(page.locator(".free-front-scene ellipse")).toHaveCount(5);
+  await expect(page.locator(".free-front-scene ellipse")).toHaveCount(2);
   await page.getByRole("tab", { name: "Markdown", exact: true }).click();
-  await expect(page.locator(".free-layer-foreground ellipse")).toHaveCount(5);
+  await expect(page.locator(".free-layer-foreground ellipse")).toHaveCount(2);
 });
 
 test("theme reveal retains clipped scrolled sheets in every mode without promoting paper snapshots", async ({
