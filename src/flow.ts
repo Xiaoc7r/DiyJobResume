@@ -39,6 +39,10 @@ export interface Line {
   order?: number;
 }
 export interface Picture {
+  background?: string;
+  hidden?: boolean;
+  locked?: boolean;
+  angle?: number;
   anchor?: string;
   id: string;
   src: string;
@@ -581,10 +585,16 @@ export function readResume(raw: unknown): Resume {
         : {}),
       src: p.src,
       label: str(p.label, "图片"),
-      x: numeric(p.x, 42, 0, 700),
-      y: numeric(p.y, 36, 0, 1000),
-      w: numeric(p.w, 72, 1, 300),
-      h: numeric(p.h, 72, 1, 300),
+      x: numeric(p.x, 42, -5000, 5000),
+      y: numeric(p.y, 36, -5000, 5000),
+      w: numeric(p.w, 72, 1, 5000),
+      h: numeric(p.h, 72, 1, 5000),
+      ...(p.angle ? { angle: numeric(p.angle, 0, -360, 360) } : {}),
+      ...(p.hidden ? { hidden: true } : {}),
+      ...(p.locked ? { locked: true } : {}),
+      ...(p.background === "transparent" || /^#[a-f\d]{6}$/i.test(p.background)
+        ? { background: p.background }
+        : {}),
       page: Math.floor(numeric(p.page, 0, 0, 500)),
     }));
   if (r.templateStyle !== undefined)

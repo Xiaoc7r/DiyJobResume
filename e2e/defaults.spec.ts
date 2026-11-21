@@ -99,6 +99,7 @@ test("the QAQ example keeps its extended paper and six elements through all nine
     await expect(page.locator(".free-source-paper")).toBeVisible();
     await page.getByRole("button", { name: /^画布元素/ }).click();
     await expect(page.locator(".free-object-name")).toHaveText([
+      name === "紫横" ? "校徽白底" : "校徽透明底",
       "标题色带",
       "标题色带",
       "链接",

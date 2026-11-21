@@ -85,7 +85,7 @@ test("new skins keep the sample on one page with identical 29px headings and ali
     await expect(
       page.getByRole("button", { name: "插入QQ图标", exact: true }),
     ).toBeEnabled();
-    await expect(page.locator(".free-front-scene svg image")).toHaveCount(3);
+    await expect(page.locator(".free-front-scene svg image")).toHaveCount(4);
     await compare();
     await page.getByRole("tab", { name: "Markdown", exact: true }).click();
     await expect(page.locator(".paper-workspace .resume-paper")).toHaveCount(1);
