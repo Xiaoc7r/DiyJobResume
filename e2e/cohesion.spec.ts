@@ -153,7 +153,7 @@ test("Markdown gutter, dark interface and side-panel bookmarks work in every mod
     "添加自定义板块",
   );
   await page.getByRole("tab", { name: "自由模式", exact: true }).click();
-  await expect(page.locator(".free-icons button")).toHaveCount(20);
+  await expect(page.locator(".free-icons button")).toHaveCount(16);
   await expect(page.locator(".free-upload-primary")).toBeVisible();
   await page.getByRole("button", { name: "排版助手", exact: true }).click();
   await expect(page.locator(".free-studio .agent-panel")).toBeVisible();

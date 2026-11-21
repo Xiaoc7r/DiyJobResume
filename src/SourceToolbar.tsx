@@ -118,17 +118,20 @@ export function SourceToolbar({
           step={0.05}
           onChange={(lineHeight) => onChange({ lineHeight })}
         />
-        <select
-          aria-label="简历字体"
-          value={value.font}
-          onChange={(event) =>
-            onChange({ font: event.target.value as Settings["font"] })
-          }
-        >
-          <option value="sans">思源黑体</option>
-          <option value="serif">思源宋体</option>
-          <option value="nunito">Nunito</option>
-        </select>
+        <label className="font-label">
+          字体
+          <select
+            aria-label="简历字体"
+            value={value.font}
+            onChange={(event) =>
+              onChange({ font: event.target.value as Settings["font"] })
+            }
+          >
+            <option value="sans">思源黑体</option>
+            <option value="serif">思源宋体</option>
+            <option value="nunito">Nunito</option>
+          </select>
+        </label>
       </div>
     </div>
   );

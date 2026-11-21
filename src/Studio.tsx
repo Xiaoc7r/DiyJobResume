@@ -87,6 +87,7 @@ import {
 } from "./canvasBindingModel";
 import { PreviewZoom } from "./PreviewZoom";
 import { ImageUploadDialog } from "./ImageUploadDialog";
+import { XiaohongshuIcon } from "./BrandIcons";
 import { FreeLoading } from "./FreeLoading";
 import { useHelpBeacon } from "./useHelpBeacon";
 
@@ -2368,7 +2369,24 @@ export default function Studio() {
             {contactOpen && (
               <div className="contact-popover">
                 <span>联系炒肉多</span>
-                <a href="mailto:xxiaocr@gmail.com">xxiaocr@gmail.com</a>
+                <a href="mailto:xxiaocr@gmail.com">
+                  <Mail size={18} />
+                  <div>
+                    <strong>邮箱</strong>
+                    <small>xxiaocr@gmail.com</small>
+                  </div>
+                </a>
+                <a
+                  href="https://www.xiaohongshu.com/search_result?keyword=%E7%82%92%E8%82%89%E5%A4%9A"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <XiaohongshuIcon size={20} />
+                  <div>
+                    <strong>小红书</strong>
+                    <small>搜索「炒肉多」</small>
+                  </div>
+                </a>
               </div>
             )}
           </div>

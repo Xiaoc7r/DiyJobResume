@@ -3,6 +3,7 @@ import type { CSSProperties, PointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { Check, Pipette, RotateCcw, X } from "lucide-react";
 import { hexToHsv, hsvToHex, normalizeHex } from "./color";
+import { CanvasColorSampler } from "./CanvasColorSampler";
 const colors = [
   ["墨黑", "#202124"],
   ["石墨", "#475569"],
@@ -42,7 +43,6 @@ export function ColorControl({
   notify.current = onOpenChange;
   const [open, setOpen] = useState(false),
     [picking, setPicking] = useState(false),
-    [sampling, setSampling] = useState(false),
     [error, setError] = useState("");
   const [draft, setDraft] = useState(value),
     [hsv, setHsv] = useState(() => hexToHsv(value)),
@@ -59,7 +59,6 @@ export function ColorControl({
     active.current = false;
     session.current++;
     setPicking(false);
-    setSampling(false);
   };
   const close = () => {
     cancel();
@@ -115,70 +114,6 @@ export function ColorControl({
       window.removeEventListener("keydown", key, true);
     };
   }, [open]);
-  useEffect(() => {
-    if (!picking) return;
-    const id = session.current,
-      cache = new Map<HTMLElement, Promise<HTMLCanvasElement>>();
-    document.body.classList.add("color-picking");
-    const capture = (paper: HTMLElement) => {
-      let pending = cache.get(paper);
-      if (!pending) {
-        pending = import("./domExport").then((m) =>
-          m.captureColorSurface(paper),
-        );
-        cache.set(paper, pending);
-      }
-      return pending;
-    };
-    const pick = async (e: globalThis.PointerEvent) => {
-      const paper = (e.target as Element).closest<HTMLElement>(
-        ".paper-workspace .resume-paper",
-      );
-      if (!paper || !active.current) return;
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      const rect = paper.getBoundingClientRect(),
-        x = (e.clientX - rect.left) / rect.width,
-        y = (e.clientY - rect.top) / rect.height;
-      setSampling(true);
-      try {
-        const canvas = await capture(paper);
-        if (!active.current || session.current !== id) return;
-        const pixel = canvas
-          .getContext("2d")!
-          .getImageData(
-            Math.max(
-              0,
-              Math.min(canvas.width - 1, Math.floor(x * canvas.width)),
-            ),
-            Math.max(
-              0,
-              Math.min(canvas.height - 1, Math.floor(y * canvas.height)),
-            ),
-            1,
-            1,
-          ).data;
-        apply.current(
-          "#" +
-            [...pixel]
-              .slice(0, 3)
-              .map((n) => n.toString(16).padStart(2, "0"))
-              .join(""),
-        );
-        cancel();
-      } catch {
-        if (session.current === id) {
-          cancel();
-          setError("取色未完成，请重试。");
-        }
-      }
-    };
-    window.addEventListener("pointerdown", pick, true);
-    return () => {
-      document.body.classList.remove("color-picking");
-      window.removeEventListener("pointerdown", pick, true);
-    };
-  }, [picking]);
   const changeHsv = (next: typeof hsv) => {
     setHsv(next);
     onChange(hsvToHex(next.h, next.s, next.v));
@@ -203,6 +138,18 @@ export function ColorControl({
   };
   return (
     <div className="color-control">
+      {picking && (
+        <CanvasColorSampler
+          onPick={(hex) => {
+            apply.current(hex);
+            cancel();
+          }}
+          onError={() => {
+            cancel();
+            setError("取色未完成，请重试。");
+          }}
+        />
+      )}
       <span>{label}</span>
       <button
         ref={button}
@@ -370,9 +317,7 @@ export function ColorControl({
                 <RotateCcw size={15} />
               </button>
             </footer>
-            {(error || sampling) && (
-              <small role="status">{sampling ? "取色中…" : error}</small>
-            )}
+            {error && <small role="status">{error}</small>}
           </div>,
           document.body,
         )}

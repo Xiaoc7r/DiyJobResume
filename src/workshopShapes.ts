@@ -1,4 +1,41 @@
-import { Rect, Ellipse, Polygon, Path, Line } from "fabric";
+import { Rect, Circle, Triangle, Ellipse, Polygon, Path, Line } from "fabric";
+export function makeCanvasShape(
+  name: string,
+  color: string,
+  paperWidth: number,
+) {
+  const base = {
+    left: 60,
+    top: 80,
+    fill: "#edf2f7",
+    stroke: color,
+    strokeWidth: 1,
+  };
+  switch (name) {
+    case "矩形":
+      return new Rect({ ...base, width: 180, height: 80 });
+    case "圆形":
+      return new Circle({ ...base, radius: 45 });
+    case "三角形":
+      return new Triangle({ ...base, width: 100, height: 90 });
+    case "分隔线":
+      return new Line([0, 0, Math.min(360, paperWidth - 100), 0], {
+        ...base,
+        strokeWidth: 1.5,
+      });
+    case "标题色带":
+      return new Rect({
+        ...base,
+        width: Math.min(450, paperWidth - 100),
+        height: 35,
+        fill: color,
+        rx: 4,
+        ry: 4,
+      });
+    default:
+      return makeWorkshopShape(name, color);
+  }
+}
 export const workshopShapes = [
   "圆角矩形",
   "空心框",

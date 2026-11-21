@@ -29,6 +29,8 @@ import type { TextStyleDeclaration } from "fabric";
 import {
   Type,
   Square,
+  RectangleHorizontal,
+  Spline,
   Circle as CircleIcon,
   Minus,
   ImagePlus,
@@ -71,8 +73,6 @@ import {
   Globe,
   Code2,
   Link,
-  Star,
-  UserRound,
   ArrowRight,
   Pencil,
   PanelLeft,
@@ -83,7 +83,11 @@ import {
   FolderOpen,
 } from "lucide-react";
 import { GiteeIcon, DouyinIcon, QQIcon } from "./BrandIcons";
-import { makeWorkshopShape, workshopShapes } from "./workshopShapes";
+import {
+  makeWorkshopShape,
+  workshopShapes,
+  makeCanvasShape,
+} from "./workshopShapes";
 import { NumericInput } from "./interaction";
 import { FreeLoading } from "./FreeLoading";
 import { PreviewZoom } from "./PreviewZoom";
@@ -183,24 +187,20 @@ const base = {
 const iconSet = {
   邮箱: Mail,
   电话: Phone,
-  GitHub: Github,
   教育: GraduationCap,
   工作: BriefcaseBusiness,
   奖项: Award,
-  位置: MapPin,
+  Base地: MapPin,
   网站: Globe,
-  技术: Code2,
   链接: Link,
-  作品集: FolderOpen,
-  星标: Star,
-  用户: UserRound,
-  箭头: ArrowRight,
+  GitHub: Github,
+  Gitee: GiteeIcon,
   微信: MessagesSquare,
   QQ: QQIcon,
-  Telegram: Send,
   LinkedIn: Linkedin,
+  Telegram: Send,
   抖音: DouyinIcon,
-  Gitee: GiteeIcon,
+  作品集: FolderOpen,
 };
 const cloneData = <T,>(data: T): T => structuredClone(data);
 const isText = (o?: FabricObject | null): o is Textbox => o instanceof IText;
@@ -831,7 +831,12 @@ export default function FreeStudio({
     const rootNode = document.createElement("div");
     const root = createRoot(rootNode);
     flushSync(() =>
-      root.render(<Icon size={28} color={doc.settings.accent} />),
+      root.render(
+        <Icon
+          size={28}
+          color={name === "QQ" ? "#171717" : doc.settings.accent}
+        />,
+      ),
     );
     const markup = rootNode.innerHTML;
     root.unmount();
@@ -1650,6 +1655,129 @@ export default function FreeStudio({
                 {!workshop && (
                   <>
                     <section>
+                      <h3>常用图标</h3>
+                      <div className="free-icons">
+                        {Object.entries(iconSet).map(([name, Icon]) => (
+                          <button
+                            key={name}
+                            title={name}
+                            aria-label={`插入${name}图标`}
+                            disabled={busy}
+                            onClick={() => {
+                              void insertIcon(
+                                name as keyof typeof iconSet,
+                              ).catch(() => setError("图标未能添加，请重试。"));
+                            }}
+                          >
+                            <Icon size={20} />
+                            <span>{name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </section>
+                  </>
+                )}
+                <section>
+                  <h3>图片与图形</h3>
+                  <div className="free-inserts">
+                    <button
+                      className="free-upload-primary"
+                      disabled={busy}
+                      onClick={() => imageInput.current?.click()}
+                    >
+                      <ImagePlus size={19} />
+                      <span>上传图片</span>
+                    </button>
+                    {[
+                      ["分隔线", Minus],
+                      ["矩形", Square],
+                      ["圆角矩形", RectangleHorizontal],
+                      ["圆形", CircleIcon],
+                      ["标题色带", RectangleHorizontal],
+                      ["虚线", Minus],
+                      ["箭头", ArrowRight],
+                      ["曲线", Spline],
+                      ["三角形", Shapes],
+                    ].map(([label, Icon]) => {
+                      const name = label as string,
+                        ShapeIcon = Icon as typeof Minus;
+                      return (
+                        <button
+                          key={name}
+                          disabled={busy}
+                          onClick={() =>
+                            add(
+                              [
+                                makeCanvasShape(
+                                  name,
+                                  doc.settings.accent,
+                                  page.width,
+                                ),
+                              ],
+                              name,
+                            )
+                          }
+                        >
+                          <ShapeIcon size={19} />
+                          <span>{name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+                {workshop && (
+                  <section>
+                    <h3>绘图工具</h3>
+                    <div className="free-inserts">
+                      <button
+                        onClick={() => setTool("draw")}
+                        aria-pressed={tool === "draw"}
+                      >
+                        <Pencil size={18} />
+                        画笔
+                      </button>
+                      <button onClick={() => setTool("select")}>
+                        <MousePointer2 size={18} />
+                        选择与移动
+                      </button>
+                      {workshopShapes
+                        .filter(
+                          (name) =>
+                            !["圆角矩形", "虚线", "箭头", "曲线"].includes(
+                              name,
+                            ),
+                        )
+                        .map((name) => (
+                          <button
+                            key={name}
+                            disabled={busy}
+                            onClick={() =>
+                              add(
+                                [makeWorkshopShape(name, doc.settings.accent)],
+                                name,
+                              )
+                            }
+                          >
+                            <Shapes size={18} />
+                            {name}
+                          </button>
+                        ))}
+                    </div>
+                    <label className="free-full-label">
+                      画笔粗细
+                      <NumericInput
+                        label="画笔粗细"
+                        value={brushWidth}
+                        min={1}
+                        max={60}
+                        onChange={setBrushWidth}
+                      />
+                    </label>
+                  </section>
+                )}
+                {!workshop && (
+                  <>
+                    <section>
                       <h3>文字与板块</h3>
                       <div className="free-inserts">
                         <button disabled={busy} onClick={() => insertText()}>
@@ -1681,197 +1809,8 @@ export default function FreeStudio({
                     </section>
                   </>
                 )}
-                <section>
-                  <h3>图片与图形</h3>
-                  <div className="free-inserts">
-                    <button
-                      className="free-upload-primary"
-                      disabled={busy}
-                      onClick={() => imageInput.current?.click()}
-                    >
-                      <ImagePlus size={19} />
-                      <span>上传图片</span>
-                    </button>
-                    <button
-                      disabled={busy}
-                      onClick={() =>
-                        add(
-                          [
-                            new Rect({
-                              ...base,
-                              left: 60,
-                              top: 80,
-                              width: 180,
-                              height: 80,
-                              fill: "#edf2f7",
-                              stroke: doc.settings.accent,
-                              strokeWidth: 1,
-                            }),
-                          ],
-                          "矩形",
-                        )
-                      }
-                    >
-                      <Square size={19} />
-                      <span>矩形</span>
-                    </button>
-                    <button
-                      disabled={busy}
-                      onClick={() =>
-                        add(
-                          [
-                            new Circle({
-                              ...base,
-                              left: 60,
-                              top: 80,
-                              radius: 42,
-                              fill: "#edf2f7",
-                              stroke: doc.settings.accent,
-                              strokeWidth: 1,
-                            }),
-                          ],
-                          "圆形",
-                        )
-                      }
-                    >
-                      <CircleIcon size={19} />
-                      <span>圆形</span>
-                    </button>
-                    <button
-                      disabled={busy}
-                      onClick={() =>
-                        add(
-                          [
-                            new Triangle({
-                              ...base,
-                              left: 60,
-                              top: 80,
-                              width: 80,
-                              height: 70,
-                              fill: doc.settings.accent,
-                            }),
-                          ],
-                          "三角形",
-                        )
-                      }
-                    >
-                      <Shapes size={19} />
-                      <span>三角形</span>
-                    </button>
-                    <button
-                      disabled={busy}
-                      onClick={() =>
-                        add(
-                          [
-                            new FabricLine(
-                              [0, 0, Math.min(450, page.width - 100), 0],
-                              {
-                                ...base,
-                                left: 50,
-                                top: 100,
-                                stroke: doc.settings.accent,
-                                strokeWidth: 1,
-                              },
-                            ),
-                          ],
-                          "分隔线",
-                        )
-                      }
-                    >
-                      <Minus size={19} />
-                      <span>分隔线</span>
-                    </button>
-                    <button
-                      disabled={busy}
-                      onClick={() =>
-                        add(
-                          [
-                            new Rect({
-                              ...base,
-                              left: 50,
-                              top: 100,
-                              width: Math.min(450, page.width - 100),
-                              height: 35,
-                              fill: doc.settings.accent,
-                              rx: 4,
-                              ry: 4,
-                            }),
-                          ],
-                          "标题色带",
-                        )
-                      }
-                    >
-                      <Square size={19} fill="currentColor" />
-                      <span>标题色带</span>
-                    </button>
-                  </div>
-                </section>
-                {workshop && (
-                  <section>
-                    <h3>绘图工具</h3>
-                    <div className="free-inserts">
-                      <button
-                        onClick={() => setTool("draw")}
-                        aria-pressed={tool === "draw"}
-                      >
-                        <Pencil size={18} />
-                        画笔
-                      </button>
-                      <button onClick={() => setTool("select")}>
-                        <MousePointer2 size={18} />
-                        选择与移动
-                      </button>
-                      {workshopShapes.map((name) => (
-                        <button
-                          key={name}
-                          disabled={busy}
-                          onClick={() =>
-                            add(
-                              [makeWorkshopShape(name, doc.settings.accent)],
-                              name,
-                            )
-                          }
-                        >
-                          <Shapes size={18} />
-                          {name}
-                        </button>
-                      ))}
-                    </div>
-                    <label className="free-full-label">
-                      画笔粗细
-                      <NumericInput
-                        label="画笔粗细"
-                        value={brushWidth}
-                        min={1}
-                        max={60}
-                        onChange={setBrushWidth}
-                      />
-                    </label>
-                  </section>
-                )}
                 {!workshop && (
                   <>
-                    <section>
-                      <h3>常用图标</h3>
-                      <div className="free-icons">
-                        {Object.entries(iconSet).map(([name, Icon]) => (
-                          <button
-                            key={name}
-                            title={name}
-                            aria-label={`插入${name}图标`}
-                            disabled={busy}
-                            onClick={() => {
-                              void insertIcon(
-                                name as keyof typeof iconSet,
-                              ).catch(() => setError("图标未能添加，请重试。"));
-                            }}
-                          >
-                            <Icon size={20} />
-                            <span>{name}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </section>
                     <section>
                       <h3>表格</h3>
                       <div className="free-table-size">
@@ -2183,7 +2122,10 @@ export default function FreeStudio({
               网格
             </label>
             {toolbarAddon}
-            <Tool name="自由模式使用帮助" onClick={() => setHelp((v) => !v)}>
+            <Tool
+              name={workshop ? "模板制造使用帮助" : "自由模式使用帮助"}
+              onClick={() => setHelp((v) => !v)}
+            >
               <HelpCircle size={17} />
             </Tool>
             {onRestore && (
@@ -2215,16 +2157,28 @@ export default function FreeStudio({
         )}
         {help && (
           <div className="free-help">
-            <b>像排版软件一样操作</b>
-            <p>
-              双击文字直接输入；拖动边框移动，拖动控制点缩放或旋转。按住 Shift
-              点击可多选，也可从空白处框选。右侧可精确输入位置和尺寸。
-            </p>
-            <p>
-              Ctrl+Z 撤销 · Ctrl+D 复制 · Ctrl+G 组合 · Ctrl+Shift+G 解组 ·
-              方向键移动（Shift 加速） · Delete
-              删除。照片可上传后裁剪。自由模式不会因拖动元素自动生成空白页。
-            </p>
+            {workshop ? (
+              <>
+                <b>做一套自己的模板</b>
+                <p>
+                  亮色区域是个人信息和板块标题的设计空间。先在右侧调整区域高度、字号，再从左侧添加线条、图形或图片，也可以用画笔绘制。
+                </p>
+                <p>
+                  在任意一个板块标题旁创作，其他标题会同步展示效果。元素可以超出虚线；做好后点右侧顶部“保存模板”，它会出现在你的整套模板最前面，套用时保留简历内容。
+                </p>
+              </>
+            ) : (
+              <>
+                <b>自由摆放简历元素</b>
+                <p>
+                  单击选中元素；拖动中心或四角移动，拉动任意一条边调整宽高。右侧可以精确输入位置和尺寸，也能调整纸张大小。
+                </p>
+                <p>
+                  按住 Shift 点击可多选。Ctrl+Z 撤销，Ctrl+D 复制，Ctrl+G
+                  组合，Delete 删除；双击文字可直接修改。
+                </p>
+              </>
+            )}
             <button onClick={() => setHelp(false)}>知道了</button>
           </div>
         )}
