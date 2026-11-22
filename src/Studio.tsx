@@ -527,6 +527,18 @@ export default function Studio() {
     y: number;
   } | null>(null);
   const view = preview?.doc ?? doc;
+  const decoratedPages = useMemo(
+    () =>
+      view.freeform?.pages.map((page, index) =>
+        pageWithTemplateArt(view, page, index),
+      ),
+    [
+      view.freeform?.pages,
+      view.freeform?.templateArt,
+      view.template,
+      view.templateStyle?.id,
+    ],
+  );
   const templateArt = useTemplateArt(view.templateStyle);
   const designFor = useMemo(
     () => lineDesignResolver(view),
@@ -1992,7 +2004,7 @@ export default function Studio() {
         )}
         {view.freeform?.base === "flow" && !options.hideDecorations && (
           <FreeLayers
-            page={pageWithTemplateArt(view, view.freeform.pages[page], page)}
+            page={decoratedPages?.[page]}
             plane="background"
             ready={options.layers}
           />
@@ -2147,7 +2159,7 @@ export default function Studio() {
         ))}
         {view.freeform?.base === "flow" && !options.hideDecorations && (
           <FreeLayers
-            page={pageWithTemplateArt(view, view.freeform.pages[page], page)}
+            page={decoratedPages?.[page]}
             plane="foreground"
             ready={options.layers}
           />
