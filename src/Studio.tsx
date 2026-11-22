@@ -96,6 +96,7 @@ import {
   cloneResume,
   loadLibrary,
   saveLibrary,
+  LibraryConflictError,
   uniqueName,
 } from "./docs";
 import type { DocEntry } from "./docs";
@@ -103,7 +104,6 @@ import { CustomCss, compileCustomCss } from "./CustomCss";
 import { checkContent, checkRendered } from "./productTools";
 import type { ExportIssue } from "./productTools";
 import { ExportReview } from "./ExportReview";
-import { AgentPanel } from "./AgentPanel";
 import type { FreeStudioApi } from "./FreeStudio";
 import type { FreeDocument, SourceDesign } from "./freeform";
 import {
@@ -125,6 +125,9 @@ const ProductTour = lazy(() =>
   import("./ProductTour").then((module) => ({ default: module.ProductTour })),
 );
 const FreeStudio = lazy(() => import("./FreeStudio"));
+const AgentPanel = lazy(() =>
+  import("./AgentPanel").then((module) => ({ default: module.AgentPanel })),
+);
 const TemplateMaker = lazy(() =>
   import("./TemplateMaker").then((module) => ({
     default: module.TemplateMaker,
@@ -771,20 +774,27 @@ export default function Studio() {
     const current = ref.current,
       name = current.name.trim() || "未命名简历",
       id = activeIdRef.current;
-    const items = docsRef.current.map((item) =>
-      item.id === id
-        ? { ...item, name, updatedAt: Date.now(), doc: current }
-        : item,
-    );
+    const existing = docsRef.current.find((item) => item.id === id);
+    const items =
+      existing?.doc === current && existing.name === name
+        ? docsRef.current
+        : docsRef.current.map((item) =>
+            item.id === id
+              ? { ...item, name, updatedAt: Date.now(), doc: current }
+              : item,
+          );
     docsRef.current = items;
     setDocs(items);
     try {
-      saveLibrary({ activeId: id, items });
+      const saved = saveLibrary({ activeId: id, items });
+      docsRef.current = saved.items;
+      setDocs(saved.items);
       setSaved("已保存到本机");
-    } catch {
+    } catch (error) {
       setSaved("保存失败，请下载备份");
+      if (error instanceof LibraryConflictError) setNotice(error.message);
     }
-    return items;
+    return docsRef.current;
   };
   useEffect(() => {
     setSaved("保存中…");
@@ -806,10 +816,16 @@ export default function Studio() {
   // 换到某一份：撤销栈、预览、选中都按文档隔离，避免跨文档撤销
   const activate = (entry: DocEntry, items: DocEntry[]) => {
     try {
-      saveLibrary({ activeId: entry.id, items });
-    } catch {
+      const saved = saveLibrary({ activeId: entry.id, items });
+      items = saved.items;
+      entry = items.find((item) => item.id === entry.id)!;
+    } catch (error) {
       setSaved("保存失败，请下载备份");
-      setNotice("无法保存，未切换或删除简历。请先下载备份。");
+      setNotice(
+        error instanceof LibraryConflictError
+          ? error.message
+          : "无法保存，未切换或删除简历。请先下载备份。",
+      );
       return false;
     }
     setMode(entry.doc.freeform && mode === "free" ? "free" : "simple");
@@ -1802,8 +1818,6 @@ export default function Studio() {
     if (preview?.key === key || pinnedPreview.current) return;
     // 别的预览（模板/模块）接管画面时，让助手的接受/不接受按钮失效，避免误报“已放弃”
     agentPreviewApi.current = null;
-    // 别的预览（模板/模块）接管画面时，让助手的接受/不接受按钮失效，避免误报“已放弃”
-    agentPreviewApi.current = null;
     if (previewScroll.current === null)
       previewScroll.current = workspace.current?.scrollTop ?? 0;
     previewReveal.current = true;
@@ -2197,44 +2211,52 @@ export default function Studio() {
       style={{ width: rightWidth, minWidth: rightWidth }}
       aria-label="排版助手"
     >
-      <AgentPanel
-        key={activeId}
-        docked
-        doc={doc}
-        docId={activeId}
-        pageCount={pages.length}
-        onApply={(next, base) => {
-          if (activeIdRef.current !== activeId || ref.current !== base)
-            return false;
-          historyUpdate(next);
-          return true;
-        }}
-        onPreview={(next) => {
-          if (activeIdRef.current !== activeId) return;
-          pinnedPreview.current = false;
-          previewScroll.current = workspace.current?.scrollTop ?? 0;
-          previewReveal.current = false;
-          setPreview({
-            key: "agent",
-            doc: next,
-            ids: [],
-            label: "排版助手建议",
-            kind: "agent",
-          });
-        }}
-        onClearPreview={() => {
-          agentPreviewApi.current = null;
-          setPreview(null);
-          previewScroll.current = null;
-        }}
-        registerPreviewApi={registerAgentPreview}
-        onClose={() => {
-          agentPreviewApi.current = null;
-          setPreview(null);
-          setAgentOpen(false);
-          setLibraryOpen(true);
-        }}
-      />
+      <Suspense
+        fallback={
+          <div role="status" className="agent-panel">
+            载入中…
+          </div>
+        }
+      >
+        <AgentPanel
+          key={activeId}
+          docked
+          doc={doc}
+          docId={activeId}
+          pageCount={pages.length}
+          onApply={(next, base) => {
+            if (activeIdRef.current !== activeId || ref.current !== base)
+              return false;
+            historyUpdate(next);
+            return true;
+          }}
+          onPreview={(next) => {
+            if (activeIdRef.current !== activeId) return;
+            pinnedPreview.current = false;
+            previewScroll.current = workspace.current?.scrollTop ?? 0;
+            previewReveal.current = false;
+            setPreview({
+              key: "agent",
+              doc: next,
+              ids: [],
+              label: "排版助手建议",
+              kind: "agent",
+            });
+          }}
+          onClearPreview={() => {
+            agentPreviewApi.current = null;
+            setPreview(null);
+            previewScroll.current = null;
+          }}
+          registerPreviewApi={registerAgentPreview}
+          onClose={() => {
+            agentPreviewApi.current = null;
+            setPreview(null);
+            setAgentOpen(false);
+            setLibraryOpen(true);
+          }}
+        />
+      </Suspense>
     </aside>
   );
   return (

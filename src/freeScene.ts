@@ -21,6 +21,24 @@ FabricObject.customProperties = [
   "interactive",
 ];
 
+// A failed image decode must not leave the other successful clones allocated.
+export async function cloneSceneObjects<T extends FabricObject>(
+  objects: T[],
+): Promise<T[]> {
+  const results = await Promise.allSettled(
+    objects.map((object) => object.clone()),
+  );
+  const copies = results.flatMap((result) =>
+    result.status === "fulfilled" ? [result.value as T] : [],
+  );
+  const failure = results.find((result) => result.status === "rejected");
+  if (failure?.status === "rejected") {
+    copies.forEach((object) => object.dispose());
+    throw failure.reason;
+  }
+  return copies;
+}
+
 const cachedSvg = boundedAsyncCache<string>(
   30,
   16_000_000,

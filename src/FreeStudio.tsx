@@ -91,7 +91,7 @@ import {
 import { NumericInput } from "./interaction";
 import { FreeLoading } from "./FreeLoading";
 import { PreviewZoom } from "./PreviewZoom";
-import "./freeScene";
+import { cloneSceneObjects } from "./freeScene";
 import { SourceInspector } from "./SourceInspector";
 import type { SourceSelection } from "./SourceInspector";
 import type { SourceDesign } from "./freeform";
@@ -100,7 +100,7 @@ import { blankFreePage, freeText } from "./freeform";
 import type { FreeDocument, FreePage } from "./freeform";
 import type { Resume } from "./flow";
 import "./free-studio.css";
-import { DetailRenderer, sceneLayers, setSvgContent } from "./scenePreview";
+import { DetailRenderer, SceneLayerCache, setSvgContent } from "./scenePreview";
 import {
   CanvasBindings,
   setPictureClip,
@@ -308,6 +308,18 @@ export default function FreeStudio({
     } | null>(null);
   const emitted = useRef(doc.freeform);
   const loadAbort = useRef<AbortController | null>(null);
+  const layerCache = useRef(new SceneLayerCache());
+  const copyRequest = useRef(0);
+  const pageTask = () => {
+    const controller = loadAbort.current,
+      canvas = scene.current;
+    return () =>
+      alive.current &&
+      !loading.current &&
+      scene.current === canvas &&
+      loadAbort.current === controller &&
+      !controller?.signal.aborted;
+  };
   const publish = (data: FreeDocument, transient = false) => {
     const next = cloneData(data);
     emitted.current = next;
@@ -483,8 +495,10 @@ export default function FreeStudio({
     const c = scene.current;
     if (!c) return;
     loadAbort.current?.abort();
+    bindings.current.cancel();
     const controller = new AbortController();
     loadAbort.current = controller;
+    layerCache.current.invalidate();
     loading.current = true;
     setBusy(true);
     c.discardActiveObject();
@@ -555,6 +569,7 @@ export default function FreeStudio({
     const c = scene.current;
     if (!c || loading.current) return;
     action(c);
+    layerCache.current.invalidate();
     c.getObjects().forEach((o) => o.setCoords());
     c.requestRenderAll();
     commit();
@@ -686,26 +701,51 @@ export default function FreeStudio({
   const copy = async (duplicate = false) => {
     const c = scene.current;
     const objects = (c?.getActiveObjects() as Item[]) || [];
-    if (!objects.length) return;
+    if (!objects.length || loading.current) return;
+    const current = pageTask(),
+      request = ++copyRequest.current;
     // ActiveSelection children use group-relative coordinates. Restore page coordinates first.
     const multiple = objects.length > 1;
     if (multiple) c!.discardActiveObject();
-    clipboard.current = await Promise.all(
-      objects.map((o) => o.clone() as Promise<Item>),
-    );
-    if (!alive.current) return;
-    if (multiple) {
-      c!.setActiveObject(new ActiveSelection(objects, { ...base, canvas: c! }));
-      c!.requestRenderAll();
+    try {
+      const copies = await cloneSceneObjects(objects);
+      if (!alive.current || request !== copyRequest.current) {
+        copies.forEach((object) => object.dispose());
+        return;
+      }
+      clipboard.current.forEach((object) => object.dispose());
+      clipboard.current = copies;
+      if (duplicate && current()) await paste();
+    } catch {
+      if (current()) setError("复制未完成，请重新选择元素后重试。");
+    } finally {
+      if (
+        multiple &&
+        request === copyRequest.current &&
+        current() &&
+        !c!.getActiveObject()
+      ) {
+        c!.setActiveObject(
+          new ActiveSelection(objects, { ...base, canvas: c! }),
+        );
+        c!.requestRenderAll();
+      }
     }
-    if (duplicate) await paste();
   };
   const paste = async () => {
     if (!clipboard.current.length || loading.current) return;
-    const objects = await Promise.all(
-      clipboard.current.map((o) => o.clone() as Promise<Item>),
-    );
-    if (!alive.current) return;
+    const current = pageTask();
+    let objects: Item[];
+    try {
+      objects = await cloneSceneObjects(clipboard.current);
+    } catch {
+      if (current()) setError("粘贴未完成，请重新复制后重试。");
+      return;
+    }
+    if (!current()) {
+      objects.forEach((object) => object.dispose());
+      return;
+    }
     objects.forEach((o) =>
       o.set({
         left: o.left + 16,
@@ -825,6 +865,7 @@ export default function FreeStudio({
       });
     });
   const insertIcon = async (name: keyof typeof iconSet) => {
+    const current = pageTask();
     // Lucide nodes are static application assets, never user-provided SVG markup.
     const Icon = iconSet[name];
     const { createRoot } = await import("react-dom/client");
@@ -841,6 +882,10 @@ export default function FreeStudio({
     const markup = rootNode.innerHTML;
     root.unmount();
     const result = await loadSVGFromString(markup);
+    if (!current()) {
+      result.objects.forEach((object) => object?.dispose());
+      return;
+    }
     const object = util.groupSVGElements(
       result.objects.filter((o): o is FabricObject => !!o),
       result.options,
@@ -850,6 +895,7 @@ export default function FreeStudio({
     add([object], name);
   };
   const uploadImage = async (file: File) => {
+    const current = pageTask();
     if (
       !["image/png", "image/jpeg", "image/webp"].includes(file.type) ||
       file.size > 15000000
@@ -865,24 +911,31 @@ export default function FreeStudio({
         reader.readAsDataURL(file);
       });
       const img = await FabricImage.fromURL(src);
+      if (!current()) {
+        img.dispose();
+        return;
+      }
       const el = img.getElement() as HTMLImageElement;
       const out = document.createElement("canvas"),
         ratio = Math.min(1, 1400 / Math.max(img.width, img.height));
       out.width = img.width * ratio;
       out.height = img.height * ratio;
       out.getContext("2d")!.drawImage(el, 0, 0, out.width, out.height);
-      const optimized = await FabricImage.fromURL(
-        out.toDataURL(
-          file.type === "image/png" ? "image/png" : "image/jpeg",
-          0.88,
-        ),
+      const optimizedSrc = out.toDataURL(
+        file.type === "image/png" ? "image/png" : "image/jpeg",
+        0.88,
       );
-      if (!alive.current) return;
+      img.dispose();
+      const optimized = await FabricImage.fromURL(optimizedSrc);
+      if (!current()) {
+        optimized.dispose();
+        return;
+      }
       optimized.set({ ...base, left: 60, top: 80 });
       optimized.scaleToWidth(Math.min(180, optimized.width));
       add([optimized], file.name);
     } catch {
-      setError("图片未能读取，请换一张图片。");
+      if (current()) setError("图片未能读取，请换一张图片。");
     }
   };
   const insertTable = () => {
@@ -1155,8 +1208,26 @@ export default function FreeStudio({
       enableRetinaScaling: true,
     });
     scene.current = c;
-    const modified = () => commitRef.current();
-    const select = () => updateRef.current();
+    const invalidate = () => layerCache.current.invalidate();
+    const modified = () => {
+      invalidate();
+      commitRef.current();
+    };
+    const select = () => {
+      // ActiveSelection temporarily changes child coordinates and group transforms.
+      invalidate();
+      updateRef.current();
+    };
+    for (const event of [
+      "object:added",
+      "object:removed",
+      "object:moving",
+      "object:scaling",
+      "object:rotating",
+      "object:skewing",
+      "text:changed",
+    ] as const)
+      c.on(event, invalidate);
     c.on("object:modified", modified);
     const hidden: Item[] = [];
     c.on("before:render", () => {
@@ -1179,7 +1250,7 @@ export default function FreeStudio({
         detailPreview.current?.parentElement?.hasAttribute("open")
       ) {
         const p = model.current.pages[activePage.current];
-        renderedLayers.current = sceneLayers(c.getObjects() as Item[], p);
+        renderedLayers.current = layerCache.current.read(c.getObjects(), p);
       }
       // Read detail viewport geometry before writing any SVG layer DOM.
       updateDetailPreview.current();
@@ -1319,6 +1390,9 @@ export default function FreeStudio({
     return () => {
       commitRef.current();
       alive.current = false;
+      loadAbort.current?.abort();
+      clipboard.current.forEach((object) => object.dispose());
+      clipboard.current = [];
       bindings.current.cancel();
       cancelAnimationFrame(liveFrame);
       clearTimeout(timer.current);

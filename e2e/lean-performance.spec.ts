@@ -18,7 +18,24 @@ test("zoom and grid changes reuse the canvas model and vector DOM; QQ is a pengu
   expect(names.at(-1)).toBe("插入作品集图标");
   await page.evaluate(() => {
     const win = window as any;
-    win.previewCounters = { clones: 0, serializations: 0, layerWrites: 0 };
+    win.previewCounters = {
+      clones: 0,
+      serializations: 0,
+      layerWrites: 0,
+      imageReads: 0,
+    };
+    const src = Object.getOwnPropertyDescriptor(
+      HTMLImageElement.prototype,
+      "src",
+    )!;
+    Object.defineProperty(HTMLImageElement.prototype, "src", {
+      ...src,
+      get() {
+        const value = src.get!.call(this) as string;
+        if (value.startsWith("data:image/")) win.previewCounters.imageReads++;
+        return value;
+      },
+    });
     const clone = structuredClone,
       stringify = JSON.stringify;
     window.structuredClone = ((value: any, ...args: any[]) => {
@@ -57,6 +74,7 @@ test("zoom and grid changes reuse the canvas model and vector DOM; QQ is a pengu
     clones: 0,
     serializations: 0,
     layerWrites: 0,
+    imageReads: 0,
   });
   await page.getByRole("button", { name: "插入QQ图标", exact: true }).click();
   await page.getByRole("button", { name: /^画布元素/ }).click();

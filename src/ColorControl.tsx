@@ -36,7 +36,6 @@ export function ColorControl({
   const button = useRef<HTMLButtonElement>(null),
     panel = useRef<HTMLDivElement>(null),
     active = useRef(false),
-    session = useRef(0),
     apply = useRef(onChange);
   apply.current = onChange;
   const notify = useRef(onOpenChange);
@@ -57,7 +56,6 @@ export function ColorControl({
   }, [value]);
   const cancel = () => {
     active.current = false;
-    session.current++;
     setPicking(false);
   };
   const close = () => {
@@ -85,9 +83,11 @@ export function ColorControl({
   }, [open]);
   useEffect(() => {
     if (!open) return;
-    const outside = (e: globalThis.PointerEvent) => {
+    const outside = (e: Event) => {
       if (
-        !active.current &&
+        (!active.current ||
+          (e.target instanceof Element &&
+            e.target.closest(".color-trigger"))) &&
         !panel.current?.contains(e.target as Node) &&
         !button.current?.contains(e.target as Node)
       )
@@ -105,12 +105,13 @@ export function ColorControl({
       }
     };
     document.addEventListener("pointerdown", outside);
+    document.addEventListener("focusin", outside);
     window.addEventListener("keydown", key, true);
     return () => {
-      session.current++;
       active.current = false;
       document.body.classList.remove("color-picking");
       document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("focusin", outside);
       window.removeEventListener("keydown", key, true);
     };
   }, [open]);
@@ -298,7 +299,6 @@ export function ColorControl({
                 onClick={() => {
                   if (active.current) cancel();
                   else {
-                    session.current++;
                     active.current = true;
                     setError("");
                     setPicking(true);

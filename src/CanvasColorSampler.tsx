@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { boundedAsyncCache } from "./boundedCache";
 
 export function CanvasColorSampler({
   onPick,
@@ -16,20 +17,26 @@ export function CanvasColorSampler({
   useEffect(() => {
     let alive = true,
       frame = 0,
-      painting = false;
+      painting = false,
+      picked = false;
     let pointer: { x: number; y: number; paper: HTMLElement } | null = null;
-    const cache = new Map<HTMLElement, Promise<HTMLCanvasElement>>();
+    const ids = new WeakMap<HTMLElement, string>();
+    let nextId = 0;
+    // Retain one surface at most; oversized custom sheets bypass the cache budget.
+    const cached = boundedAsyncCache<HTMLCanvasElement>(
+      1,
+      64_000_000,
+      (canvas) => canvas.width * canvas.height * 4,
+    );
     const target = (event: PointerEvent) =>
       (event.target as Element).closest<HTMLElement>(
         ".paper-workspace .resume-paper, .free-canvas-host",
       );
     const capture = (paper: HTMLElement) => {
-      if (!cache.has(paper))
-        cache.set(
-          paper,
-          import("./domExport").then((m) => m.captureColorSurface(paper)),
-        );
-      return cache.get(paper)!;
+      if (!ids.has(paper)) ids.set(paper, String(++nextId));
+      return cached(ids.get(paper)!, () =>
+        import("./domExport").then((m) => m.captureColorSurface(paper)),
+      );
     };
     const pixel = (
       canvas: HTMLCanvasElement,
@@ -93,9 +100,13 @@ export function CanvasColorSampler({
         lens.current!.style.transform = `translate(${Math.max(8, Math.min(innerWidth - 134, x + 22))}px,${Math.max(8, y + 170 > innerHeight ? y - 160 : y + 22)}px)`;
         lens.current!.hidden = false;
       } catch {
-        if (alive) callbacks.current.onError();
+        if (alive && pointer?.paper === paper) callbacks.current.onError();
       } finally {
         painting = false;
+        // Moving to another sheet while a capture is pending must update even if
+        // the pointer has stopped; the old capture never paints over the new target.
+        if (alive && pointer && pointer.paper !== paper && !frame)
+          frame = requestAnimationFrame(paint);
       }
     };
     const move = (event: PointerEvent) => {
@@ -112,6 +123,8 @@ export function CanvasColorSampler({
       if (!paper) return;
       event.preventDefault();
       event.stopImmediatePropagation();
+      if (picked) return;
+      picked = true;
       const x = event.clientX,
         y = event.clientY;
       try {
@@ -127,7 +140,6 @@ export function CanvasColorSampler({
     return () => {
       alive = false;
       cancelAnimationFrame(frame);
-      cache.clear();
       document.body.classList.remove("color-picking");
       window.removeEventListener("pointermove", move, true);
       window.removeEventListener("pointerdown", pick, true);

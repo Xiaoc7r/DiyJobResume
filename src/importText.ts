@@ -41,7 +41,10 @@ const COLON_SECTION = new RegExp(
 const END_PUNCT = /[。！？；;.!?：:)\]】」』”"]$/;
 
 const tidy = (value: string) =>
-  value.replace(/[\t\u3000]+/g, " ").replace(/ {2,}/g, "  ").trim();
+  value
+    .replace(/[\t\u3000]+/g, " ")
+    .replace(/ {2,}/g, "  ")
+    .trim();
 
 const cellsOf = (value: string) =>
   value
@@ -190,8 +193,10 @@ export function reviewLines(lines: Line[]): Line[] {
       current.text.length <= 120
     ) {
       // 中文断行直接接回；英文单词之间保留被换行替代的空格。
-      const separator = /[A-Za-z0-9]$/.test(previous.text) &&
-        /^[A-Za-z0-9]/.test(current.text) ? " " : "";
+      const separator =
+        /[A-Za-z0-9]$/.test(previous.text) && /^[A-Za-z0-9]/.test(current.text)
+          ? " "
+          : "";
       previous.text += separator + current.text;
       continue;
     }
@@ -221,7 +226,9 @@ export function reviewStructure(lines: Line[]): Line[] {
   }
 
   // 只整理页眉；正文里的手机端、邮箱功能描述不能被提取成联系方式。
-  const bodyStart = body.findIndex(item => item.kind !== "name" && item.kind !== "text");
+  const bodyStart = body.findIndex(
+    (item) => item.kind !== "name" && item.kind !== "text",
+  );
   const contacts = (bodyStart < 0 ? body : body.slice(0, bodyStart)).filter(
     (item) =>
       item.kind === "text" &&
@@ -321,9 +328,7 @@ export function reformat(lines: Line[]): Line[] {
 }
 
 export function textToLines(raw: string): Line[] {
-  return reformat(
-    reviewStructure(reviewLines(toLines(expand(rowsOf(raw))))),
-  );
+  return reformat(reviewStructure(reviewLines(toLines(expand(rowsOf(raw))))));
 }
 
 // 分步执行，供界面显示「排版进行到哪一步」
@@ -362,7 +367,9 @@ export function looksLikeMarkdown(text: string) {
 export function looksLikeResumeBlock(text: string) {
   const rows = text.split("\n").filter((row) => row.trim());
   if (rows.length < 5) return false;
-  return /【.+?】/.test(text) || /[►▶]/.test(text) || /(^|\n)\s*[·•]/.test(text);
+  return (
+    /【.+?】/.test(text) || /[►▶]/.test(text) || /(^|\n)\s*[·•]/.test(text)
+  );
 }
 
 // markdown 写法交给 flow 的解析器（同一套规则，不重复实现）

@@ -144,8 +144,7 @@ describe("agent whole-document action", () => {
     const next = applyAgentActions(before, [
       {
         type: "setContent",
-        text:
-          "李景阳\n电话：18319206783 ｜ 邮箱：a@b.com\n【项目经历】\n► 某项目   负责人   2025.01 – 2025.06\n· 做了点事",
+        text: "李景阳\n电话：18319206783 ｜ 邮箱：a@b.com\n【项目经历】\n► 某项目   负责人   2025.01 – 2025.06\n· 做了点事",
       },
     ]);
     const markdown = toMarkdown(next.doc.lines);
@@ -171,7 +170,9 @@ describe("agent whole-document action", () => {
   });
   it("skips empty content instead of wiping the resume", () => {
     const before = doc();
-    const next = applyAgentActions(before, [{ type: "setContent", text: "  " }]);
+    const next = applyAgentActions(before, [
+      { type: "setContent", text: "  " },
+    ]);
     expect(next.doc).toBe(before);
     expect(next.skipped).toHaveLength(1);
   });
@@ -179,7 +180,8 @@ describe("agent whole-document action", () => {
 
 describe("AI layout review", () => {
   it("compares content while ignoring structure marks", () => {
-    const draft = "# 李景阳\n电话：138 | 邮箱：a@b.com\n## 教育背景\n### 某大学 | 本科 | 2020 – 2024\n- 课程";
+    const draft =
+      "# 李景阳\n电话：138 | 邮箱：a@b.com\n## 教育背景\n### 某大学 | 本科 | 2020 – 2024\n- 课程";
     const reviewed =
       "李景阳\n电话：138 | 邮箱：a@b.com\n教育背景\n某大学 | 本科 | 2020 – 2024\n课程";
     expect(stripStructure(reviewed)).toBe(stripStructure(draft));
@@ -264,7 +266,19 @@ describe("context budget", () => {
     expect(turns.length - packed.summary.count).toBeGreaterThanOrEqual(12);
     expect(bodies[0].messages[0].content).toContain("简历编辑对话");
     // 已经摘要过的部分不会再摘一遍
-    expect(packed.summary.count).toBe(bodies.length * 10 <= 28 ? packed.summary.count : packed.summary.count);
+    const calls = bodies.length;
+    const reused = await compactHistory(
+      { baseUrl: "https://api.example.com/v1", model: "m", apiKey: "k" },
+      "系统提示",
+      "再紧一点",
+      turns,
+      packed.summary,
+      undefined,
+      80,
+    );
+    expect(reused.summary).toEqual(packed.summary);
+    expect(reused.compacted).toBe(false);
+    expect(bodies).toHaveLength(calls);
   });
 
   it("keeps history untouched when it fits", async () => {

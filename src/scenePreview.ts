@@ -36,6 +36,32 @@ export function sceneLayers(
   return layers;
 }
 
+/** Viewport changes do not change vector markup. Invalidate only on scene edits. */
+export class SceneLayerCache {
+  private dirty = true;
+  private width = 0;
+  private height = 0;
+  private layers: LayerSvg = { background: "", foreground: "" };
+
+  invalidate = () => {
+    this.dirty = true;
+  };
+
+  read(objects: FabricObject[], page: Pick<FreePage, "width" | "height">) {
+    if (
+      this.dirty ||
+      page.width !== this.width ||
+      page.height !== this.height
+    ) {
+      this.layers = sceneLayers(objects, page);
+      this.width = page.width;
+      this.height = page.height;
+      this.dirty = false;
+    }
+    return this.layers;
+  }
+}
+
 export class DetailRenderer {
   private viewport?: HTMLElement;
   private sheet = document.createElement("div");

@@ -39,13 +39,12 @@ type Binding =
       background: string;
       appearance: string;
     }
-  | { kind: "template"; original: string };
+  | { kind: "template" };
 const json = (object: FabricObject) =>
   object.toObject() as Record<string, unknown>;
 const near = (n: number, original: number) =>
   Math.abs(n - original) < 1e-7 ? original : n;
-const imageAppearance = (object: FabricObject) => {
-  const raw = json(object);
+const imageAppearance = (raw: Record<string, unknown>) => {
   return JSON.stringify(
     [
       "opacity",
@@ -72,11 +71,13 @@ export class CanvasBindings {
   private pictureIds = new Set<string>();
   private templateOriginal = "[]";
   private generation = 0;
+  private pending?: AbortController;
   get(object: FabricObject) {
     return this.bindings.get(object);
   }
   cancel() {
     this.generation++;
+    this.pending?.abort();
   }
   async install(
     canvas: Canvas,
@@ -87,127 +88,158 @@ export class CanvasBindings {
     base: Record<string, unknown>,
     pictures = true,
   ) {
-    const generation = ++this.generation;
+    this.cancel();
+    const generation = this.generation;
+    const controller = new AbortController();
+    this.pending = controller;
     const created: { object: FabricObject; binding: Binding }[] = [];
-    if (pictures) {
-      const ids = new Set<string>();
-      await Promise.all(
-        doc.pictures.map(async (p) => {
-          const element = [
-            ...(root?.querySelectorAll<HTMLElement>("[data-picture-id]") || []),
-          ].find((el) => el.dataset.pictureId === p.id);
-          if ((!element && p.page !== index) || (p.anchor && !element)) return;
-          const x = p.anchor && element ? parseFloat(element.style.left) : p.x,
-            y = p.anchor && element ? parseFloat(element.style.top) : p.y;
-          const image = await FabricImage.fromURL(p.src);
-          const bg = pictureBackground(p, doc);
-          image.set({
-            ...base,
-            id: "picture_" + p.id,
-            label: p.label,
-            plane: "foreground",
-            left: x,
-            top: y,
-            originX: "left",
-            originY: "top",
-            strokeWidth: 0,
-            scaleX: p.w / image.width,
-            scaleY: p.h / image.height,
-            angle: p.angle || 0,
-            visible: !p.hidden,
-            lockMovementX: !!p.locked,
-            lockMovementY: !!p.locked,
-            lockScalingX: !!p.locked,
-            lockScalingY: !!p.locked,
-            lockRotation: !!p.locked,
-            hasControls: !p.locked,
-            backgroundColor: clear(bg) ? "" : bg,
-          });
-          setPictureClip(image, p.label, bg);
-          ids.add(p.id);
-          created.push({
-            object: image,
-            binding: {
-              kind: "picture",
-              original: p,
-              x,
-              y,
-              background: bg,
-              appearance: imageAppearance(image),
-            },
-          });
-        }),
-      );
-      if (generation === this.generation) this.pictureIds = ids;
-    }
-    const override = data.templateArt?.[templateKey(doc)]?.[index];
-    const paint =
-      override != null
-        ? await util.enlivenObjects<FabricObject>(override)
-        : await capturePaint(doc, index, root);
-    paint.forEach((object) => {
-      object.set({ ...base, plane: "background" });
-      created.push({
-        object,
-        binding: { kind: "template", original: JSON.stringify(json(object)) },
+    let nextPictureIds: Set<string> | undefined;
+    const elements = new Map(
+      [...(root?.querySelectorAll<HTMLElement>("[data-picture-id]") || [])].map(
+        (el) => [el.dataset.pictureId, el] as const,
+      ),
+    );
+    try {
+      if (pictures) {
+        const ids = new Set<string>();
+        const results = await Promise.allSettled(
+          doc.pictures.map(async (p) => {
+            const element = elements.get(p.id);
+            if ((!element && p.page !== index) || (p.anchor && !element))
+              return;
+            const x =
+                p.anchor && element ? parseFloat(element.style.left) : p.x,
+              y = p.anchor && element ? parseFloat(element.style.top) : p.y;
+            const image = await FabricImage.fromURL(p.src, {
+              signal: controller.signal,
+            });
+            const bg = pictureBackground(p, doc);
+            image.set({
+              ...base,
+              id: "picture_" + p.id,
+              label: p.label,
+              plane: "foreground",
+              left: x,
+              top: y,
+              originX: "left",
+              originY: "top",
+              strokeWidth: 0,
+              scaleX: p.w / image.width,
+              scaleY: p.h / image.height,
+              angle: p.angle || 0,
+              visible: !p.hidden,
+              lockMovementX: !!p.locked,
+              lockMovementY: !!p.locked,
+              lockScalingX: !!p.locked,
+              lockScalingY: !!p.locked,
+              lockRotation: !!p.locked,
+              hasControls: !p.locked,
+              backgroundColor: clear(bg) ? "" : bg,
+            });
+            setPictureClip(image, p.label, bg);
+            ids.add(p.id);
+            created.push({
+              object: image,
+              binding: {
+                kind: "picture",
+                original: p,
+                x,
+                y,
+                background: bg,
+                appearance: imageAppearance(json(image)),
+              },
+            });
+          }),
+        );
+        const failure = results.find((result) => result.status === "rejected");
+        if (failure?.status === "rejected") throw failure.reason;
+        nextPictureIds = ids;
+      }
+      const override = data.templateArt?.[templateKey(doc)]?.[index];
+      const paint =
+        override != null
+          ? await util.enlivenObjects<FabricObject>(override, {
+              signal: controller.signal,
+            })
+          : await capturePaint(doc, index, root);
+      paint.forEach((object) => {
+        object.set({ ...base, plane: "background" });
+        created.push({
+          object,
+          binding: { kind: "template" },
+        });
       });
-    });
-    if (generation !== this.generation || canvas.disposed) {
+      if (generation !== this.generation || canvas.disposed) {
+        created.forEach((item) => item.object.dispose());
+        return;
+      }
+      if (nextPictureIds) this.pictureIds = nextPictureIds;
+      const selected = canvas.getActiveObject(),
+        selectedId = selected?.get("id");
+      const removed = canvas
+        .getObjects()
+        .filter(
+          (o) =>
+            this.bindings.get(o)?.kind === "template" ||
+            (pictures && this.bindings.get(o)?.kind === "picture"),
+        );
+      removed.forEach((o) => {
+        canvas.remove(o);
+        o.dispose();
+      });
+      for (const item of created) {
+        this.bindings.set(item.object, item.binding);
+        canvas.add(item.object);
+        item.object.setCoords();
+      }
+      this.templateOriginal = JSON.stringify(paint.map(json));
+      if (selected && removed.includes(selected)) {
+        const next = created.find(
+          (item) => item.object.get("id") === selectedId,
+        )?.object;
+        if (next) canvas.setActiveObject(next);
+      }
+      canvas.requestRenderAll();
+    } catch (error) {
       created.forEach((item) => item.object.dispose());
-      return;
+      if (!controller.signal.aborted) throw error;
     }
-    const selected = canvas.getActiveObject(),
-      selectedId = selected?.get("id");
-    const removed = canvas
-      .getObjects()
-      .filter(
-        (o) =>
-          this.bindings.get(o)?.kind === "template" ||
-          (pictures && this.bindings.get(o)?.kind === "picture"),
-      );
-    removed.forEach((o) => {
-      canvas.remove(o);
-      o.dispose();
-    });
-    for (const item of created) {
-      this.bindings.set(item.object, item.binding);
-      canvas.add(item.object);
-      item.object.setCoords();
-    }
-    this.templateOriginal = JSON.stringify(paint.map(json));
-    if (selected && removed.includes(selected)) {
-      const next = created.find(
-        (item) => item.object.get("id") === selectedId,
-      )?.object;
-      if (next) canvas.setActiveObject(next);
-    }
-    canvas.requestRenderAll();
   }
   snapshot(canvas: Canvas, doc: Resume, data: FreeDocument, index: number) {
     const objects = canvas.getObjects();
+    const serialized = (
+      canvas.toObject() as { objects: Record<string, unknown>[] }
+    ).objects;
+    // Match by export order, not user-controlled IDs (imports may contain duplicates).
+    const rawByObject = new Map(
+      objects
+        .filter((o) => !o.excludeFromExport)
+        .map((o, i) => [o, serialized[i]]),
+    );
     // Advanced image edits become native objects atomically; retain the image
     // exactly once and keep every Fabric property through mode changes/backup.
     for (const object of objects) {
       const binding = this.bindings.get(object);
       if (
         binding?.kind === "picture" &&
-        binding.appearance !== imageAppearance(object)
+        binding.appearance !==
+          imageAppearance(rawByObject.get(object) || json(object))
       )
         this.bindings.delete(object);
     }
-    const boundIds = new Set(
-      objects.filter((o) => this.bindings.has(o)).map((o) => o.get("id")),
-    );
-    const serialized = (
-      canvas.toObject() as { objects: Record<string, unknown>[] }
-    ).objects;
     data.pages[index].canvas = {
       version: "7.4.0",
-      objects: serialized.filter((o) => !boundIds.has(o.id)),
+      objects: objects.flatMap((o) => {
+        const raw = rawByObject.get(o);
+        return raw && !this.bindings.has(o) ? [raw] : [];
+      }),
     };
     const art = objects
       .filter((o) => this.bindings.get(o)?.kind === "template")
-      .map((o) => serialized.find((raw) => raw.id === o.get("id"))!);
+      .flatMap((o) => {
+        const raw = rawByObject.get(o);
+        return raw ? [raw] : [];
+      });
     const key = templateKey(doc);
     if (
       data.templateArt?.[key]?.[index] != null ||
@@ -218,17 +250,20 @@ export class CanvasBindings {
       pages[index] = art;
       data.templateArt = { ...data.templateArt, [key]: pages };
     }
+    const boundPictures = new Map<
+      string,
+      { object: FabricObject; binding: Extract<Binding, { kind: "picture" }> }
+    >();
+    for (const object of objects) {
+      const binding = this.bindings.get(object);
+      if (binding?.kind === "picture")
+        boundPictures.set(binding.original.id, { object, binding });
+    }
     const nextPictures = doc.pictures.flatMap((p) => {
       if (!this.pictureIds.has(p.id)) return [p];
-      const object = objects.find((o) => {
-        const b = this.bindings.get(o);
-        return b?.kind === "picture" && b.original.id === p.id;
-      });
-      if (!object) return [];
-      const binding = this.bindings.get(object) as Extract<
-        Binding,
-        { kind: "picture" }
-      >;
+      const match = boundPictures.get(p.id);
+      if (!match) return [];
+      const { object, binding } = match;
       const position = object.getXY(),
         bg = object.backgroundColor || "transparent";
       const next: Picture = {
@@ -249,7 +284,8 @@ export class CanvasBindings {
       if (object.get("resetPictureBackground")) delete next.background;
       return [JSON.stringify(next) === JSON.stringify(p) ? p : next];
     });
-    return JSON.stringify(nextPictures) === JSON.stringify(doc.pictures)
+    return nextPictures.length === doc.pictures.length &&
+      nextPictures.every((p, i) => p === doc.pictures[i])
       ? doc.pictures
       : nextPictures;
   }
