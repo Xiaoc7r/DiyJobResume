@@ -316,6 +316,28 @@ describe("free editor actions in a Node DOM", () => {
     expect(e.saved().pages[0].canvas.objects).toHaveLength(2);
     readFreeDocument(e.saved());
   });
+  it("does not finish a delayed duplicate onto a different page", async () => {
+    const e = await mountEditor();
+    await click(e.container, "矩形");
+    let finish!: (object: Rect) => void;
+    const clone = vi.spyOn(Rect.prototype, "clone").mockImplementation(
+      () =>
+        new Promise((done) => {
+          finish = done;
+        }),
+    );
+    try {
+      await click(e.container, "复制选中元素");
+      await click(e.container, "新增自由页");
+      await act(async () => {
+        finish(new Rect({ width: 20, height: 20 }));
+      });
+      expect(e.saved().pages[0].canvas.objects).toHaveLength(2);
+      expect(e.saved().pages[1].canvas.objects).toHaveLength(0);
+    } finally {
+      clone.mockRestore();
+    }
+  });
   it("adds a real editable table, ungroups it and preserves it when leaving free mode", async () => {
     const e = await mountEditor();
     await click(e.container, "插入");

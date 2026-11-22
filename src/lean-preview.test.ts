@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
 import { boundedAsyncCache } from "./boundedCache";
-import { DetailRenderer, sceneLayers, setSvgContent } from "./scenePreview";
+import {
+  DetailRenderer,
+  SceneLayerCache,
+  sceneLayers,
+  setSvgContent,
+} from "./scenePreview";
 import { blankFreePage } from "./freeform";
 import type { FabricObject } from "fabric";
 
@@ -69,6 +74,37 @@ describe("async render cache budget", () => {
 });
 
 describe("shared vector and detail preview", () => {
+  it("reuses unchanged vectors but refreshes edits, visibility, layer order and paper bounds", () => {
+    const cache = new SceneLayerCache();
+    const front = {
+      visible: true,
+      plane: "foreground",
+      toSVG: vi.fn(() => "<path/>"),
+    };
+    const back = {
+      visible: true,
+      plane: "background",
+      toSVG: vi.fn(() => "<rect/>"),
+    };
+    const objects = [front, back] as unknown as FabricObject[];
+    const page = blankFreePage();
+    const original = cache.read(objects, page);
+    for (let i = 0; i < 100; i++)
+      expect(cache.read(objects, page)).toBe(original);
+    expect(front.toSVG).toHaveBeenCalledTimes(1);
+    front.toSVG.mockReturnValue("<circle/>");
+    cache.invalidate();
+    expect(cache.read(objects, page).foreground).toContain("<circle/>");
+    front.visible = false;
+    cache.invalidate();
+    expect(cache.read(objects, page).foreground).not.toContain("<circle/>");
+    back.plane = "foreground";
+    cache.invalidate();
+    expect(cache.read(objects, page).foreground).toContain("<rect/>");
+    expect(cache.read([], { width: 600, height: 1500 }).foreground).toContain(
+      'viewBox="0 0 600 1500"',
+    );
+  });
   it("serializes each visible object once and skips DOM work on unchanged layers", () => {
     const object = (plane: string, visible = true) => ({
       visible,

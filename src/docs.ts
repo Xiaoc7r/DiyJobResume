@@ -7,7 +7,7 @@ import {
   uid,
 } from "./flow";
 import type { Resume, Template } from "./flow";
-import { AGENT_TURNS_KEY, turnsKey } from "./agent";
+import { AGENT_TURNS_KEY, turnsKey } from "./agentHistory";
 
 // 多份简历存在同一个键里：避免每份简历各占一个 localStorage 键，
 // 也方便一次性读写、避免切换时漏存。
@@ -141,7 +141,51 @@ function settleLegacyTurns(items: DocEntry[]) {
 }
 
 let verifiedRaw: string | null = null;
+let verifiedStorage: Storage | undefined;
+
+export class LibraryConflictError extends Error {
+  constructor() {
+    super("另一标签页已修改这份简历。当前内容仍在，请下载备份后刷新。");
+    this.name = "LibraryConflictError";
+  }
+}
+
+// A different tab may have saved another resume since we loaded the library.
+// Merge independent edits; never silently replace a changed or deleted draft.
+export function mergeLibraryChanges(
+  base: DocLibrary,
+  local: DocLibrary,
+  remote: DocLibrary,
+): DocLibrary {
+  const before = new Map(base.items.map((item) => [item.id, item]));
+  const ours = new Map(local.items.map((item) => [item.id, item]));
+  const theirs = new Map(remote.items.map((item) => [item.id, item]));
+  const signature = (item: DocEntry | undefined) =>
+    item && JSON.stringify([item.name, item.doc]);
+  const items: DocEntry[] = [];
+  for (const id of new Set([...ours.keys(), ...theirs.keys()])) {
+    const original = signature(before.get(id)),
+      a = ours.get(id),
+      b = theirs.get(id);
+    const left = signature(a),
+      right = signature(b);
+    if (
+      left !== right &&
+      right !== original &&
+      (left !== original || id === local.activeId)
+    )
+      throw new LibraryConflictError();
+    const next = left !== original ? a : b;
+    if (next) items.push(next);
+  }
+  if (!items.some((item) => item.id === local.activeId))
+    throw new LibraryConflictError();
+  return { activeId: local.activeId, items };
+}
+
 function write(library: DocLibrary) {
+  if (verifiedStorage !== localStorage) verifiedRaw = null;
+  verifiedStorage = localStorage;
   const raw = localStorage.getItem(DOCS_KEY);
   if (raw && raw !== verifiedRaw) {
     let damaged = false;
@@ -160,11 +204,20 @@ function write(library: DocLibrary) {
         ? `${RECOVERY_KEY}.${uid()}`
         : RECOVERY_KEY;
       localStorage.setItem(key, raw);
+    } else if (verifiedRaw) {
+      library = mergeLibraryChanges(
+        JSON.parse(verifiedRaw),
+        library,
+        JSON.parse(raw),
+      );
     }
+  } else if (!raw && verifiedRaw) {
+    throw new LibraryConflictError();
   }
   const next = JSON.stringify(library);
-  localStorage.setItem(DOCS_KEY, next);
+  if (next !== raw) localStorage.setItem(DOCS_KEY, next);
   verifiedRaw = next;
+  return library;
 }
 
 // 读取简历列表；老版本只有单份文档，这里自动装进列表，用户不会丢稿。
@@ -172,6 +225,8 @@ export function loadLibrary(): { library: DocLibrary; notice: string } {
   let damaged = false;
   try {
     const raw = localStorage.getItem(DOCS_KEY);
+    verifiedStorage = localStorage;
+    verifiedRaw = null;
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<DocLibrary>;
       const items = Array.isArray(parsed.items)
@@ -182,6 +237,7 @@ export function loadLibrary(): { library: DocLibrary; notice: string } {
           ? String(parsed.activeId)
           : items[0].id;
         settleLegacyTurns(items);
+        if (items.length === parsed.items?.length) verifiedRaw = raw;
         return {
           library: { activeId, items },
           notice:
@@ -227,5 +283,5 @@ export function loadLibrary(): { library: DocLibrary; notice: string } {
 }
 
 export function saveLibrary(library: DocLibrary) {
-  write(library);
+  return write(library);
 }

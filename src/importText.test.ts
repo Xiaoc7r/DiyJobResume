@@ -28,11 +28,16 @@ const RAW = `李景阳
 
 describe("pasted resume text", () => {
   it("does not move or merge body lines that mention phone or email features", () => {
-    const lines = textToLines("张三\n项目经历\n负责手机端开发\n实现邮箱验证码\n工作经历\n负责手机端开发");
-    expect(lines.map(item => [item.kind, item.text])).toEqual([
-      ["name", "张三"], ["section", "项目经历"],
-      ["text", "负责手机端开发"], ["text", "实现邮箱验证码"],
-      ["section", "工作经历"], ["text", "负责手机端开发"],
+    const lines = textToLines(
+      "张三\n项目经历\n负责手机端开发\n实现邮箱验证码\n工作经历\n负责手机端开发",
+    );
+    expect(lines.map((item) => [item.kind, item.text])).toEqual([
+      ["name", "张三"],
+      ["section", "项目经历"],
+      ["text", "负责手机端开发"],
+      ["text", "实现邮箱验证码"],
+      ["section", "工作经历"],
+      ["text", "负责手机端开发"],
     ]);
   });
   it("keeps repeated body text across different sections", () => {
@@ -83,7 +88,12 @@ describe("pasted resume text", () => {
     const sections = lines
       .filter((line) => line.kind === "section")
       .map((line) => line.text);
-    expect(sections).toEqual(["个人总结", "项目经历", "教育背景", "证书 / 其他"]);
+    expect(sections).toEqual([
+      "个人总结",
+      "项目经历",
+      "教育背景",
+      "证书 / 其他",
+    ]);
     const bullets = lines.filter((line) => line.kind === "bullet");
     expect(bullets.length).toBe(7);
     expect(bullets[0].text).toContain("毕业于东莞理工学院");
@@ -125,14 +135,14 @@ describe("pasted resume text", () => {
     expect(looksLikeResumeBlock(RAW)).toBe(true);
     expect(looksLikeResumeBlock("把行距调大一点")).toBe(false);
     expect(
-      looksLikeResumeBlock(
-        "李景阳\n电话：123\n· 一条\n· 两条\n· 三条",
-      ),
+      looksLikeResumeBlock("李景阳\n电话：123\n· 一条\n· 两条\n· 三条"),
     ).toBe(true);
   });
 
   it("splits section markers written inline", () => {
-    const lines = textToLines("李景阳\n【项目经历】某项目\n教育背景：东莞理工学院");
+    const lines = textToLines(
+      "李景阳\n【项目经历】某项目\n教育背景：东莞理工学院",
+    );
     expect(lines.map((line) => [line.kind, line.text])).toEqual([
       ["name", "李景阳"],
       ["section", "项目经历"],
@@ -143,10 +153,12 @@ describe("pasted resume text", () => {
   });
 
   it("glues a bullet that was hard-wrapped while copying", () => {
-    const lines = textToLines(RAW.replace(
-      "· 有信息化系统部署与运维实战经验：基于 Docker / Linux 完成服务部署。",
-      "· 有信息化系统部署与运维实战经验：基于 Docker / Linux 完成服务部署，\n并且熟悉日志与进程守护。",
-    ));
+    const lines = textToLines(
+      RAW.replace(
+        "· 有信息化系统部署与运维实战经验：基于 Docker / Linux 完成服务部署。",
+        "· 有信息化系统部署与运维实战经验：基于 Docker / Linux 完成服务部署，\n并且熟悉日志与进程守护。",
+      ),
+    );
     const merged = lines.find((line) => line.text.includes("日志与进程守护"));
     expect(merged?.kind).toBe("bullet");
     expect(lines.some((line) => line.text === "并且熟悉日志与进程守护。")).toBe(
@@ -174,9 +186,9 @@ describe("pasted resume text", () => {
   it("drops sections that have no content", () => {
     const lines = textToLines("李景阳\n【其他】\n【证书】\n· 驾驶证");
     expect(lines.map((line) => line.text)).not.toContain("其他");
-    expect(lines.some((line) => line.kind === "section" && line.text === "证书")).toBe(
-      true,
-    );
+    expect(
+      lines.some((line) => line.kind === "section" && line.text === "证书"),
+    ).toBe(true);
   });
 
   it("turns numbered rows into an ordered list", () => {
@@ -216,7 +228,9 @@ describe("pasted resume text", () => {
   it("reports layout stages and ends with the final lines", () => {
     const stages = Array.from(layoutSteps(RAW));
     expect(stages).toHaveLength(6);
-    expect(stages.map((stage) => stage.label).join(" ")).toContain("重新排格式");
+    expect(stages.map((stage) => stage.label).join(" ")).toContain(
+      "重新排格式",
+    );
     expect(stages[0].label).toContain("清洗文字");
     const brief = (list: { kind: string; text: string }[]) =>
       list.map((line) => [line.kind, line.text]);
@@ -224,7 +238,8 @@ describe("pasted resume text", () => {
   });
 
   it("accepts markdown output as well", () => {
-    const markdown = "# 张三\n138 | a@b.com\n## 教育背景\n### 某大学 | 本科 | 2020 – 2024\n- 课程";
+    const markdown =
+      "# 张三\n138 | a@b.com\n## 教育背景\n### 某大学 | 本科 | 2020 – 2024\n- 课程";
     expect(looksLikeMarkdown(markdown)).toBe(true);
     const lines = contentToLines(markdown);
     expect(lines[0]).toMatchObject({ kind: "name", text: "张三" });

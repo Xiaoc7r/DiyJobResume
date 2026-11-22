@@ -8,25 +8,17 @@ import {
 } from "./flow";
 import type { Kind, Line, Resume, Settings, Template } from "./flow";
 import { contentToLines } from "./importText";
+import type { AgentSummary, AgentTurn } from "./agentHistory";
+export type { AgentSummary, AgentTurn } from "./agentHistory";
 
 export const AGENT_CONFIG_KEY = "diyjobresume.agent.v1";
-export const AGENT_TURNS_KEY = "diyjobresume.agent.turns.v1";
-// 每份简历各存一份对话，切换简历不会串台
-export const turnsKey = (docId: string) => `${AGENT_TURNS_KEY}.${docId}`;
+export { AGENT_TURNS_KEY, turnsKey } from "./agentHistory";
 const NOTICE_KEY = "diyjobresume.agent.notice.v1";
 
 export interface AgentConfig {
   baseUrl: string;
   model: string;
   apiKey: string;
-}
-export interface AgentTurn {
-  role: "user" | "assistant";
-  text: string;
-  /** 助手这一轮实际应用的改动，回传给模型当记忆 */
-  notes?: string[];
-  /** 用户没有接受这一轮方案 */
-  rejected?: boolean;
 }
 export interface AgentReply {
   reply: string;
@@ -363,11 +355,6 @@ async function summarizeTurns(
     choices?: { message?: { content?: string } }[];
   };
   return (data.choices?.[0]?.message?.content || "").trim();
-}
-
-export interface AgentSummary {
-  text: string;
-  count: number;
 }
 
 // 超出预算时，把最早的对话分批摘要，留一个可续用的摘要 + 最近若干条原文

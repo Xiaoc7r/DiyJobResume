@@ -19,7 +19,6 @@ import {
   describeDoc,
   isReviewAction,
   reviewLayout,
-  turnsKey,
   loadAgentConfig,
   noticeAccepted,
   requestAgent,
@@ -34,6 +33,7 @@ import type {
 import { contentToLines } from "./importText";
 
 import type { Resume } from "./flow";
+import { loadSummary, loadTurns, summaryKey, turnsKey } from "./agentHistory";
 
 const EXAMPLES = [
   "内容有点挤，帮我排得清爽一点",
@@ -41,48 +41,6 @@ const EXAMPLES = [
   "把专业技能排到最前面",
   "行距松一点，看着更透气",
 ];
-const summaryKey = (docId: string) => `diyjobresume.agent.summary.v1.${docId}`;
-
-function loadSummary(docId: string): AgentSummary {
-  try {
-    const raw = localStorage.getItem(summaryKey(docId));
-    if (!raw) return { text: "", count: 0 };
-    const saved = JSON.parse(raw) as Partial<AgentSummary>;
-    return {
-      text: typeof saved.text === "string" ? saved.text : "",
-      count: Number(saved.count) || 0,
-    };
-  } catch {
-    return { text: "", count: 0 };
-  }
-}
-
-function loadTurns(docId: string): AgentTurn[] {
-  try {
-    const raw = localStorage.getItem(turnsKey(docId));
-    if (!raw) return [];
-    const list = JSON.parse(raw) as AgentTurn[];
-    return Array.isArray(list)
-      ? list
-          .filter(
-            (t) =>
-              t &&
-              (t.role === "user" || t.role === "assistant") &&
-              typeof t.text === "string",
-          )
-          .map((t) => ({
-            role: t.role,
-            text: t.text,
-            notes: Array.isArray(t.notes)
-              ? t.notes.filter((n) => typeof n === "string")
-              : undefined,
-            rejected: t.rejected === true || undefined,
-          }))
-      : [];
-  } catch {
-    return [];
-  }
-}
 function errorText(e: unknown) {
   const name = e instanceof Error ? e.name : "",
     message = String(e instanceof Error ? e.message : e);
@@ -230,6 +188,8 @@ export function AgentPanel({
   };
 
   const test = async () => {
+    const controller = new AbortController();
+    controllers.current.add(controller);
     setTesting(true);
     setTestResult("");
     try {
@@ -242,12 +202,15 @@ export function AgentPanel({
         "你是连通性测试，只回复 ok。",
         [],
         "ping",
+        controller.signal,
       );
-      setTestResult(`连接正常（模型回复：${reply.reply.slice(0, 20)}）`);
+      if (mounted.current)
+        setTestResult(`连接正常（模型回复：${reply.reply.slice(0, 20)}）`);
     } catch (e) {
-      setTestResult(`连接失败：${errorText(e)}`);
+      if (mounted.current) setTestResult(`连接失败：${errorText(e)}`);
     } finally {
-      setTesting(false);
+      controllers.current.delete(controller);
+      if (mounted.current) setTesting(false);
     }
   };
 

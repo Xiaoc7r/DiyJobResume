@@ -5,6 +5,7 @@ import {
   loadLibrary,
   saveLibrary,
   uniqueName,
+  LibraryConflictError,
 } from "./docs";
 import { AGENT_TURNS_KEY, turnsKey } from "./agent";
 import { STORAGE_KEY, initialResume } from "./flow";
@@ -24,6 +25,49 @@ afterEach(() => {
 });
 
 describe("resume library", () => {
+  it("merges another tab's independent draft edits and keeps local edits", () => {
+    const store = memoryStorage();
+    vi.stubGlobal("localStorage", store);
+    const { library } = loadLibrary();
+    const other = { ...library.items[0], id: "other", name: "other" };
+    const base = saveLibrary({ ...library, items: [...library.items, other] });
+    const remote = structuredClone(base);
+    remote.items[1].name = "另一标签的新名字";
+    store.setItem(DOCS_KEY, JSON.stringify(remote));
+    const local = structuredClone(base);
+    local.items[0].name = "本标签的新名字";
+    expect(saveLibrary(local).items.map((item) => item.name)).toEqual([
+      "本标签的新名字",
+      "另一标签的新名字",
+    ]);
+    expect(loadLibrary().library.items.map((item) => item.name)).toEqual([
+      "本标签的新名字",
+      "另一标签的新名字",
+    ]);
+  });
+  it("does not overwrite a conflicting or externally deleted library", () => {
+    const store = memoryStorage();
+    vi.stubGlobal("localStorage", store);
+    const { library } = loadLibrary();
+    const remote = structuredClone(library);
+    remote.items[0].name = "另一标签的改动";
+    const bytes = JSON.stringify(remote);
+    store.setItem(DOCS_KEY, bytes);
+    library.items[0].name = "本标签的改动";
+    expect(() => saveLibrary(library)).toThrow(LibraryConflictError);
+    expect(store.getItem(DOCS_KEY)).toBe(bytes);
+    expect(library.items[0].name).toBe("本标签的改动");
+    store.removeItem(DOCS_KEY);
+    expect(() => saveLibrary(library)).toThrow(LibraryConflictError);
+  });
+  it("does not rewrite identical bytes", () => {
+    const store = memoryStorage();
+    vi.stubGlobal("localStorage", store);
+    const { library } = loadLibrary();
+    const write = vi.spyOn(store, "setItem");
+    saveLibrary(library);
+    expect(write).not.toHaveBeenCalled();
+  });
   it("migrates the old single draft into the list", () => {
     const old = initialResume();
     old.name = "老草稿";
