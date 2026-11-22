@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { beforeAll, afterEach, describe, expect, it, vi } from "vitest";
 import { createCanvas } from "@napi-rs/canvas";
-import { StaticCanvas, Textbox, Rect, Group } from "fabric";
+import { StaticCanvas, Textbox, Rect, Group, config } from "fabric";
 import { act, createElement, createRef, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -17,6 +17,7 @@ import type { FreeDocument } from "./freeform";
 import { initialResume, readResume } from "./flow";
 import { cloneResume, loadLibrary, saveLibrary } from "./docs";
 import { captureFreeform } from "./freeCapture";
+import { sceneSvg } from "./freeScene";
 
 // Native 2D text metrics and SVG serialization in a Node DOM. This is not a browser UI test.
 const makeNativeCanvas = (width: number, height: number) =>
@@ -98,6 +99,21 @@ const draft = (): FreeDocument => {
   );
 };
 describe("free document persistence and boundaries", () => {
+  it("encodes full-size text SVG without allocating a retina scratch bitmap", async () => {
+    const ratio = config.devicePixelRatio;
+    const width = vi.spyOn(HTMLCanvasElement.prototype, "width", "set");
+    config.configure({ devicePixelRatio: 3 });
+    try {
+      const page = draft().pages[0];
+      const svg = await sceneSvg(page, "foreground");
+      expect(svg).toContain('viewBox="0 0 794 1123"');
+      expect(svg).toContain("独立可编辑文字");
+      expect(Math.max(...width.mock.calls.map(([value]) => value))).toBe(794);
+    } finally {
+      config.configure({ devicePixelRatio: ratio });
+      width.mockRestore();
+    }
+  });
   it("rejects SVG paint injection and external style resources in nested text runs", () => {
     const doc = draft();
     doc.pages[0].canvas.objects[0].fill = "url(https://example.com/x)";

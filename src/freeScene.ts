@@ -63,6 +63,8 @@ export function sceneSvg(page: FreePage, plane?: "background" | "foreground") {
       width: page.width,
       height: page.height,
       renderOnAddRemove: false,
+      // SVG encoding never reads backing pixels; avoid a redundant DPR² bitmap.
+      enableRetinaScaling: false,
     });
     try {
       await canvas.loadFromJSON({ objects });
