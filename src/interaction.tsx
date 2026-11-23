@@ -65,6 +65,98 @@ export function NumericInput({
   );
 }
 
+// Keep at most one pending sample. Release flushes it even before the next paint;
+// cancellation drops it so a completed gesture can never write state later.
+function pointerFrame(onMove: (event: PointerEvent) => void) {
+  let frame: number | undefined;
+  let pending: PointerEvent | undefined;
+  const cancel = () => {
+    if (frame !== undefined) window.cancelAnimationFrame(frame);
+    frame = undefined;
+    pending = undefined;
+  };
+  const flush = () => {
+    const event = pending;
+    cancel();
+    if (event) onMove(event);
+  };
+  return {
+    push(event: PointerEvent) {
+      pending = event;
+      frame ??= window.requestAnimationFrame(flush);
+    },
+    flush,
+    cancel,
+  };
+}
+
+function releasePointer(handle: HTMLElement, pointerId: number) {
+  try {
+    if (handle.hasPointerCapture(pointerId))
+      handle.releasePointerCapture(pointerId);
+  } catch {
+    // The browser may already have removed a cancelled pointer or its target.
+  }
+}
+
+// Shared by sidebar and picture gestures. Call the returned cleanup when their
+// document/mode unmounts; cancellation preserves the last visible position.
+export function trackPointer(
+  e: ReactPointerEvent,
+  onMove: (event: PointerEvent) => void,
+  onFinish: () => void,
+) {
+  const handle = e.currentTarget as HTMLElement;
+  const pointerId = e.pointerId;
+  const updates = pointerFrame(onMove);
+  let closed = false;
+  const cleanup = () => {
+    if (closed) return;
+    closed = true;
+    updates.cancel();
+    handle.removeEventListener("pointermove", move);
+    handle.removeEventListener("pointerup", end);
+    handle.removeEventListener("pointercancel", cancel);
+    handle.removeEventListener("lostpointercapture", cancel);
+    window.removeEventListener("blur", cleanup);
+    window.removeEventListener("keydown", escape);
+    releasePointer(handle, pointerId);
+    onFinish();
+  };
+  const move = (event: PointerEvent) => {
+    if (event.pointerId !== pointerId) return;
+    event.preventDefault();
+    updates.push(event);
+  };
+  const end = (event: PointerEvent) => {
+    if (event.pointerId !== pointerId) return;
+    try {
+      updates.flush();
+    } finally {
+      cleanup();
+    }
+  };
+  const cancel = (event: PointerEvent) => {
+    if (event.pointerId === pointerId) cleanup();
+  };
+  const escape = (event: KeyboardEvent) => {
+    if (event.key === "Escape") cleanup();
+  };
+  try {
+    handle.setPointerCapture(pointerId);
+  } catch {
+    onFinish();
+    return () => {};
+  }
+  handle.addEventListener("pointermove", move);
+  handle.addEventListener("pointerup", end);
+  handle.addEventListener("pointercancel", cancel);
+  handle.addEventListener("lostpointercapture", cancel);
+  window.addEventListener("blur", cleanup);
+  window.addEventListener("keydown", escape);
+  return cleanup;
+}
+
 // A quick click keeps native caret/selection behavior. Movement before the hold
 // threshold cancels dragging, so selecting text does not accidentally move blocks.
 // holdMs = 0 means "start dragging immediately" (used by the row handle grip).
@@ -79,12 +171,15 @@ export function holdDrag(
   if (holdMs && (e.target as HTMLElement).closest("button,input,select,a"))
     return;
   const handle = e.currentTarget as HTMLElement,
+    pointerId = e.pointerId,
     startX = e.clientX,
     startY = e.clientY,
     root =
       handle.closest?.<HTMLElement>(".simple-editor,.paper-workspace") ??
       document.body;
   let active = false,
+    closed = false,
+    timer: number | undefined,
     target: HTMLElement | null = null,
     after = false;
   const clearTarget = () => {
@@ -110,16 +205,27 @@ export function holdDrag(
     return last ? { row: last, after: true } : null;
   };
   const activate = () => {
+    if (handle.isConnected === false) {
+      cleanup();
+      return;
+    }
+    try {
+      handle.setPointerCapture(pointerId);
+    } catch {
+      cleanup();
+      return;
+    }
     active = true;
-    handle.setPointerCapture(e.pointerId);
     document.body.classList.add("holding-block");
     handle.classList.add("moving-block");
     handle.closest?.(".edit-field")?.classList.add("moving-block");
     window.getSelection()?.removeAllRanges();
   };
-  const timer = holdMs ? window.setTimeout(activate, holdMs) : (activate(), 0);
   const cleanup = () => {
+    if (closed) return;
+    closed = true;
     clearTimeout(timer);
+    updates.cancel();
     clearTarget();
     document.body.classList.remove("holding-block");
     handle.classList.remove("moving-block");
@@ -130,39 +236,53 @@ export function holdDrag(
     handle.removeEventListener("pointerleave", leave);
     handle.removeEventListener("lostpointercapture", cancel);
     window.removeEventListener("keydown", escape);
-    if (handle.hasPointerCapture(e.pointerId))
-      handle.releasePointerCapture(e.pointerId);
+    window.removeEventListener("blur", cleanup);
+    releasePointer(handle, pointerId);
   };
+  const updates = pointerFrame((event) => {
+    window.getSelection()?.removeAllRanges();
+    const hit = pickAt(event.clientY);
+    const next = hit?.row ?? null;
+    if (target !== next) {
+      clearTarget();
+      target = next;
+      target?.classList.add("drop-target");
+    }
+    after = hit?.after ?? false;
+    const box = root.getBoundingClientRect?.();
+    if (box && typeof root.scrollTop === "number") {
+      if (event.clientY < box.top + 55) root.scrollTop -= 22;
+      else if (event.clientY > box.bottom - 55) root.scrollTop += 22;
+    }
+  });
   const move = (event: PointerEvent) => {
+    if (event.pointerId !== pointerId) return;
     if (!active) {
       if (Math.hypot(event.clientX - startX, event.clientY - startY) > 5)
         cleanup();
       return;
     }
     event.preventDefault();
-    window.getSelection()?.removeAllRanges();
-    clearTarget();
-    const hit = pickAt(event.clientY);
-    target = hit?.row ?? null;
-    after = hit?.after ?? false;
-    if ((target?.dataset.line || target?.dataset.field) !== id)
-      target?.classList.add("drop-target");
-    const box = root.getBoundingClientRect?.();
-    if (box && typeof root.scrollTop === "number") {
-      if (event.clientY < box.top + 55) root.scrollTop -= 22;
-      else if (event.clientY > box.bottom - 55) root.scrollTop += 22;
+    updates.push(event);
+  };
+  const end = (event: PointerEvent) => {
+    if (event.pointerId !== pointerId) return;
+    try {
+      updates.flush();
+      const dest = target?.dataset.line || target?.dataset.field,
+        dropAfter = after,
+        moved = active;
+      cleanup();
+      if (moved && dest && dest !== id) onMove(dest, dropAfter);
+    } finally {
+      cleanup();
     }
   };
-  const end = () => {
-    const dest = target?.dataset.line || target?.dataset.field,
-      dropAfter = after,
-      moved = active;
-    cleanup();
-    if (moved && dest && dest !== id) onMove(dest, dropAfter);
+  const cancel = (event: PointerEvent) => {
+    if (event.pointerId === pointerId) cleanup();
   };
-  const cancel = () => cleanup();
-  const leave = () => {
-    if (!active) cleanup();
+  const leave = (event: PointerEvent) => {
+    if (event.pointerId === pointerId && !active) cleanup();
   };
   const escape = (event: KeyboardEvent) => {
     if (event.key === "Escape") cleanup();
@@ -173,4 +293,7 @@ export function holdDrag(
   handle.addEventListener("pointerleave", leave);
   handle.addEventListener("lostpointercapture", cancel);
   window.addEventListener("keydown", escape);
+  window.addEventListener("blur", cleanup);
+  if (holdMs) timer = window.setTimeout(activate, holdMs);
+  else activate();
 }

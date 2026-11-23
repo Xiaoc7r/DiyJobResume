@@ -59,7 +59,7 @@ import type {
 import { lineHtml, editableText, fonts, rowStyle } from "./render";
 import { SelectionTools, paragraphOptions } from "./SelectionTools";
 import { withColumns } from "./formatting";
-import { NumericInput, holdDrag } from "./interaction";
+import { NumericInput, holdDrag, trackPointer } from "./interaction";
 import "./ui-theme.css";
 import { MarkdownNumbers } from "./MarkdownNumbers";
 import { STARTER_PAGE } from "./starter";
@@ -473,6 +473,14 @@ export default function Studio() {
     [docMenu, setDocMenu] = useState(false),
     [confirmDelete, setConfirmDelete] = useState(false),
     [mobile, setMobile] = useState<"editor" | "preview" | "library">("preview");
+  const pointerSession = useRef<(() => void) | null>(null);
+  useLayoutEffect(
+    () => () => {
+      pointerSession.current?.();
+      pointerSession.current = null;
+    },
+    [activeId, mode],
+  );
   useEffect(() => {
     const save = () => saveViewPrefs({ zoom, leftWidth, autoZoom });
     const timer = window.setTimeout(save, 100);
@@ -1414,28 +1422,29 @@ export default function Studio() {
     color: view.settings.color,
   } as CSSProperties;
   const resizeSidebar = (e: ReactPointerEvent) => {
+    if (e.button !== 0) return;
+    pointerSession.current?.();
     const start = e.clientX,
       width = leftWidth;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    const target = e.currentTarget;
-    const move = (event: PointerEvent) =>
-      setLeftWidth(
-        Math.max(
-          260,
-          Math.min(window.innerWidth * 0.6, width + event.clientX - start),
+    pointerSession.current = trackPointer(
+      e,
+      (event) =>
+        setLeftWidth(
+          Math.max(
+            260,
+            Math.min(window.innerWidth * 0.6, width + event.clientX - start),
+          ),
         ),
-      );
-    const end = () => {
-      target.removeEventListener("pointermove", move as EventListener);
-      target.removeEventListener("pointerup", end);
-    };
-    target.addEventListener("pointermove", move as EventListener);
-    target.addEventListener("pointerup", end, { once: true });
+      () => {
+        pointerSession.current = null;
+      },
+    );
   };
   const dragPicture = (e: ReactPointerEvent, pic: Picture, resize = false) => {
     e.preventDefault();
     e.stopPropagation();
-    if (pic.locked) return;
+    if (pic.locked || e.button !== 0) return;
+    pointerSession.current?.();
     setPicSelection(pic.id);
     const base = ref.current,
       startX = e.clientX,
@@ -1443,7 +1452,6 @@ export default function Studio() {
     setPast((p) => [...p, base].slice(-60));
     setFuture([]);
     const target = e.currentTarget;
-    target.setPointerCapture(e.pointerId);
     const move = (event: PointerEvent) => {
       const paper = target.closest(".resume-paper") as HTMLElement | null;
       const scale = paper
@@ -1469,12 +1477,9 @@ export default function Studio() {
       ref.current = next;
       setDoc(next);
     };
-    const end = () => {
-      target.removeEventListener("pointermove", move as EventListener);
-      target.removeEventListener("pointerup", end);
-    };
-    target.addEventListener("pointermove", move as EventListener);
-    target.addEventListener("pointerup", end, { once: true });
+    pointerSession.current = trackPointer(e, move, () => {
+      pointerSession.current = null;
+    });
   };
   const sectionStart = (id: string) => {
     const lines = ref.current.lines;
